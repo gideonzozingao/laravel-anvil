@@ -1,0 +1,63 @@
+# Dependencies
+vendor/
+node_modules/
+
+# Composer
+composer.lock
+composer.phar
+
+# Laravel / testing app
+/testbench-workbench/
+/workbench/vendor/
+/.orchestra/
+/bootstrap/cache/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE & editors
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.fleet/
+.zed/
+nbproject/
+.phpstorm.meta.php
+_ide_helper.php
+_ide_helper_models.php
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+
+# PHP / testing
+.phpunit.result.cache
+.phpunit.cache/
+coverage/
+.coverage
+*.log
+/storage/logs/
+
+# Build / dist
+/dist/
+/build/
+*.phar
+
+# Rector / static analysis
+.rector_cache/
+.php-cs-fixer.cache
+.phpstan-cache/
+/phpstan.neon.dist
+
+# NPM / assets (if package has stubs with frontend assets)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock

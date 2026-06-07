@@ -1559,5 +1559,3 @@ Please open a GitHub issue with:
 ## 19. License
 
 Laravel Anvil is open-source software licensed under the [MIT License](LICENSE.md).
-
-# laravel-anvil

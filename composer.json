@@ -1,0 +1,98 @@
+{
+    "$schema": "https://getcomposer.org/schema.json",
+    "name": "zuqongtech/laravel-anvil",
+    "description": "Full Laravel project scaffolding via live database introspection — models, controllers, form requests, services, repositories, gates, API routes, factories, seeders, migrations, events, observers, policies, and feature tests generated from your connected database.",
+    "type": "library",
+    "keywords": [
+        "laravel",
+        "laravel-anvil",
+        "scaffold",
+        "scaffolding",
+        "code-generation",
+        "database",
+        "introspection",
+        "eloquent",
+        "factory",
+        "seeder",
+        "repository",
+        "service",
+        "boilerplate",
+        "generator"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Gideon Zozingao",
+            "email": "gideon@zuqongtech.com",
+            "homepage": "https://github.com/zuqongtech",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/console": "^11.0|^12.0",
+        "illuminate/database": "^11.0|^12.0",
+        "illuminate/filesystem": "^11.0|^12.0",
+        "illuminate/support": "^11.0|^12.0"
+    },
+    "require-dev": {
+        "driftingly/rector-laravel": "^2.5",
+        "fakerphp/faker": "^1.23",
+        "laravel/pint": "^1.0",
+        "mockery/mockery": "^1.6",
+        "orchestra/testbench": "^9.0|^10.0",
+        "phpunit/phpunit": "^11.0|^12.0",
+        "rector/rector": "^2.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "Zuqongtech\\LaravelAnvil\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Zuqongtech\\LaravelAnvil\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Zuqongtech\\LaravelAnvil\\LaravelAnvilServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit --colors=always",
+        "test-coverage": "vendor/bin/phpunit --coverage-html coverage",
+        "lint": "vendor/bin/pint",
+        "lint-check": "vendor/bin/pint --test",
+        "refactor": "vendor/bin/rector process",
+        "refactor-dry": "vendor/bin/rector process --dry-run"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "archive": {
+        "exclude": [
+            "/.github",
+            "/tests",
+            "/workbench",
+            "/.rector_cache",
+            "/.phpunit.cache",
+            "/coverage",
+            "phpunit.xml",
+            "phpunit.xml.dist",
+            "rector.php",
+            ".pint.json",
+            "CHANGELOG.md",
+            "CONTRIBUTING.md"
+        ]
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
