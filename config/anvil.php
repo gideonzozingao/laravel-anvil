@@ -389,7 +389,7 @@ return [
             'default_viewany' => true,
             'ownership_column' => 'user_id',
         ],
-
+         
         'api_routes' => [
             'version' => env('DB_INTROSPECTION_API_VERSION', 'v1'),
             'middleware' => ['auth:sanctum'],
@@ -439,5 +439,14 @@ return [
         ],
 
     ],
-
+'openapi' => [
+    'output_path'   => 'openapi',
+    'format'        => 'yaml',        // yaml | json
+    'split_files'   => true,
+    'version'       => '3.1.0',
+    'title'         => env('APP_NAME', 'Laravel API'),
+    'api_url'       => env('APP_URL', 'http://localhost'),
+    'security'      => 'sanctum',     // sanctum | passport | none
+    'publish_ui'    => false,
+],
 ];

@@ -5,10 +5,17 @@ namespace Zuqongtech\LaravelAnvil\Support;
 use Illuminate\Console\Command;
 
 /**
- * Data Transfer Object for generation options.
+ * Immutable DTO carrying all generation options through the pipeline.
  *
- * Encapsulates all CLI flags and config values into a single type-safe object
- * that is passed through the entire generation pipeline.
+ * Versioned API scaffold (--api / --api-version):
+ *   $api        — generate versioned JSON API scaffold
+ *   $apiVersion — version number (default: 1 → V1)
+ *
+ * OpenAPI spec generation (--openapi / --openapi-format / ...):
+ *   $openApi           — master switch, enables all OpenAPI generators
+ *   $openApiFormat     — 'yaml' (default) | 'json'
+ *   $openApiSingleFile — merge everything into one openapi.yaml
+ *   $openApiUi         — publish Swagger UI to public/docs/
  */
 final class GenerationOptions
 {
@@ -20,7 +27,7 @@ final class GenerationOptions
         public bool $observers = false,
         public bool $policies = false,
 
-        // ── New artifact flags ───────────────────────────────────────────────
+        // ── Scaffolding flags ────────────────────────────────────────────────
         public bool $formRequests = false,
         public bool $services = false,
         public bool $repositories = false,
@@ -33,14 +40,14 @@ final class GenerationOptions
         public bool $tests = false,
 
         // ── Versioned API scaffold flags ─────────────────────────────────────
-        // --api generates a fully versioned API scaffold:
-        //   - API controller in App\Http\Controllers\Api\V{n}\
-        //   - Versioned api.php routes (or routes/api/v{n}.php)
-        //   - ForceJsonServiceProvider registered in bootstrap/app.php
-        // --api-version controls the version number (default: 1 → V1)
         public bool $api = false,
-        public int $apiVersion = 1,
-        public bool $openApi = false,
+        public int  $apiVersion = 1,
+
+        // ── OpenAPI flags ────────────────────────────────────────────────────
+        public bool   $openApi = false,
+        public string $openApiFormat = 'yaml',
+        public bool   $openApiSingleFile = false,
+        public bool   $openApiUi = false,
 
         // ── Behaviour flags ──────────────────────────────────────────────────
         public bool $force = false,
@@ -62,7 +69,7 @@ final class GenerationOptions
     ) {}
 
     // -----------------------------------------------------------------------
-    // Factory: CLI command
+    // Factories
     // -----------------------------------------------------------------------
 
     public static function fromCommand(Command $command): self
@@ -78,110 +85,117 @@ final class GenerationOptions
 
         $api = (bool) ($command->option('api') ?? false);
 
+        // --openapi-format default: yaml
+        $format = $command->option('openapi-format') ?? 'yaml';
+        if (! in_array($format, ['yaml', 'json'], true)) {
+            $format = 'yaml';
+        }
+
         return new self(
             // Original
-            models: true,
-            controllers: ! $api && ($all || (bool) ($command->option('controllers') ?? false)),
-            resources: $all || (bool) ($command->option('resources') ?? false),
-            observers: $all || (bool) ($command->option('observers') ?? false),
-            policies: $all || (bool) ($command->option('policies') ?? false),
+            models:       true,
+            controllers:  ! $api && ($all || (bool) ($command->option('controllers') ?? false)),
+            resources:    $all || (bool) ($command->option('resources') ?? false),
+            observers:    $all || (bool) ($command->option('observers') ?? false),
+            policies:     $all || (bool) ($command->option('policies') ?? false),
 
-            // New
+            // Scaffolding
             formRequests: $all || $api || (bool) ($command->option('form-requests') ?? false),
-            services: $all || $api || (bool) ($command->option('services') ?? false),
+            services:     $all || $api || (bool) ($command->option('services') ?? false),
             repositories: $all || (bool) ($command->option('repositories') ?? false),
-            gates: $all || (bool) ($command->option('gates') ?? false),
-            apiRoutes: $all || $api || (bool) ($command->option('api-routes') ?? false),
-            factories: $all || (bool) ($command->option('factories') ?? false),
-            seeders: $all || (bool) ($command->option('seeders') ?? false),
-            migrations: $all || (bool) ($command->option('migrations') ?? false),
-            events: $all || (bool) ($command->option('events') ?? false),
-            tests: $all || $api || (bool) ($command->option('tests') ?? false),
+            gates:        $all || (bool) ($command->option('gates') ?? false),
+            apiRoutes:    $all || $api || (bool) ($command->option('api-routes') ?? false),
+            factories:    $all || (bool) ($command->option('factories') ?? false),
+            seeders:      $all || (bool) ($command->option('seeders') ?? false),
+            migrations:   $all || (bool) ($command->option('migrations') ?? false),
+            events:       $all || (bool) ($command->option('events') ?? false),
+            tests:        $all || $api || (bool) ($command->option('tests') ?? false),
 
             // Versioned API
-            api: $api,
+            api:        $api,
             apiVersion: $apiVersion,
-            openApi: $command->option('openapi') || $command->option('all'),
+
+            // OpenAPI
+            openApi:           $all || (bool) ($command->option('openapi') ?? false),
+            openApiFormat:     $format,
+            openApiSingleFile: (bool) ($command->option('openapi-single-file') ?? false),
+            openApiUi:         (bool) ($command->option('openapi-ui') ?? false),
 
             // Behaviour
-            force: (bool) ($command->option('force') ?? false),
-            dryRun: (bool) ($command->option('dry-run') ?? false),
-            backup: (bool) ($command->option('backup') ?? false),
-            withPhpDoc: (bool) ($command->option('with-phpdoc') ?? true),
-            withInverse: (bool) ($command->option('with-inverse') ?? true),
-            withConstraints: (bool) ($command->option('with-constraints') ?? false),
-            validateFk: (bool) ($command->option('validate-fk') ?? false),
-            analyzeConstraints: (bool) ($command->option('analyze-constraints') ?? false),
+            force:               (bool) ($command->option('force') ?? false),
+            dryRun:              (bool) ($command->option('dry-run') ?? false),
+            backup:              (bool) ($command->option('backup') ?? false),
+            withPhpDoc:          (bool) ($command->option('with-phpdoc') ?? true),
+            withInverse:         (bool) ($command->option('with-inverse') ?? true),
+            withConstraints:     (bool) ($command->option('with-constraints') ?? false),
+            validateFk:          (bool) ($command->option('validate-fk') ?? false),
+            analyzeConstraints:  (bool) ($command->option('analyze-constraints') ?? false),
             showRecommendations: (bool) ($command->option('show-recommendations') ?? false),
 
             // Routing
-            namespace: $command->option('namespace'),
-            path: $command->option('path'),
+            namespace:  $command->option('namespace'),
+            path:       $command->option('path'),
             connection: $command->option('connection'),
-            tables: $command->option('tables') ?? [],
-            ignore: $command->option('ignore') ?? [],
+            tables:     $command->option('tables') ?? [],
+            ignore:     $command->option('ignore') ?? [],
         );
     }
-
-    // -----------------------------------------------------------------------
-    // Factory: config defaults
-    // -----------------------------------------------------------------------
 
     public static function withDefaults(): self
     {
         return new self(
-            models: true,
-            force: config('anvil.force_overwrite', false),
-            dryRun: config('anvil.dry_run', false),
-            backup: config('anvil.backup_existing', false),
-            withPhpDoc: config('anvil.with_phpdoc', true),
-            withInverse: config('anvil.with_inverse', true),
-            validateFk: config('anvil.relationships.validate_foreign_keys', false),
-            namespace: config('anvil.namespace', 'App\\Models'),
-            path: config('anvil.target_path', 'app'),
-            connection: config('anvil.connection'),
-            ignore: config('anvil.ignore_tables', []),
+            models:      true,
+            force:       config('laravel-anvil.force_overwrite', false),
+            dryRun:      config('laravel-anvil.dry_run', false),
+            backup:      config('laravel-anvil.backup_existing', false),
+            withPhpDoc:  config('laravel-anvil.with_phpdoc', true),
+            withInverse: config('laravel-anvil.with_inverse', true),
+            validateFk:  config('laravel-anvil.relationships.validate_foreign_keys', false),
+            namespace:   config('laravel-anvil.namespace', 'App\\Models'),
+            path:        config('laravel-anvil.target_path', 'app'),
+            connection:  config('laravel-anvil.connection'),
+            ignore:      config('laravel-anvil.ignore_tables', []),
         );
     }
-
-    // -----------------------------------------------------------------------
-    // Factory: array
-    // -----------------------------------------------------------------------
 
     public static function fromArray(array $options): self
     {
         return new self(
-            models: $options['models'] ?? true,
-            controllers: $options['controllers'] ?? false,
-            resources: $options['resources'] ?? false,
-            observers: $options['observers'] ?? false,
-            policies: $options['policies'] ?? false,
-            formRequests: $options['form_requests'] ?? false,
-            services: $options['services'] ?? false,
-            repositories: $options['repositories'] ?? false,
-            gates: $options['gates'] ?? false,
-            apiRoutes: $options['api_routes'] ?? false,
-            factories: $options['factories'] ?? false,
-            seeders: $options['seeders'] ?? false,
-            migrations: $options['migrations'] ?? false,
-            events: $options['events'] ?? false,
-            tests: $options['tests'] ?? false,
-            api: $options['api'] ?? false,
-            apiVersion: (int) ($options['api_version'] ?? 1),
-            force: $options['force'] ?? false,
-            dryRun: $options['dry_run'] ?? false,
-            backup: $options['backup'] ?? false,
-            withPhpDoc: $options['with_phpdoc'] ?? true,
-            withInverse: $options['with_inverse'] ?? true,
-            withConstraints: $options['with_constraints'] ?? false,
-            validateFk: $options['validate_fk'] ?? false,
-            analyzeConstraints: $options['analyze_constraints'] ?? false,
+            models:            $options['models'] ?? true,
+            controllers:       $options['controllers'] ?? false,
+            resources:         $options['resources'] ?? false,
+            observers:         $options['observers'] ?? false,
+            policies:          $options['policies'] ?? false,
+            formRequests:      $options['form_requests'] ?? false,
+            services:          $options['services'] ?? false,
+            repositories:      $options['repositories'] ?? false,
+            gates:             $options['gates'] ?? false,
+            apiRoutes:         $options['api_routes'] ?? false,
+            factories:         $options['factories'] ?? false,
+            seeders:           $options['seeders'] ?? false,
+            migrations:        $options['migrations'] ?? false,
+            events:            $options['events'] ?? false,
+            tests:             $options['tests'] ?? false,
+            api:               $options['api'] ?? false,
+            apiVersion:        (int) ($options['api_version'] ?? 1),
+            openApi:           $options['open_api'] ?? false,
+            openApiFormat:     $options['open_api_format'] ?? 'yaml',
+            openApiSingleFile: $options['open_api_single_file'] ?? false,
+            openApiUi:         $options['open_api_ui'] ?? false,
+            force:             $options['force'] ?? false,
+            dryRun:            $options['dry_run'] ?? false,
+            backup:            $options['backup'] ?? false,
+            withPhpDoc:        $options['with_phpdoc'] ?? true,
+            withInverse:       $options['with_inverse'] ?? true,
+            withConstraints:   $options['with_constraints'] ?? false,
+            validateFk:        $options['validate_fk'] ?? false,
+            analyzeConstraints:  $options['analyze_constraints'] ?? false,
             showRecommendations: $options['show_recommendations'] ?? false,
-            namespace: $options['namespace'] ?? null,
-            path: $options['path'] ?? null,
-            connection: $options['connection'] ?? null,
-            tables: $options['tables'] ?? [],
-            ignore: $options['ignore'] ?? [],
+            namespace:         $options['namespace'] ?? null,
+            path:              $options['path'] ?? null,
+            connection:        $options['connection'] ?? null,
+            tables:            $options['tables'] ?? [],
+            ignore:            $options['ignore'] ?? [],
         );
     }
 
@@ -191,18 +205,18 @@ final class GenerationOptions
 
     public function getNamespace(): string
     {
-        return $this->namespace ?? config('anvil.namespace', 'App\\Models');
+        return $this->namespace ?? config('laravel-anvil.namespace', 'App\\Models');
     }
 
     public function getPath(): string
     {
-        return $this->path ?? config('anvil.target_path', 'app');
+        return $this->path ?? config('laravel-anvil.target_path', 'app');
     }
 
     public function getConnection(): string
     {
         return $this->connection
-            ?? config('anvil.connection')
+            ?? config('laravel-anvil.connection')
             ?? config('database.default');
     }
 
@@ -211,7 +225,7 @@ final class GenerationOptions
      */
     public function getApiVersionString(): string
     {
-        return 'V'.$this->apiVersion;
+        return 'V' . $this->apiVersion;
     }
 
     /**
@@ -219,7 +233,7 @@ final class GenerationOptions
      */
     public function getApiVersionSlug(): string
     {
-        return 'v'.$this->apiVersion;
+        return 'v' . $this->apiVersion;
     }
 
     /**
@@ -228,7 +242,7 @@ final class GenerationOptions
      */
     public function getApiControllerNamespace(): string
     {
-        return 'App\\Http\\Controllers\\Api\\'.$this->getApiVersionString();
+        return 'App\\Http\\Controllers\\Api\\' . $this->getApiVersionString();
     }
 
     public function hasSpecificTables(): bool
@@ -244,128 +258,109 @@ final class GenerationOptions
     public function getAllIgnoredTables(): array
     {
         return array_merge(
-            config('anvil.ignore_tables', []),
+            config('laravel-anvil.ignore_tables', []),
             $this->ignore,
         );
     }
 
     public function hasAnyArtifacts(): bool
-{
-    return $this->models
-        || $this->controllers || $this->resources
-        || $this->observers || $this->policies
-        || $this->formRequests || $this->services
-        || $this->repositories || $this->gates
-        || $this->apiRoutes || $this->factories
-        || $this->seeders || $this->migrations
-        || $this->events || $this->tests
-        || $this->api || $this->openApi;  // ← added openApi
-}
+    {
+        return $this->models || $this->controllers || $this->resources
+            || $this->observers || $this->policies || $this->formRequests
+            || $this->services || $this->repositories || $this->gates
+            || $this->apiRoutes || $this->factories || $this->seeders
+            || $this->migrations || $this->events || $this->tests
+            || $this->api || $this->openApi;
+    }
 
     public function getEnabledGenerators(): array
     {
         $map = [
-    'Models'       => $this->models,
-    'Controllers'  => $this->controllers && ! $this->api,
-    'ApiScaffold'  => $this->api,
-    'Resources'    => $this->resources,
-    'Observers'    => $this->observers,
-    'Policies'     => $this->policies,
-    'FormRequests' => $this->formRequests,
-    'Services'     => $this->services,
-    'Repositories' => $this->repositories,
-    'Gates'        => $this->gates,
-    'ApiRoutes'    => $this->apiRoutes && ! $this->api,
-    'Factories'    => $this->factories,
-    'Seeders'      => $this->seeders,
-    'Migrations'   => $this->migrations,
-    'Events'       => $this->events,
-    'Tests'        => $this->tests,
-    'OpenAPI'      => $this->openApi,   // ← added
-];
+            'Models'       => $this->models,
+            'Controllers'  => $this->controllers && ! $this->api,
+            'ApiScaffold'  => $this->api,
+            'Resources'    => $this->resources,
+            'Observers'    => $this->observers,
+            'Policies'     => $this->policies,
+            'FormRequests' => $this->formRequests,
+            'Services'     => $this->services,
+            'Repositories' => $this->repositories,
+            'Gates'        => $this->gates,
+            'ApiRoutes'    => $this->apiRoutes && ! $this->api,
+            'Factories'    => $this->factories,
+            'Seeders'      => $this->seeders,
+            'Migrations'   => $this->migrations,
+            'Events'       => $this->events,
+            'Tests'        => $this->tests,
+            'OpenAPI'      => $this->openApi,
+        ];
 
         return array_keys(array_filter($map));
     }
 
-    public function isModelsOnly(): bool
-    {
-        return $this->models && array_filter(
-            $this->toArray(),
-            fn ($v, $k) => $v === true && $k !== 'models' && str_ends_with($k, 's'),
-            ARRAY_FILTER_USE_BOTH
-        ) === [];
-    }
-
-    // -----------------------------------------------------------------------
-    // Serialisation
-    // -----------------------------------------------------------------------
-
     public function toArray(): array
     {
         return [
-            'models' => $this->models,
-            'controllers' => $this->controllers,
-            'resources' => $this->resources,
-            'observers' => $this->observers,
-            'policies' => $this->policies,
-            'form_requests' => $this->formRequests,
-            'services' => $this->services,
-            'repositories' => $this->repositories,
-            'gates' => $this->gates,
-            'api_routes' => $this->apiRoutes,
-            'factories' => $this->factories,
-            'seeders' => $this->seeders,
-            'migrations' => $this->migrations,
-            'events' => $this->events,
-            'tests' => $this->tests,
-            'api' => $this->api,
-            'api_version' => $this->apiVersion,
+            'models'               => $this->models,
+            'controllers'          => $this->controllers,
+            'resources'            => $this->resources,
+            'observers'            => $this->observers,
+            'policies'             => $this->policies,
+            'form_requests'        => $this->formRequests,
+            'services'             => $this->services,
+            'repositories'         => $this->repositories,
+            'gates'                => $this->gates,
+            'api_routes'           => $this->apiRoutes,
+            'factories'            => $this->factories,
+            'seeders'              => $this->seeders,
+            'migrations'           => $this->migrations,
+            'events'               => $this->events,
+            'tests'                => $this->tests,
+            'api'                  => $this->api,
+            'api_version'          => $this->apiVersion,
             'open_api'             => $this->openApi,
-            'force' => $this->force,
-            'dry_run' => $this->dryRun,
-            'backup' => $this->backup,
-            'with_phpdoc' => $this->withPhpDoc,
-            'with_inverse' => $this->withInverse,
-            'with_constraints' => $this->withConstraints,
-            'validate_fk' => $this->validateFk,
-            'analyze_constraints' => $this->analyzeConstraints,
+            'open_api_format'      => $this->openApiFormat,
+            'open_api_single_file' => $this->openApiSingleFile,
+            'open_api_ui'          => $this->openApiUi,
+            'force'                => $this->force,
+            'dry_run'              => $this->dryRun,
+            'backup'               => $this->backup,
+            'with_phpdoc'          => $this->withPhpDoc,
+            'with_inverse'         => $this->withInverse,
+            'with_constraints'     => $this->withConstraints,
+            'validate_fk'          => $this->validateFk,
+            'analyze_constraints'  => $this->analyzeConstraints,
             'show_recommendations' => $this->showRecommendations,
-            'namespace' => $this->namespace,
-            'path' => $this->path,
-            'connection' => $this->connection,
-            'tables' => $this->tables,
-            'ignore' => $this->ignore,
-            
+            'namespace'            => $this->namespace,
+            'path'                 => $this->path,
+            'connection'           => $this->connection,
+            'tables'               => $this->tables,
+            'ignore'               => $this->ignore,
         ];
     }
 
     public function getSummary(): string
     {
         $parts = [];
-        $gens = $this->getEnabledGenerators();
+        $gens  = $this->getEnabledGenerators();
 
         if (! empty($gens)) {
-            $parts[] = 'Generators: '.implode(', ', $gens);
+            $parts[] = 'Generators: ' . implode(', ', $gens);
         }
         if ($this->api) {
-            $parts[] = 'API version: '.$this->getApiVersionString();
+            $parts[] = 'API version: ' . $this->getApiVersionString();
         }
-         if ($this->openApi) {
-            $parts[] = 'OpenAPI docs';
+        if ($this->openApi) {
+            $parts[] = 'OpenAPI format: ' . strtoupper($this->openApiFormat);
+            $parts[] = $this->openApiSingleFile ? 'Single-file spec' : 'Split-file spec';
         }
-        if ($this->force) {
-            $parts[] = 'Force overwrite';
+        if ($this->force)  { $parts[] = 'Force overwrite'; }
+        if ($this->dryRun) { $parts[] = 'Dry run'; }
+        if ($this->backup) { $parts[] = 'Backup enabled'; }
+        if (! empty($this->tables)) {
+            $parts[] = 'Tables: ' . implode(', ', $this->tables);
         }
-        if ($this->dryRun) {
-            $parts[] = 'Dry run mode';
-        }
-        if ($this->backup) {
-            $parts[] = 'Backup enabled';
-        }
-        if ($this->hasSpecificTables()) {
-            $parts[] = 'Tables: '.implode(', ', $this->tables);
-        }
-       
+
         return implode(' | ', $parts);
     }
 

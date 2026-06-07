@@ -22,9 +22,9 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  *   - update / delete / restore / forceDelete: ownership check when a
  *     user_id column exists, otherwise true
  *
- * Because gates are registered globally this generator appends a single
- * block into the AuthServiceProvider rather than creating per-model files,
- * keeping them centralised and easy to review.
+ * Self-referential models (e.g. the User model itself) receive a
+ * disambiguated second parameter name ($targetUser instead of $user)
+ * to avoid a PHP fatal error from duplicate parameter names.
  */
 final class GateGenerator implements Generator
 {
@@ -42,8 +42,8 @@ final class GateGenerator implements Generator
     {
         if ($options->dryRun) {
             return [
-                'type' => $this->getName(),
-                'name' => 'Gate definitions for '.$meta->model,
+                'type'   => $this->getName(),
+                'name'   => 'Gate definitions for ' . $meta->model,
                 'status' => 'dry-run',
             ];
         }
@@ -51,8 +51,8 @@ final class GateGenerator implements Generator
         $this->appendGates($meta, $options);
 
         return [
-            'type' => $this->getName(),
-            'name' => 'Gate definitions for '.$meta->model,
+            'type'   => $this->getName(),
+            'name'   => 'Gate definitions for ' . $meta->model,
             'status' => 'success',
         ];
     }
@@ -60,7 +60,7 @@ final class GateGenerator implements Generator
     protected function appendGates(ModelMetadata $meta, GenerationOptions $options): void
     {
         $providerPath = app_path('Providers/AuthServiceProvider.php');
-        $gatePath = app_path('Providers/GateServiceProvider.php');
+        $gatePath     = app_path('Providers/GateServiceProvider.php');
 
         $gateBlock = $this->buildGateBlock($meta, $options);
 
@@ -73,18 +73,32 @@ final class GateGenerator implements Generator
 
     protected function buildGateBlock(ModelMetadata $meta, GenerationOptions $options): string
     {
-        $model = $meta->model;
-        $slug = Str::kebab($model);
-        $variable = lcfirst($model);
-        $hasOwnership = collect($meta->columns)->contains('name', 'user_id');
-        $ownerCheck = $hasOwnership
-            ? "\$user->id === \${$variable}->user_id"
-            : 'true';
-
+        $model     = $meta->model;
+        $slug      = Str::kebab($model);
         $namespace = trim($options->getNamespace(), '\\');
         $fullModel = "\\{$namespace}\\{$model}";
 
-        $lines = [];
+        $hasOwnership = collect($meta->columns)->contains('name', 'user_id');
+
+        // ── Self-referential guard ────────────────────────────────────────────
+        // When the model being authorized IS the authenticated user model
+        // (i.e. both parameters would be typed `User $user`), PHP raises a
+        // fatal "Duplicate parameter name" error. We detect this by comparing
+        // the short class name against the Laravel auth user model class basename.
+        $authUserModel  = class_basename(config('auth.providers.users.model', 'App\\Models\\User'));
+        $isSelfReferential = $model === $authUserModel;
+
+        // The authenticated user is always "$user".
+        // The model parameter is "$variable" — disambiguated when self-referential.
+        $variable = $isSelfReferential
+            ? 'target' . $model          // e.g. $targetUser
+            : lcfirst($model);           // e.g. $post
+
+        $ownerCheck = $hasOwnership && ! $isSelfReferential
+            ? "\$user->id === \${$variable}->user_id"
+            : ($isSelfReferential ? "\$user->id === \${$variable}->id" : 'true');
+
+        $lines   = [];
         $lines[] = "        // --- {$model} gates ---";
         $lines[] = "        Gate::define('viewAny-{$slug}', fn (\\App\\Models\\User \$user) => true);";
         $lines[] = "        Gate::define('view-{$slug}', fn (\\App\\Models\\User \$user, {$fullModel} \${$variable}) => true);";
@@ -105,7 +119,7 @@ final class GateGenerator implements Generator
         $content = file_get_contents($path);
 
         // Idempotency: skip if gates for this model already present
-        if (str_contains($content, Str::kebab($model)."' gates")) {
+        if (str_contains($content, Str::kebab($model) . "' gates")) {
             return;
         }
 
@@ -118,17 +132,11 @@ final class GateGenerator implements Generator
             );
         }
 
-        // Append inside boot() — look for closing brace of the method
+        // Append inside boot() — find its closing brace
         if (preg_match('/public function boot\(\).*?{/s', $content, $m, PREG_OFFSET_CAPTURE)) {
-            // Find the matching closing brace
             $insertPos = $this->findMethodEnd($content, $m[0][1] + strlen($m[0][0]));
             if ($insertPos !== false) {
-                $content = substr_replace(
-                    $content,
-                    "\n{$gateBlock}\n",
-                    $insertPos,
-                    0,
-                );
+                $content = substr_replace($content, "\n{$gateBlock}\n", $insertPos, 0);
             }
         }
 
@@ -166,7 +174,8 @@ PHP;
 
         $content = file_get_contents($path);
 
-        if (str_contains($content, Str::kebab($model)."' gates")) {
+        // Idempotency
+        if (str_contains($content, Str::kebab($model) . "' gates")) {
             return;
         }
 
@@ -180,13 +189,13 @@ PHP;
     }
 
     /**
-     * Find the position of the closing brace for the method starting at $offset.
-     * Returns position just before the closing brace so we can insert before it.
+     * Walk $source from $offset to find the matching closing brace of a method
+     * and return the position just before it so content can be inserted there.
      */
     protected function findMethodEnd(string $source, int $offset): int|false
     {
         $depth = 1;
-        $len = strlen($source);
+        $len   = strlen($source);
 
         for ($i = $offset; $i < $len; $i++) {
             if ($source[$i] === '{') {

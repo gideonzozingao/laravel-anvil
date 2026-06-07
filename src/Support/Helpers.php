@@ -394,4 +394,11 @@ class Helpers
 
         return implode('_', $tables);
     }
+
+    public static function modelToRouteName(string $model): string
+{
+    return Str::kebab(
+        Str::pluralStudly($model)
+    );
+}
 }
