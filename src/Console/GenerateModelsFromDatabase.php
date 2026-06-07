@@ -35,6 +35,7 @@ class GenerateModelsFromDatabase extends Command
                             {--tests                  : Generate Feature test classes for all CRUD endpoints}
                             {--api                    : Generate a versioned JSON API scaffold with ForceJson enforcement}
                             {--api-version=1          : Version number for --api scaffold (e.g. 1, 2, v2)}
+                            {--openapi : Generate OpenAPI 3.1 spec stubs for all API resources}
                             {--namespace=App\\Models   : Namespace for generated models}
                             {--connection=            : Database connection to introspect}
                             {--tables=*               : Limit generation to these tables}

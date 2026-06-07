@@ -40,6 +40,7 @@ final class GenerationOptions
         // --api-version controls the version number (default: 1 → V1)
         public bool $api = false,
         public int $apiVersion = 1,
+        public bool $openApi = false,
 
         // ── Behaviour flags ──────────────────────────────────────────────────
         public bool $force = false,
@@ -100,6 +101,7 @@ final class GenerationOptions
             // Versioned API
             api: $api,
             apiVersion: $apiVersion,
+            openApi: $command->option('openapi') || $command->option('all'),
 
             // Behaviour
             force: (bool) ($command->option('force') ?? false),
@@ -248,38 +250,39 @@ final class GenerationOptions
     }
 
     public function hasAnyArtifacts(): bool
-    {
-        return $this->models
-            || $this->controllers || $this->resources
-            || $this->observers || $this->policies
-            || $this->formRequests || $this->services
-            || $this->repositories || $this->gates
-            || $this->apiRoutes || $this->factories
-            || $this->seeders || $this->migrations
-            || $this->events || $this->tests
-            || $this->api;
-    }
+{
+    return $this->models
+        || $this->controllers || $this->resources
+        || $this->observers || $this->policies
+        || $this->formRequests || $this->services
+        || $this->repositories || $this->gates
+        || $this->apiRoutes || $this->factories
+        || $this->seeders || $this->migrations
+        || $this->events || $this->tests
+        || $this->api || $this->openApi;  // ← added openApi
+}
 
     public function getEnabledGenerators(): array
     {
         $map = [
-            'Models' => $this->models,
-            'Controllers' => $this->controllers && ! $this->api,
-            'ApiScaffold' => $this->api,
-            'Resources' => $this->resources,
-            'Observers' => $this->observers,
-            'Policies' => $this->policies,
-            'FormRequests' => $this->formRequests,
-            'Services' => $this->services,
-            'Repositories' => $this->repositories,
-            'Gates' => $this->gates,
-            'ApiRoutes' => $this->apiRoutes && ! $this->api,
-            'Factories' => $this->factories,
-            'Seeders' => $this->seeders,
-            'Migrations' => $this->migrations,
-            'Events' => $this->events,
-            'Tests' => $this->tests,
-        ];
+    'Models'       => $this->models,
+    'Controllers'  => $this->controllers && ! $this->api,
+    'ApiScaffold'  => $this->api,
+    'Resources'    => $this->resources,
+    'Observers'    => $this->observers,
+    'Policies'     => $this->policies,
+    'FormRequests' => $this->formRequests,
+    'Services'     => $this->services,
+    'Repositories' => $this->repositories,
+    'Gates'        => $this->gates,
+    'ApiRoutes'    => $this->apiRoutes && ! $this->api,
+    'Factories'    => $this->factories,
+    'Seeders'      => $this->seeders,
+    'Migrations'   => $this->migrations,
+    'Events'       => $this->events,
+    'Tests'        => $this->tests,
+    'OpenAPI'      => $this->openApi,   // ← added
+];
 
         return array_keys(array_filter($map));
     }
@@ -317,6 +320,7 @@ final class GenerationOptions
             'tests' => $this->tests,
             'api' => $this->api,
             'api_version' => $this->apiVersion,
+            'open_api'             => $this->openApi,
             'force' => $this->force,
             'dry_run' => $this->dryRun,
             'backup' => $this->backup,
@@ -331,6 +335,7 @@ final class GenerationOptions
             'connection' => $this->connection,
             'tables' => $this->tables,
             'ignore' => $this->ignore,
+            
         ];
     }
 
@@ -345,6 +350,9 @@ final class GenerationOptions
         if ($this->api) {
             $parts[] = 'API version: '.$this->getApiVersionString();
         }
+         if ($this->openApi) {
+            $parts[] = 'OpenAPI docs';
+        }
         if ($this->force) {
             $parts[] = 'Force overwrite';
         }
@@ -357,7 +365,7 @@ final class GenerationOptions
         if ($this->hasSpecificTables()) {
             $parts[] = 'Tables: '.implode(', ', $this->tables);
         }
-
+       
         return implode(' | ', $parts);
     }
 

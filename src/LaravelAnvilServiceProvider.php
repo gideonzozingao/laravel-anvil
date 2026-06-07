@@ -21,6 +21,7 @@ use Zuqongtech\LaravelAnvil\Generators\SeederGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ServiceGenerator;
 use Zuqongtech\LaravelAnvil\Generators\TestGenerator;
 use Zuqongtech\LaravelAnvil\Support\GenerationOrchestrator;
+use Zuqongtech\LaravelAnvil\Generators\OpenApiGenerator;
 
 class LaravelAnvilServiceProvider extends ServiceProvider
 {
@@ -50,7 +51,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
 
             // Route generator (handles both legacy and versioned modes)
             ApiRouteGenerator::class,           // --api-routes  / --api
-
+            OpenApiGenerator::class,
             // Versioned API scaffold (--api only)
             // Order matters: infrastructure first, then controllers
             ForceJsonServiceProviderGenerator::class,  // --api (runs once per table, idempotent)
