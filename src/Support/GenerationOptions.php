@@ -91,7 +91,7 @@ final class GenerationOptions
         }
 
         $api = (bool) ($command->option('api') ?? false);
-        $web = (bool) ($command->option('web') ?? false);
+        $web = $command->hasOption('web') ? (bool) $command->option('web') : false;
 
         // --openapi-format default: yaml
         $format = $command->option('openapi-format') ?? 'yaml';
@@ -150,6 +150,23 @@ final class GenerationOptions
             connection: $command->option('connection'),
             tables: $command->option('tables') ?? [],
             ignore: $command->option('ignore') ?? [],
+        );
+    }
+
+    public static function withDefaults(): self
+    {
+        return new self(
+            models: true,
+            force: config('laravel-anvil.force_overwrite', false),
+            dryRun: config('laravel-anvil.dry_run', false),
+            backup: config('laravel-anvil.backup_existing', false),
+            withPhpDoc: config('laravel-anvil.with_phpdoc', true),
+            withInverse: config('laravel-anvil.with_inverse', true),
+            validateFk: config('laravel-anvil.relationships.validate_foreign_keys', false),
+            namespace: config('laravel-anvil.namespace', 'App\\Models'),
+            path: config('laravel-anvil.target_path', 'app'),
+            connection: config('laravel-anvil.connection'),
+            ignore: config('laravel-anvil.ignore_tables', []),
         );
     }
 
@@ -232,9 +249,31 @@ final class GenerationOptions
         return 'v'.$this->apiVersion;
     }
 
+    /**
+     * Namespace segment for versioned API controllers,
+     * e.g. "App\Http\Controllers\Api\V1".
+     */
+    public function getApiControllerNamespace(): string
+    {
+        return 'App\\Http\\Controllers\\Api\\'.$this->getApiVersionString();
+    }
+
+    /**
+     * Namespace for web scaffold controllers, e.g. "App\Http\Controllers\Web".
+     */
+    public function getWebControllerNamespace(): string
+    {
+        return config('anvil.web.controller_namespace', 'App\\Http\\Controllers\\Web');
+    }
+
     public function hasSpecificTables(): bool
     {
         return ! empty($this->tables);
+    }
+
+    public function hasIgnoredTables(): bool
+    {
+        return ! empty($this->ignore);
     }
 
     public function getAllIgnoredTables(): array
@@ -243,6 +282,16 @@ final class GenerationOptions
             config('laravel-anvil.ignore_tables', []),
             $this->ignore,
         );
+    }
+
+    public function hasAnyArtifacts(): bool
+    {
+        return $this->models || $this->controllers || $this->resources
+            || $this->observers || $this->policies || $this->formRequests
+            || $this->services || $this->repositories || $this->gates
+            || $this->apiRoutes || $this->factories || $this->seeders
+            || $this->migrations || $this->events || $this->tests
+            || $this->api || $this->web || $this->openApi;
     }
 
     public function getEnabledGenerators(): array
@@ -311,6 +360,40 @@ final class GenerationOptions
             'tables' => $this->tables,
             'ignore' => $this->ignore,
         ];
+    }
+
+    public function getSummary(): string
+    {
+        $parts = [];
+        $gens = $this->getEnabledGenerators();
+
+        if (! empty($gens)) {
+            $parts[] = 'Generators: '.implode(', ', $gens);
+        }
+        if ($this->api) {
+            $parts[] = 'API version: '.$this->getApiVersionString();
+        }
+        if ($this->web) {
+            $parts[] = 'Web scaffold';
+        }
+        if ($this->openApi) {
+            $parts[] = 'OpenAPI format: '.strtoupper($this->openApiFormat);
+            $parts[] = $this->openApiSingleFile ? 'Single-file spec' : 'Split-file spec';
+        }
+        if ($this->force) {
+            $parts[] = 'Force overwrite';
+        }
+        if ($this->dryRun) {
+            $parts[] = 'Dry run';
+        }
+        if ($this->backup) {
+            $parts[] = 'Backup enabled';
+        }
+        if (! empty($this->tables)) {
+            $parts[] = 'Tables: '.implode(', ', $this->tables);
+        }
+
+        return implode(' | ', $parts);
     }
 
     public function __toString(): string

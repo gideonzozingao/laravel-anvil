@@ -30,6 +30,7 @@ use Zuqongtech\LaravelAnvil\Generators\WebControllerGenerator;
 use Zuqongtech\LaravelAnvil\Generators\WebRouteGenerator;
 use Zuqongtech\LaravelAnvil\Http\DocsController;
 use Zuqongtech\LaravelAnvil\Support\GenerationOrchestrator;
+use Zuqongtech\LaravelAnvil\Console\GenerateWebCommand;
 
 class LaravelAnvilServiceProvider extends ServiceProvider
 {
@@ -121,6 +122,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
             $this->commands([
                 GenerateModelsFromDatabase::class,
                 DocsCommand::class,
+                GenerateWebCommand::class,
             ]);
 
             $this->publishes([
