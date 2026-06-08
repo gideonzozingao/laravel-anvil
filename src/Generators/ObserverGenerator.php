@@ -36,16 +36,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class ObserverGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->observers ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'Observer';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $observerName = $meta->model.'Observer';
@@ -101,7 +104,7 @@ final class ObserverGenerator implements Generator
             $softDeleteMethods = $this->buildSoftDeleteMethods($model, $variable);
         }
 
-        $includeSoftDeleteEvents = config(
+        config(
             'anvil.generators.observers.include_soft_delete_events',
             true
         );

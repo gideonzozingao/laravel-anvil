@@ -7,7 +7,6 @@ use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 use Zuqongtech\LaravelAnvil\Support\Helpers;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
 use Zuqongtech\LaravelAnvil\Support\OpenApiTypeMapper;
-use Zuqongtech\LaravelAnvil\Support\OpenApiYamlSerializer;
 
 /**
  * Generates OpenAPI 3.1 component schemas for a model:
@@ -28,21 +27,19 @@ final class OpenApiSchemaGenerator implements Generator
         'id', 'created_at', 'updated_at', 'deleted_at',
     ];
 
-    public function __construct(
-        private readonly OpenApiTypeMapper $mapper = new OpenApiTypeMapper,
-        private readonly OpenApiYamlSerializer $serializer = new OpenApiYamlSerializer,
-    ) {}
-
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->openApi ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'OpenApiSchema';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $format = config('anvil.openapi.format', 'yaml');

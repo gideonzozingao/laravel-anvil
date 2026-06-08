@@ -3,7 +3,6 @@
 namespace Zuqongtech\LaravelAnvil\Support;
 
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 class DatabaseInspector
 {
@@ -582,14 +581,6 @@ class DatabaseInspector
             'name' => $c->name,
             'definition' => $c->definition,
         ], $constraints);
-    }
-
-    /**
-     * Check if table exists
-     */
-    public function tableExists(string $table): bool
-    {
-        return Schema::connection($this->connectionName)->hasTable($table);
     }
 
     /**

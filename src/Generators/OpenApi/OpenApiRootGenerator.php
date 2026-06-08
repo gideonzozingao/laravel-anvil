@@ -8,7 +8,6 @@ use Zuqongtech\LaravelAnvil\Contracts\Generator;
 use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
 use Zuqongtech\LaravelAnvil\Support\OpenApiTypeMapper;
-use Zuqongtech\LaravelAnvil\Support\OpenApiYamlSerializer;
 
 /**
  * Assembles the root OpenAPI 3.1 specification document.
@@ -33,22 +32,19 @@ final class OpenApiRootGenerator implements Generator
     /** @var list<string> Tags collected across all models */
     private array $collectedTags = [];
 
-    public function __construct(
-        private readonly OpenApiSchemaGenerator $schemaGenerator,
-        private readonly OpenApiPathGenerator $pathGenerator,
-        private readonly OpenApiYamlSerializer $serializer = new OpenApiYamlSerializer,
-    ) {}
-
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->openApi ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'OpenApiRoot';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $splitFiles = config('anvil.openapi.split_files', true);
@@ -70,40 +66,6 @@ final class OpenApiRootGenerator implements Generator
                 $this->mergedPaths[$result['path_key']] = $result['path_def'];
             }
             $results[] = $result;
-        }
-
-        return $results;
-    }
-
-    public function finalize(GenerationOptions $options): array
-    {
-        if ($options->dryRun) {
-            return [['type' => $this->getName(), 'name' => 'openapi.yaml', 'status' => 'dry-run']];
-        }
-
-        $format = config('anvil.openapi.format', 'yaml');
-        $splitFiles = config('anvil.openapi.split_files', true);
-        $outputPath = base_path(config('anvil.openapi.output_path', 'openapi'));
-        $ext = $format === 'json' ? 'json' : 'yaml';
-        $rootPath = "{$outputPath}/openapi.{$ext}";
-
-        $spec = $splitFiles
-            ? $this->buildSplitRootSpec($outputPath, $ext)
-            : $this->buildMergedSpec();
-
-        $this->serializer->writeFile($spec, $rootPath, $format);
-
-        $results = [
-            [
-                'type' => $this->getName(),
-                'name' => "openapi.{$ext}",
-                'path' => $rootPath,
-                'status' => 'success',
-            ],
-        ];
-
-        if (config('anvil.openapi.publish_ui', false) || ($options->openApiUi ?? false)) {
-            $results[] = $this->publishSwaggerUi($rootPath, $outputPath);
         }
 
         return $results;

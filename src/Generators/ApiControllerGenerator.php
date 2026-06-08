@@ -28,16 +28,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class ApiControllerGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->api;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'ApiController';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $results = [];

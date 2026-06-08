@@ -28,16 +28,19 @@ use Zuqongtech\LaravelAnvil\Support\ProviderRegistrar;
  */
 final class ApiRouteGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->apiRoutes || $options->api;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'ApiRoute';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         return $options->api

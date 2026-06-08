@@ -11,6 +11,10 @@ use Illuminate\Console\Command;
  *   $api        — generate versioned JSON API scaffold
  *   $apiVersion — version number (default: 1 → V1)
  *
+ * Web scaffold (--web):
+ *   $web — generate resource controllers (App\Http\Controllers\Web), Blade
+ *          views and web routes; implies form-requests + services.
+ *
  * OpenAPI spec generation (--openapi / --openapi-format / ...):
  *   $openApi           — master switch, enables all OpenAPI generators
  *   $openApiFormat     — 'yaml' (default) | 'json'
@@ -42,6 +46,9 @@ final class GenerationOptions
         // ── Versioned API scaffold flags ─────────────────────────────────────
         public bool $api = false,
         public int $apiVersion = 1,
+
+        // ── Web scaffold flag ────────────────────────────────────────────────
+        public bool $web = false,
 
         // ── OpenAPI flags ────────────────────────────────────────────────────
         public bool $openApi = false,
@@ -84,6 +91,7 @@ final class GenerationOptions
         }
 
         $api = (bool) ($command->option('api') ?? false);
+        $web = (bool) ($command->option('web') ?? false);
 
         // --openapi-format default: yaml
         $format = $command->option('openapi-format') ?? 'yaml';
@@ -99,9 +107,10 @@ final class GenerationOptions
             observers: $all || (bool) ($command->option('observers') ?? false),
             policies: $all || (bool) ($command->option('policies') ?? false),
 
-            // Scaffolding
-            formRequests: $all || $api || (bool) ($command->option('form-requests') ?? false),
-            services: $all || $api || (bool) ($command->option('services') ?? false),
+            // Scaffolding — the web scaffold reuses the same FormRequests and
+            // Services as the API scaffold, so --web implies both.
+            formRequests: $all || $api || $web || (bool) ($command->option('form-requests') ?? false),
+            services: $all || $api || $web || (bool) ($command->option('services') ?? false),
             repositories: $all || (bool) ($command->option('repositories') ?? false),
             gates: $all || (bool) ($command->option('gates') ?? false),
             apiRoutes: $all || $api || (bool) ($command->option('api-routes') ?? false),
@@ -114,6 +123,9 @@ final class GenerationOptions
             // Versioned API
             api: $api,
             apiVersion: $apiVersion,
+
+            // Web
+            web: $web,
 
             // OpenAPI
             openApi: $all || (bool) ($command->option('openapi') ?? false),
@@ -141,23 +153,6 @@ final class GenerationOptions
         );
     }
 
-    public static function withDefaults(): self
-    {
-        return new self(
-            models: true,
-            force: config('laravel-anvil.force_overwrite', false),
-            dryRun: config('laravel-anvil.dry_run', false),
-            backup: config('laravel-anvil.backup_existing', false),
-            withPhpDoc: config('laravel-anvil.with_phpdoc', true),
-            withInverse: config('laravel-anvil.with_inverse', true),
-            validateFk: config('laravel-anvil.relationships.validate_foreign_keys', false),
-            namespace: config('laravel-anvil.namespace', 'App\\Models'),
-            path: config('laravel-anvil.target_path', 'app'),
-            connection: config('laravel-anvil.connection'),
-            ignore: config('laravel-anvil.ignore_tables', []),
-        );
-    }
-
     public static function fromArray(array $options): self
     {
         return new self(
@@ -178,6 +173,7 @@ final class GenerationOptions
             tests: $options['tests'] ?? false,
             api: $options['api'] ?? false,
             apiVersion: (int) ($options['api_version'] ?? 1),
+            web: $options['web'] ?? false,
             openApi: $options['open_api'] ?? false,
             openApiFormat: $options['open_api_format'] ?? 'yaml',
             openApiSingleFile: $options['open_api_single_file'] ?? false,
@@ -236,23 +232,9 @@ final class GenerationOptions
         return 'v'.$this->apiVersion;
     }
 
-    /**
-     * Namespace segment for versioned API controllers,
-     * e.g. "App\Http\Controllers\Api\V1".
-     */
-    public function getApiControllerNamespace(): string
-    {
-        return 'App\\Http\\Controllers\\Api\\'.$this->getApiVersionString();
-    }
-
     public function hasSpecificTables(): bool
     {
         return ! empty($this->tables);
-    }
-
-    public function hasIgnoredTables(): bool
-    {
-        return ! empty($this->ignore);
     }
 
     public function getAllIgnoredTables(): array
@@ -263,22 +245,13 @@ final class GenerationOptions
         );
     }
 
-    public function hasAnyArtifacts(): bool
-    {
-        return $this->models || $this->controllers || $this->resources
-            || $this->observers || $this->policies || $this->formRequests
-            || $this->services || $this->repositories || $this->gates
-            || $this->apiRoutes || $this->factories || $this->seeders
-            || $this->migrations || $this->events || $this->tests
-            || $this->api || $this->openApi;
-    }
-
     public function getEnabledGenerators(): array
     {
         $map = [
             'Models' => $this->models,
             'Controllers' => $this->controllers && ! $this->api,
             'ApiScaffold' => $this->api,
+            'WebScaffold' => $this->web,
             'Resources' => $this->resources,
             'Observers' => $this->observers,
             'Policies' => $this->policies,
@@ -318,6 +291,7 @@ final class GenerationOptions
             'tests' => $this->tests,
             'api' => $this->api,
             'api_version' => $this->apiVersion,
+            'web' => $this->web,
             'open_api' => $this->openApi,
             'open_api_format' => $this->openApiFormat,
             'open_api_single_file' => $this->openApiSingleFile,
@@ -337,37 +311,6 @@ final class GenerationOptions
             'tables' => $this->tables,
             'ignore' => $this->ignore,
         ];
-    }
-
-    public function getSummary(): string
-    {
-        $parts = [];
-        $gens = $this->getEnabledGenerators();
-
-        if (! empty($gens)) {
-            $parts[] = 'Generators: '.implode(', ', $gens);
-        }
-        if ($this->api) {
-            $parts[] = 'API version: '.$this->getApiVersionString();
-        }
-        if ($this->openApi) {
-            $parts[] = 'OpenAPI format: '.strtoupper($this->openApiFormat);
-            $parts[] = $this->openApiSingleFile ? 'Single-file spec' : 'Split-file spec';
-        }
-        if ($this->force) {
-            $parts[] = 'Force overwrite';
-        }
-        if ($this->dryRun) {
-            $parts[] = 'Dry run';
-        }
-        if ($this->backup) {
-            $parts[] = 'Backup enabled';
-        }
-        if (! empty($this->tables)) {
-            $parts[] = 'Tables: '.implode(', ', $this->tables);
-        }
-
-        return implode(' | ', $parts);
     }
 
     public function __toString(): string

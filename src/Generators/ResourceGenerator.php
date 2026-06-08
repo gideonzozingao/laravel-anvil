@@ -48,16 +48,19 @@ final class ResourceGenerator implements Generator
         'two_factor_recovery_codes',
     ];
 
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->resources ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'Resource';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $resourceName = $meta->model.'Resource';
@@ -101,7 +104,6 @@ final class ResourceGenerator implements Generator
     {
         $model = $meta->model;
         $resourceName = $model.'Resource';
-        $fullModel = trim($namespace, '\\').'\\'.$model;
 
         $excludedFields = array_merge(
             self::DEFAULT_EXCLUDED,
@@ -172,7 +174,6 @@ PHP;
         $lines = [];
 
         // Columns that are FK columns — we handle those in relationship lines
-        $fkColumns = array_column($meta->foreignKeys, 'column');
 
         // Auto-skip timestamp/soft-delete columns (handled separately)
         $autoSkip = ['created_at', 'updated_at', 'deleted_at'];

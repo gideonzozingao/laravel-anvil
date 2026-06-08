@@ -25,16 +25,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class WebControllerGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->web ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'WebController';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $controllerName = $meta->model.'Controller';

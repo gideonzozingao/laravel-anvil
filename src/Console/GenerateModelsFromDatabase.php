@@ -35,6 +35,7 @@ class GenerateModelsFromDatabase extends Command
                             {--tests                  : Feature test classes for all CRUD endpoints}
                             {--api                    : Generate a versioned JSON API scaffold with ForceJson enforcement}
                             {--api-version=1          : Version number for --api scaffold (e.g. 1, 2, v2)}
+                            {--web                    : Generate a web scaffold (resource controllers, Blade views, web routes)}
                             {--openapi                : Generate OpenAPI 3.1 specification}
                             {--openapi-format=yaml    : Output format: yaml (default) or json}
                             {--openapi-single-file    : Merge all schemas and paths into one file}
@@ -189,6 +190,10 @@ class GenerateModelsFromDatabase extends Command
             $this->info("🚀 Versioned API scaffold — {$versionLabel} (JSON-enforced)");
         }
 
+        if ($options->web) {
+            $this->info('🌐 Web scaffold — controllers, Blade views and web routes');
+        }
+
         if ($options->openApi) {
             $fmt = strtoupper($options->openApiFormat);
             $mode = $options->openApiSingleFile ? 'single-file' : 'split-files';
@@ -249,7 +254,8 @@ class GenerateModelsFromDatabase extends Command
                     || $options->apiRoutes || $options->factories
                     || $options->seeders || $options->migrations
                     || $options->events || $options->tests
-                    || $options->api || $options->openApi;
+                    || $options->api || $options->openApi
+                    || $options->web;
 
                 if ($needsOrchestrator) {
                     $orchestratorResults = $this->orchestrator->generate([$meta], $options);
@@ -377,6 +383,15 @@ class GenerateModelsFromDatabase extends Command
                 $this->line('   Provider     : App\\Providers\\ForceJsonApiServiceProvider');
             }
 
+            if ($options->web) {
+                $routeFile = config('anvil.web.route_file', 'routes/web.php');
+                $layout = config('anvil.web.layout', 'layouts.anvil');
+                $this->line('   Controllers  : App\\Http\\Controllers\\Web\\');
+                $this->line("   Route file   : {$routeFile}");
+                $this->line('   Views        : resources/views/{resource}/');
+                $this->line("   Layout       : {$layout}");
+            }
+
             if ($options->openApi) {
                 $path = config('laravel-anvil.openapi.output_path', 'openapi');
                 $this->line("   OpenAPI output → {$path}/");
@@ -461,6 +476,16 @@ class GenerateModelsFromDatabase extends Command
             $this->info("🚀 Versioned API ({$versionString}) scaffold complete.");
             $this->line("   Route file : routes/api/{$versionSlug}.php");
             $this->line('   All requests and exceptions locked to JSON via ForceJsonApiServiceProvider.');
+        }
+
+        // Web scaffold summary
+        if ($options->web) {
+            $routeFile = config('anvil.web.route_file', 'routes/web.php');
+            $this->newLine();
+            $this->info('🌐 Web scaffold complete.');
+            $this->line("   Controllers : App\\Http\\Controllers\\Web\\");
+            $this->line("   Routes      : {$routeFile} (Route::resource within the configured middleware group)");
+            $this->line('   Views       : resources/views/{resource}/ (index, create, edit, show, _form)');
         }
 
         // Pivot tables

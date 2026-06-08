@@ -20,16 +20,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class OpenApiGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->openApi ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'OpenAPI';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $results = [];

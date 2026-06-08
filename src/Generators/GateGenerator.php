@@ -28,16 +28,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class GateGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->gates ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'Gate';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         if ($options->dryRun) {

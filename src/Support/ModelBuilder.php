@@ -571,12 +571,4 @@ class ModelBuilder
     {
         return Helpers::tableToModelName($this->tableName);
     }
-
-    /**
-     * Get full model class
-     */
-    public function getFullModelClass(): string
-    {
-        return $this->namespace.'\\'.$this->getModelName();
-    }
 }

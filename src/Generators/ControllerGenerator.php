@@ -19,16 +19,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class ControllerGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->controllers ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'Controller';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $controllerName = $meta->model.'Controller';

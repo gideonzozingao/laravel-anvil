@@ -83,16 +83,19 @@ final class FactoryGenerator implements Generator
         'subject' => 'fake()->sentence(6)',
     ];
 
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->factories ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'Factory';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $factoryName = $meta->model.'Factory';

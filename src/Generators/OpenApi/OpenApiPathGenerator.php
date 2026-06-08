@@ -7,7 +7,6 @@ use Zuqongtech\LaravelAnvil\Contracts\Generator;
 use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 use Zuqongtech\LaravelAnvil\Support\Helpers;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
-use Zuqongtech\LaravelAnvil\Support\OpenApiYamlSerializer;
 
 /**
  * Generates OpenAPI 3.1 path definitions for a model's REST endpoints.
@@ -34,20 +33,19 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiYamlSerializer;
  */
 final class OpenApiPathGenerator implements Generator
 {
-    public function __construct(
-        private readonly OpenApiYamlSerializer $serializer = new OpenApiYamlSerializer,
-    ) {}
-
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->openApi ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'OpenApiPath';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $format = config('anvil.openapi.format', 'yaml');

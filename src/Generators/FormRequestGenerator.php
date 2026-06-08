@@ -19,16 +19,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class FormRequestGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->formRequests ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'FormRequest';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $results = [];

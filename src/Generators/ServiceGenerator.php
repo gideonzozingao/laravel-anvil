@@ -21,16 +21,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class ServiceGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->services ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'Service';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $serviceName = $meta->model.'Service';
@@ -70,7 +73,6 @@ final class ServiceGenerator implements Generator
     {
         $model = $meta->model;
         $service = $model.'Service';
-        $repo = $model.'Repository';
         $repoInterface = $model.'RepositoryInterface';
         $variable = lcfirst($model);
         $fullModel = trim($namespace, '\\').'\\'.$model;

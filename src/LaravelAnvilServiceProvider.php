@@ -25,11 +25,15 @@ use Zuqongtech\LaravelAnvil\Generators\ResourceGenerator;
 use Zuqongtech\LaravelAnvil\Generators\SeederGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ServiceGenerator;
 use Zuqongtech\LaravelAnvil\Generators\TestGenerator;
+use Zuqongtech\LaravelAnvil\Generators\ViewGenerator;
+use Zuqongtech\LaravelAnvil\Generators\WebControllerGenerator;
+use Zuqongtech\LaravelAnvil\Generators\WebRouteGenerator;
 use Zuqongtech\LaravelAnvil\Http\DocsController;
 use Zuqongtech\LaravelAnvil\Support\GenerationOrchestrator;
 
 class LaravelAnvilServiceProvider extends ServiceProvider
 {
+    #[\Override]
     public function register(): void
     {
 
@@ -72,6 +76,11 @@ class LaravelAnvilServiceProvider extends ServiceProvider
             // spec in finalize(). Only this entry is registered; it drives the
             // other two internally, so they must NOT be registered separately.
             OpenApiRootGenerator::class,        // --openapi
+
+            // Web scaffold (--web)
+            WebControllerGenerator::class,
+            WebRouteGenerator::class,
+            ViewGenerator::class,
         ];
 
         // Bind generators. The OpenAPI Root generator depends on the Schema and
@@ -129,7 +138,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
         $prefix = trim(config('anvil.openapi.docs.route', 'docs'), '/');
         $middleware = config('anvil.openapi.docs.middleware', ['web']);
 
-        Route::middleware($middleware)->group(function () use ($prefix) {
+        Route::middleware($middleware)->group(function () use ($prefix): void {
             Route::get($prefix, [DocsController::class, 'ui'])
                 ->name('anvil.docs');
 

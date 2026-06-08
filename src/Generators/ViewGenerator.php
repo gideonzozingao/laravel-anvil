@@ -27,16 +27,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class ViewGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->web ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'View';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $results = [];

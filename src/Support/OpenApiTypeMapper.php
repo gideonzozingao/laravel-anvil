@@ -207,16 +207,6 @@ final class OpenApiTypeMapper
     // FK ref helper
     // -----------------------------------------------------------------------
 
-    /**
-     * Build a $ref property for a foreign key column.
-     */
-    public function fkRef(string $referencedTable): array
-    {
-        $model = Helpers::tableToModelName($referencedTable);
-
-        return ['$ref' => "#/components/schemas/{$model}"];
-    }
-
     // -----------------------------------------------------------------------
     // Shared response schema helpers
     // -----------------------------------------------------------------------

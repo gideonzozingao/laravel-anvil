@@ -41,16 +41,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class PolicyGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->policies ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'Policy';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $policyName = $meta->model.'Policy';

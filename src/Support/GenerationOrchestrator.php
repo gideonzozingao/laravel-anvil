@@ -30,12 +30,6 @@ final class GenerationOrchestrator
         $this->generators[] = $generator;
     }
 
-    /** @return list<Generator> */
-    public function getGenerators(): array
-    {
-        return $this->generators;
-    }
-
     // -----------------------------------------------------------------------
     // Pass 1 — per-model generation
     // -----------------------------------------------------------------------

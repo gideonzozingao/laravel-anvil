@@ -38,16 +38,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class MigrationGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->migrations ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'Migration';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $timestamp = date('Y_m_d_His');
@@ -272,7 +275,6 @@ PHP;
     protected function buildIndexLines(ModelMetadata $meta): string
     {
         $lines = [];
-        $pkCols = $meta->compositePrimaryKey;
 
         foreach ($meta->indexes as $index) {
             if ($index['primary']) {

@@ -7,26 +7,6 @@ class StubGenerator
     public function __construct(protected array $replacements = []) {}
 
     /**
-     * Add a replacement
-     */
-    public function addReplacement(string $key, string $value): self
-    {
-        $this->replacements[$key] = $value;
-
-        return $this;
-    }
-
-    /**
-     * Add multiple replacements
-     */
-    public function addReplacements(array $replacements): self
-    {
-        $this->replacements = array_merge($this->replacements, $replacements);
-
-        return $this;
-    }
-
-    /**
      * Generate model stub
      */
     public function generate(): string
@@ -200,37 +180,6 @@ STUB;
 
         foreach ($casts as $column => $cast) {
             $stub .= "{$innerIndent}'{$column}' => '{$cast}',\n";
-        }
-
-        return $stub.($indentation.'];');
-    }
-
-    /**
-     * Generate dates array stub
-     */
-    public static function datesStub(array $dates, int $indent = 1): string
-    {
-        if ($dates === []) {
-            return '';
-        }
-
-        $indentation = str_repeat('    ', $indent);
-        $innerIndent = str_repeat('    ', $indent + 1);
-
-        $stub = "\n{$indentation}/**\n";
-        $stub .= $indentation.' * The attributes that should be mutated to dates.
-';
-        $stub .= $indentation.' *
-';
-        $stub .= $indentation.' * @var array<int, string>
-';
-        $stub .= $indentation.' */
-';
-        $stub .= $indentation.'protected $dates = [
-';
-
-        foreach ($dates as $date) {
-            $stub .= "{$innerIndent}'{$date}',\n";
         }
 
         return $stub.($indentation.'];');

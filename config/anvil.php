@@ -438,6 +438,14 @@ return [
             'auth_guard' => 'sanctum',
         ],
 
+        'web' => [
+            'controller_namespace' => 'App\\Http\\Controllers\\Web',
+            'route_file' => 'routes/web.php',
+            'middleware' => ['web', 'auth'],   // routes wrapped in this group
+            'layout' => 'layouts.anvil',   // views @extends this
+            'generate_layout' => true,              // emit a Tailwind-CDN base layout once
+        ],
+
     ],
     'openapi' => [
         'title' => env('ANVIL_OPENAPI_TITLE', 'Laravel Anvil'),
@@ -455,4 +463,12 @@ return [
             'ui_version' => '5.17.14',                          // swagger-ui-dist CDN version
         ],
     ],
+    'web' => [
+        'controller_namespace' => 'App\\Http\\Controllers\\Web',
+        'route_file' => 'routes/web.php',
+        'middleware' => ['web', 'auth'],   // routes wrapped in this group
+        'layout' => 'layouts.anvil',   // views @extends this
+        'generate_layout' => true,              // emit a Tailwind-CDN base layout once
+    ],
+
 ];

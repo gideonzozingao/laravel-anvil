@@ -2,7 +2,6 @@
 
 namespace Zuqongtech\LaravelAnvil\Http;
 
-use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Symfony\Component\Yaml\Yaml;
 
@@ -24,58 +23,12 @@ use Symfony\Component\Yaml\Yaml;
  *   which only resolve against the document they live in — and a path file has
  *   no `components` section, so Swagger UI throws "JSON Pointer evaluation
  *   failed ... 'components'". Bundling inlines the external files into one
- *   self-contained document so every #/components/... ref resolves. In
+ *   self-contained docfinal ument so every #/components/... ref resolves. In
  *   single-file mode there are no external refs, so bundling is a harmless
  *   no-op.
  */
 class DocsController
 {
-    public function ui(Request $request): Response
-    {
-        $ext = $this->extension();
-        $specUrl = url($this->prefix().'/openapi.'.$ext);
-
-        return new Response(
-            $this->html($specUrl),
-            200,
-            ['Content-Type' => 'text/html; charset=UTF-8'],
-        );
-    }
-
-    public function spec(Request $request, ?string $file = null): Response
-    {
-        $base = $this->specBasePath();
-        $ext = $this->extension();
-
-        if (! is_dir($base)) {
-            return $this->missingSpecResponse();
-        }
-
-        $rootName = 'openapi.'.$ext;
-        $file = $file ?: $rootName;
-
-        $candidate = realpath($base.DIRECTORY_SEPARATOR.$file);
-        $baseReal = realpath($base);
-
-        if ($candidate === false || $baseReal === false || ! str_starts_with($candidate, $baseReal)) {
-            return new Response("Spec file not found: {$file}", 404, ['Content-Type' => 'text/plain']);
-        }
-
-        $isJson = str_ends_with($candidate, '.json');
-        $contentType = $isJson ? 'application/json' : 'application/yaml';
-
-        // The root spec is bundled; sub-files are served raw (handy for debugging).
-        $body = ($file === $rootName)
-            ? $this->bundle($candidate, $isJson ? 'json' : 'yaml')
-            : file_get_contents($candidate);
-
-        return new Response($body, 200, [
-            'Content-Type' => $contentType,
-            'Access-Control-Allow-Origin' => '*',
-            'Cache-Control' => 'no-cache',
-        ]);
-    }
-
     // -----------------------------------------------------------------------
     // Bundler
     // -----------------------------------------------------------------------
@@ -86,7 +39,7 @@ class DocsController
      * left untouched — once their targets are inlined they resolve within the
      * single bundled document.
      */
-    protected function bundle(string $rootFile, string $format): string
+    protected function bundle(string $rootFile, string $format): string|false
     {
         try {
             $base = dirname($rootFile);
@@ -206,7 +159,7 @@ class DocsController
     /**
      * @param  array<mixed>  $data
      */
-    protected function dump(array $data, string $format): string
+    protected function dump(array $data, string $format): string|false
     {
         if ($format === 'json') {
             return json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);

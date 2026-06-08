@@ -35,16 +35,19 @@ final class ForceJsonServiceProviderGenerator implements Generator
 {
     private const PROVIDER_FQN = 'App\\Providers\\ForceJsonApiServiceProvider';
 
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->api;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'ForceJsonProvider';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         return [

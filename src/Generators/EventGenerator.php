@@ -25,16 +25,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class EventGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->events ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'Event';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $events = ['Created', 'Updated', 'Deleted'];

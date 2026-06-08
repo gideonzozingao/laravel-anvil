@@ -22,16 +22,19 @@ use Zuqongtech\LaravelAnvil\Support\ProviderRegistrar;
  */
 final class RepositoryGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->repositories ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'Repository';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $results = [];

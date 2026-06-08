@@ -480,30 +480,6 @@ class ConfigValidator
     }
 
     /**
-     * Get all errors
-     */
-    public function getErrors(): array
-    {
-        return $this->errors;
-    }
-
-    /**
-     * Get all warnings
-     */
-    public function getWarnings(): array
-    {
-        return $this->warnings;
-    }
-
-    /**
-     * Check if there are any errors
-     */
-    public function hasErrors(): bool
-    {
-        return $this->errors !== [];
-    }
-
-    /**
      * Check if there are any warnings
      */
     public function hasWarnings(): bool
@@ -533,31 +509,5 @@ class ConfigValidator
             array_keys($this->warnings),
             $this->warnings
         );
-    }
-
-    /**
-     * Validate and throw exception if invalid
-     */
-    public function validateOrFail(): void
-    {
-        if (! $this->validate()) {
-            $messages = implode("\n", $this->getFormattedErrors());
-            throw new \InvalidArgumentException('Configuration validation failed:
-'.$messages);
-        }
-    }
-
-    /**
-     * Get validation summary
-     */
-    public function getSummary(): array
-    {
-        return [
-            'valid' => $this->errors === [],
-            'errors' => count($this->errors),
-            'warnings' => count($this->warnings),
-            'error_messages' => $this->getFormattedErrors(),
-            'warning_messages' => $this->getFormattedWarnings(),
-        ];
     }
 }

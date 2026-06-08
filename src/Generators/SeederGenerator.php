@@ -30,16 +30,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class SeederGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->seeders ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'Seeder';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $seederName = $meta->model.'Seeder';

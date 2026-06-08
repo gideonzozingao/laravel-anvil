@@ -166,55 +166,6 @@ class RelationshipDetector
     }
 
     /**
-     * Get relationship summary for a table
-     */
-    public function getRelationshipSummary(string $table): array
-    {
-        return [
-            'belongs_to' => $this->foreignKeyMap[$table] ?? [],
-            'has_many' => $this->getInverseRelationships($table),
-            'many_to_many' => $this->detectManyToMany($table),
-            'polymorphic' => $this->detectPolymorphic($table),
-        ];
-    }
-
-    /**
-     * Determine relationship cardinality
-     */
-    public function determineCardinality(string $sourceTable, string $targetTable): string
-    {
-        $foreignKeys = $this->foreignKeyMap[$sourceTable] ?? [];
-
-        foreach ($foreignKeys as $fk) {
-            if ($fk['referenced_table'] === $targetTable) {
-                return $this->shouldBeHasOne($sourceTable, $fk['column']) ? 'one' : 'many';
-            }
-        }
-
-        return 'many';
-    }
-
-    /**
-     * Check if table is a pivot table
-     */
-    public function isPivotTable(string $table): bool
-    {
-        $manyToMany = $this->detectManyToMany($table);
-
-        return $manyToMany !== [];
-    }
-
-    /**
-     * Get relationship method name for many-to-many
-     */
-    public function getManyToManyMethodName(string $relatedTable): string
-    {
-        return Helpers::getInverseRelationName(
-            Helpers::tableToModelName($relatedTable)
-        );
-    }
-
-    /**
      * Validate foreign key references
      */
     public function validateForeignKeys(): array

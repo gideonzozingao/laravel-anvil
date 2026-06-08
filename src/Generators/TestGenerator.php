@@ -31,16 +31,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class TestGenerator implements Generator
 {
+    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->tests ?? false;
     }
 
+    #[\Override]
     public function getName(): string
     {
         return 'Test';
     }
 
+    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $testName = $meta->model.'Test';
