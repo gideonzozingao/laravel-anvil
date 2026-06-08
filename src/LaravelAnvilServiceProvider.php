@@ -14,6 +14,9 @@ use Zuqongtech\LaravelAnvil\Generators\FormRequestGenerator;
 use Zuqongtech\LaravelAnvil\Generators\GateGenerator;
 use Zuqongtech\LaravelAnvil\Generators\MigrationGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ObserverGenerator;
+use Zuqongtech\LaravelAnvil\Generators\OpenApi\OpenApiPathGenerator;
+use Zuqongtech\LaravelAnvil\Generators\OpenApi\OpenApiRootGenerator;
+use Zuqongtech\LaravelAnvil\Generators\OpenApi\OpenApiSchemaGenerator;
 use Zuqongtech\LaravelAnvil\Generators\PolicyGenerator;
 use Zuqongtech\LaravelAnvil\Generators\RepositoryGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ResourceGenerator;
@@ -21,27 +24,29 @@ use Zuqongtech\LaravelAnvil\Generators\SeederGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ServiceGenerator;
 use Zuqongtech\LaravelAnvil\Generators\TestGenerator;
 use Zuqongtech\LaravelAnvil\Support\GenerationOrchestrator;
-use Zuqongtech\LaravelAnvil\Generators\OpenApiGenerator;
 
 class LaravelAnvilServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->mergeConfigFrom(
-            __DIR__.'/../config/anvil.php',
-            'anvil',
-        );
+        // The codebase reads config under two historical keys: older generators
+        // use config('anvil.*'), while the OpenAPI generators, GenerationOptions,
+        // and the console command use config('laravel-anvil.*'). Merging the same
+        // file under BOTH keys makes every lookup resolve correctly without having
+        // to touch dozens of call sites.
+        $this->mergeConfigFrom(__DIR__.'/../config/anvil.php', 'anvil');
+        $this->mergeConfigFrom(__DIR__.'/../config/anvil.php', 'laravel-anvil');
 
-        // ── Standard generators (active for their respective flags) ──────────
+        // ── Generator pipeline (order is authoritative) ──────────────────────
         $generators = [
-            // Original artifacts
+            // Core per-model artifacts
             ControllerGenerator::class,         // --controllers (non-API)
             ResourceGenerator::class,           // --resources
             ObserverGenerator::class,           // --observers
             PolicyGenerator::class,             // --policies
             FormRequestGenerator::class,        // --form-requests / --api
             ServiceGenerator::class,            // --services    / --api
-            RepositoryGenerator::class,         // --repositories
+            RepositoryGenerator::class,         // --repositories (auto-registers its provider)
             GateGenerator::class,               // --gates
             FactoryGenerator::class,            // --factories
             SeederGenerator::class,             // --seeders
@@ -49,22 +54,32 @@ class LaravelAnvilServiceProvider extends ServiceProvider
             EventGenerator::class,              // --events
             TestGenerator::class,               // --tests       / --api
 
-            // Route generator (handles both legacy and versioned modes)
+            // Routes (legacy + versioned)
             ApiRouteGenerator::class,           // --api-routes  / --api
-            OpenApiGenerator::class,
-            // Versioned API scaffold (--api only)
-            // Order matters: infrastructure first, then controllers
-            ForceJsonServiceProviderGenerator::class,  // --api (runs once per table, idempotent)
+
+            // Versioned JSON API scaffold — infrastructure MUST precede controllers
+            // ForceJsonServiceProviderGenerator now auto-registers the provider in
+            // bootstrap/providers.php, so the versioned routes wire themselves up.
+            ForceJsonServiceProviderGenerator::class,  // --api
             ApiControllerGenerator::class,             // --api
+
+            // OpenAPI 3.1 — Root orchestrates Schema + Path and writes the root
+            // spec in finalize(). Only this entry is registered; it drives the
+            // other two internally, so they must NOT be registered separately.
+            OpenApiRootGenerator::class,        // --openapi
         ];
+
+        // Bind generators. The OpenAPI Root generator depends on the Schema and
+        // Path generators (and serializer/type-mapper, which are default
+        // constructable), so the container can autowire them — but we bind the
+        // collaborators explicitly as singletons for clarity and reuse.
+        $this->app->singleton(OpenApiSchemaGenerator::class);
+        $this->app->singleton(OpenApiPathGenerator::class);
 
         foreach ($generators as $generatorClass) {
             $this->app->singleton($generatorClass);
         }
 
-        // Wire all generators into the orchestrator.
-        // Developers can replace individual generators by rebinding them
-        // in their own service providers before this provider boots.
         $this->app->singleton(GenerationOrchestrator::class, function ($app) use ($generators) {
             $orchestrator = new GenerationOrchestrator;
 
@@ -72,7 +87,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
                 $orchestrator->addGenerator($app->make($generatorClass));
             }
 
-            // Merge any custom generators registered via config
+            // Custom generators registered via config are appended last.
             foreach (config('anvil.custom_generators', []) as $customClass) {
                 if (class_exists($customClass)) {
                     $orchestrator->addGenerator($app->make($customClass));
@@ -85,9 +100,13 @@ class LaravelAnvilServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        if (config('anvil.openapi.docs.enabled', false)) {
+        $this->registerDocsRoutes();
+    }
         if ($this->app->runningInConsole()) {
             $this->commands([
-                GenerateModelsFromDatabase::class,
+                    \Zuqongtech\LaravelAnvil\Console\GenerateModelsFromDatabase::class,
+                    \Zuqongtech\LaravelAnvil\Console\DocsCommand::class, 
             ]);
 
             $this->publishes([
@@ -99,4 +118,20 @@ class LaravelAnvilServiceProvider extends ServiceProvider
             ], 'stubs');
         }
     }
+
+
+    protected function registerDocsRoutes(): void
+{
+    $prefix     = trim(config('anvil.openapi.docs.route', 'docs'), '/');
+    $middleware = config('anvil.openapi.docs.middleware', ['web']);
+
+    \Illuminate\Support\Facades\Route::middleware($middleware)->group(function () use ($prefix) {
+        \Illuminate\Support\Facades\Route::get($prefix, [\Zuqongtech\LaravelAnvil\Http\DocsController::class, 'ui'])
+            ->name('anvil.docs');
+
+        \Illuminate\Support\Facades\Route::get($prefix.'/{file}', [\Zuqongtech\LaravelAnvil\Http\DocsController::class, 'spec'])
+            ->where('file', '.*')
+            ->name('anvil.docs.spec');
+    });
+}
 }

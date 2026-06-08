@@ -5,6 +5,7 @@ namespace Zuqongtech\LaravelAnvil\Generators;
 use Zuqongtech\LaravelAnvil\Contracts\Generator;
 use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
+use Zuqongtech\LaravelAnvil\Support\ProviderRegistrar;
 
 /**
  * Generates three files for every model:
@@ -13,10 +14,11 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  *  2. app/Repositories/{Model}Repository.php   (Eloquent implementation)
  *  3. app/Providers/RepositoryServiceProvider.php  (created once, appended per model)
  *
- * The interface defines the standard data-access contract so the
- * service layer depends only on the abstraction. Swapping out
- * persistence engines (Eloquent → Doctrine, Redis cache, etc.) only
- * requires a new implementation and a binding change.
+ * ENHANCEMENT: when config('anvil.generators.repositories.register_provider')
+ * is true (default), RepositoryServiceProvider is also registered automatically
+ * in bootstrap/providers.php (Laravel 11+) — no manual wiring required. The
+ * registration is idempotent and falls back to bootstrap/app.php / config/app.php
+ * on older applications.
  */
 final class RepositoryGenerator implements Generator
 {
@@ -36,7 +38,7 @@ final class RepositoryGenerator implements Generator
 
         $results[] = $this->generateInterface($meta, $options);
         $results[] = $this->generateImplementation($meta, $options);
-        $this->ensureServiceProvider($meta, $options);
+        $results[] = $this->ensureServiceProvider($meta, $options);
 
         return $results;
     }
@@ -185,7 +187,6 @@ class {$name} implements {$iface}
     {
         \$query = \$this->model->newQuery();
 
-        // Apply filters — extend this with your filter logic
         foreach (\$filters as \$column => \$value) {
             if (\$value !== null && \$value !== '') {
                 \$query->where(\$column, \$value);
@@ -233,15 +234,11 @@ PHP;
     }
 
     // -----------------------------------------------------------------------
-    // RepositoryServiceProvider — created once, bindings appended
+    // RepositoryServiceProvider — created once, bindings appended, auto-registered
     // -----------------------------------------------------------------------
 
-    protected function ensureServiceProvider(ModelMetadata $meta, GenerationOptions $options): void
+    protected function ensureServiceProvider(ModelMetadata $meta, GenerationOptions $options): array
     {
-        if ($options->dryRun) {
-            return;
-        }
-
         $path = app_path('Providers/RepositoryServiceProvider.php');
 
         $model = $meta->model;
@@ -251,8 +248,13 @@ PHP;
 
         $bindingLine = "        \$this->app->bind({$ifaceClass}::class, fn () => new {$repoClass}(new \\{$modelClass}()));";
 
+        if ($options->dryRun) {
+            return ['type' => $this->getName().'Provider', 'name' => 'RepositoryServiceProvider', 'path' => $path, 'status' => 'dry-run'];
+        }
+
+        $created = false;
+
         if (! file_exists($path)) {
-            // Create the provider for the first time
             $content = <<<PHP
 <?php
 
@@ -274,24 +276,34 @@ PHP;
                 mkdir($dir, 0755, true);
             }
             file_put_contents($path, $content);
+            $created = true;
+        } else {
+            $existing = file_get_contents($path);
 
-            return;
+            if (! str_contains($existing, "{$model}RepositoryInterface")) {
+                $updated = str_replace(
+                    "    }\n}",
+                    "{$bindingLine}\n    }\n}",
+                    $existing,
+                );
+                file_put_contents($path, $updated);
+            }
         }
 
-        // Append new binding if not already present
-        $existing = file_get_contents($path);
-        if (str_contains($existing, "{$model}RepositoryInterface")) {
-            return;
+        // ── Auto-register the provider in the application bootstrap ──────────
+        $registration = ['status' => 'disabled'];
+        if (config('anvil.generators.repositories.register_provider', true)) {
+            $registrar = new ProviderRegistrar($options->dryRun);
+            $registration = $registrar->registerProvider('App\\Providers\\RepositoryServiceProvider');
         }
 
-        // Insert before the closing brace of register()
-        $updated = str_replace(
-            "    }\n}",
-            "{$bindingLine}\n    }\n}",
-            $existing,
-        );
-
-        file_put_contents($path, $updated);
+        return [
+            'type' => $this->getName().'Provider',
+            'name' => 'RepositoryServiceProvider',
+            'path' => $path,
+            'status' => $created ? 'success' : 'updated',
+            'registration' => $registration,
+        ];
     }
 
     // -----------------------------------------------------------------------

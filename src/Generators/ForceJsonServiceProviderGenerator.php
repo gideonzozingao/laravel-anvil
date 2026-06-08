@@ -5,36 +5,36 @@ namespace Zuqongtech\LaravelAnvil\Generators;
 use Zuqongtech\LaravelAnvil\Contracts\Generator;
 use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
+use Zuqongtech\LaravelAnvil\Support\ProviderRegistrar;
 
 /**
  * Generates the infrastructure that locks every versioned API request and
- * response to JSON — including exceptions.
+ * response — including exceptions — to JSON, and wires it into the app.
  *
- * THREE files are created / updated (all idempotent):
+ * Files created / updated (all idempotent):
  *
- * 1. app/Http/Middleware/ForceJsonResponse.php
- *    Sets Accept: application/json on every incoming request so Laravel's
- *    exception handler always renders JSON instead of HTML.
+ *  1. app/Http/Middleware/ForceJsonResponse.php
+ *     Sets Accept: application/json on every incoming request so Laravel's
+ *     exception handler always renders JSON instead of HTML.
  *
- * 2. app/Providers/ForceJsonApiServiceProvider.php
- *    A service provider that:
- *      - Loads every routes/api/v{n}.php file it knows about
- *      - Wraps them in the correct middleware group:
- *          api + ForceJsonResponse + auth:sanctum (configurable)
- *      - Registers a JSON exception renderer that overrides the default
- *        HTML fallback for all API routes (even 404, 405, 422, 500, etc.)
+ *  2. app/Providers/ForceJsonApiServiceProvider.php
+ *     Loads every routes/api/v{n}.php file, wraps each version in the correct
+ *     middleware group (api + ForceJsonResponse + auth:sanctum), and registers
+ *     a JSON exception renderer for all API routes.
  *
- * 3. bootstrap/app.php  ← registration
- *    Appends the provider and middleware to the application bootstrap file
- *    so Laravel 11+'s minimal bootstrap picks it up automatically.
- *    For Laravel ≤ 10 the generator falls back to config/app.php providers[].
+ *  3. bootstrap/providers.php  ← registration (Laravel 11+)
+ *     The provider is appended here automatically. Falls back to
+ *     bootstrap/app.php (->withProviders) or config/app.php on older apps.
+ *     The middleware is NOT injected into bootstrap/app.php: the provider
+ *     applies ForceJsonResponse on the versioned route group itself, so the
+ *     enforcement is self-contained and cannot leak onto non-API routes.
  *
- * The generator only produces output when $options->api === true.
- * Running it multiple times is safe — each file is checked for the presence
- * of its own marker string before any write occurs.
+ * Active only when $options->api === true. Safe to run once per table.
  */
 final class ForceJsonServiceProviderGenerator implements Generator
 {
+    private const PROVIDER_FQN = 'App\\Providers\\ForceJsonApiServiceProvider';
+
     public function supports(GenerationOptions $options): bool
     {
         return $options->api;
@@ -45,20 +45,13 @@ final class ForceJsonServiceProviderGenerator implements Generator
         return 'ForceJsonProvider';
     }
 
-    /**
-     * ModelMetadata is not used here (infrastructure is per-version, not per-model)
-     * but we must honour the interface contract. The generator is intentionally
-     * idempotent so calling it once per table is harmless.
-     */
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
-        $results = [];
-
-        $results[] = $this->ensureMiddleware($options);
-        $results[] = $this->ensureServiceProvider($options);
-        $results[] = $this->ensureBootstrapRegistration($options);
-
-        return $results;
+        return [
+            $this->ensureMiddleware($options),
+            $this->ensureServiceProvider($options),
+            $this->ensureBootstrapRegistration($options),
+        ];
     }
 
     // -----------------------------------------------------------------------
@@ -70,13 +63,7 @@ final class ForceJsonServiceProviderGenerator implements Generator
         $path = app_path('Http/Middleware/ForceJsonResponse.php');
 
         if (file_exists($path)) {
-            return [
-                'type' => $this->getName().'Middleware',
-                'name' => 'ForceJsonResponse',
-                'path' => $path,
-                'status' => 'skipped',
-                'reason' => 'already exists',
-            ];
+            return $this->result('Middleware', 'ForceJsonResponse', $path, 'skipped', 'already exists');
         }
 
         $content = <<<'PHP'
@@ -92,11 +79,10 @@ use Symfony\Component\HttpFoundation\Response;
  * ForceJsonResponse middleware.
  *
  * Sets the Accept header to application/json on every request that passes
- * through this middleware. This causes Laravel's exception handler to render
- * JSON responses for ALL error conditions (401, 403, 404, 405, 422, 500, …)
- * rather than falling back to HTML pages.
+ * through it, causing Laravel's exception handler to render JSON for ALL
+ * error conditions (401, 403, 404, 405, 422, 500, …) rather than HTML.
  *
- * Applied globally to all versioned API route groups by ForceJsonApiServiceProvider.
+ * Applied to versioned API route groups by ForceJsonApiServiceProvider.
  */
 class ForceJsonResponse
 {
@@ -106,8 +92,6 @@ class ForceJsonResponse
 
         $response = $next($request);
 
-        // Ensure the Content-Type response header is always application/json
-        // even for responses that don't set it explicitly (e.g. 204 No Content).
         if (! $response->headers->has('Content-Type') || $response->getStatusCode() !== 204) {
             $response->headers->set('Content-Type', 'application/json');
         }
@@ -119,20 +103,10 @@ class ForceJsonResponse
 PHP;
 
         if (! $options->dryRun) {
-            $dir = dirname($path);
-            if (! is_dir($dir)) {
-                mkdir($dir, 0755, true);
-            }
-            file_put_contents($path, $content);
+            $this->putFile($path, $content);
         }
 
-        return [
-            'type' => $this->getName().'Middleware',
-            'name' => 'ForceJsonResponse',
-            'path' => $path,
-            'status' => 'success',
-            'action' => 'created',
-        ];
+        return $this->result('Middleware', 'ForceJsonResponse', $path, 'success', null, 'created');
     }
 
     // -----------------------------------------------------------------------
@@ -143,41 +117,23 @@ PHP;
     {
         $path = app_path('Providers/ForceJsonApiServiceProvider.php');
         $versionSlug = $options->getApiVersionSlug();
-        $versionString = $options->getApiVersionString();
 
         if (file_exists($path)) {
-            // Provider already exists — append new version entry if missing
             $this->appendVersionToProvider($path, $versionSlug, $options);
 
-            return [
-                'type' => $this->getName().'Provider',
-                'name' => 'ForceJsonApiServiceProvider',
-                'path' => $path,
-                'status' => 'updated',
-                'reason' => "appended {$versionSlug} routes",
-            ];
+            return $this->result('Provider', 'ForceJsonApiServiceProvider', $path, 'updated', "appended {$versionSlug} routes");
         }
 
         $middleware = config('anvil.api_middleware', ['auth:sanctum']);
-        $mwList = "'".implode("',\n                    '", $middleware)."'";
+        $mwList = "'".implode("',\n        '", $middleware)."'";
 
         $content = $this->buildServiceProvider($versionSlug, $mwList);
 
         if (! $options->dryRun) {
-            $dir = dirname($path);
-            if (! is_dir($dir)) {
-                mkdir($dir, 0755, true);
-            }
-            file_put_contents($path, $content);
+            $this->putFile($path, $content);
         }
 
-        return [
-            'type' => $this->getName().'Provider',
-            'name' => 'ForceJsonApiServiceProvider',
-            'path' => $path,
-            'status' => 'success',
-            'action' => 'created',
-        ];
+        return $this->result('Provider', 'ForceJsonApiServiceProvider', $path, 'success', null, 'created');
     }
 
     protected function buildServiceProvider(string $versionSlug, string $mwList): string
@@ -190,29 +146,23 @@ namespace App\Providers;
 use App\Http\Middleware\ForceJsonResponse;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\Config;
 use Throwable;
 
 /**
  * ForceJsonApiServiceProvider
  *
- * Responsibilities:
- *  1. Load every versioned API route file from routes/api/v{n}.php
- *  2. Wrap each version's routes in the correct middleware stack that
- *     GUARANTEES JSON for every request and every response including
- *     exceptions (404, 405, 422, 500, etc.)
- *  3. Register a global JSON exception renderer so unhandled exceptions
- *     inside the API prefix always return a structured JSON envelope.
+ *  1. Loads every versioned API route file from routes/api/v{n}.php.
+ *  2. Wraps each version in a middleware stack that GUARANTEES JSON for every
+ *     request, response, and exception (404, 405, 422, 500, …).
+ *  3. Registers a global JSON exception renderer for the API prefix.
  *
- * To add a new API version simply add an entry to \$versions below,
- * or re-run  php artisan anvil:generate --api --api-version=<n>
- * which will append the entry automatically.
+ * To add a new version: re-run  php artisan anvil:generate --api --api-version=<n>
+ * which appends the entry below automatically.
  */
 class ForceJsonApiServiceProvider extends ServiceProvider
 {
     /**
-     * Registered API versions.
-     * Each entry maps a version slug to its route file path.
+     * Registered API versions: slug => route file path.
      *
      * @var array<string, string>
      */
@@ -238,8 +188,6 @@ class ForceJsonApiServiceProvider extends ServiceProvider
         \$this->registerJsonExceptionHandler();
     }
 
-    // -----------------------------------------------------------------------
-
     protected function registerApiRoutes(): void
     {
         foreach (\$this->versions as \$version => \$routeFile) {
@@ -255,25 +203,14 @@ class ForceJsonApiServiceProvider extends ServiceProvider
     }
 
     /**
-     * Override Laravel's default exception rendering for all API paths so
-     * that every unhandled exception — including framework-level ones —
-     * returns a consistent JSON envelope instead of an HTML error page.
-     *
-     * This covers: ModelNotFoundException (404), AuthenticationException (401),
-     * AuthorizationException (403), ValidationException (422), and any
-     * unhandled Throwable (500).
+     * Render all unhandled exceptions on API paths as a consistent JSON envelope.
      */
     protected function registerJsonExceptionHandler(): void
     {
-        \$this->app->make(\Illuminate\Contracts\Http\Kernel::class)
-            ->pushMiddleware(ForceJsonResponse::class);
-
-        // Register a renderable exception handler that catches ALL throwables
-        // on API paths and formats them as JSON envelopes.
         \$this->app->make(\Illuminate\Contracts\Debug\ExceptionHandler::class)
             ->renderable(function (Throwable \$e, \$request) {
                 if (! \$request->is('v*/*') && ! \$request->is('*/api/*') && ! \$request->wantsJson()) {
-                    return null; // Let non-API requests fall through
+                    return null;
                 }
 
                 return \$this->renderApiException(\$e, \$request);
@@ -306,8 +243,6 @@ class ForceJsonApiServiceProvider extends ServiceProvider
     }
 
     /**
-     * Map a Throwable to an HTTP status code, human message, and errors bag.
-     *
      * @return array{int, string, array<mixed>}
      */
     protected function classifyException(Throwable \$e): array
@@ -346,23 +281,18 @@ PHP;
     }
 
     /**
-     * Append a new version entry to \$versions in an existing provider file.
+     * Append a new version entry to $versions in an existing provider file.
      */
-    protected function appendVersionToProvider(
-        string $path,
-        string $versionSlug,
-        GenerationOptions $options,
-    ): void {
+    protected function appendVersionToProvider(string $path, string $versionSlug, GenerationOptions $options): void
+    {
         $content = file_get_contents($path);
 
-        // Idempotency
-        if (str_contains($content, "'{$versionSlug}'")) {
+        if (str_contains($content, "'{$versionSlug}' =>")) {
             return;
         }
 
         $newEntry = "        '{$versionSlug}' => 'routes/api/{$versionSlug}.php',";
 
-        // Insert after the anvil:managed marker
         $updated = str_replace(
             '// anvil:managed — do not remove this comment',
             "// anvil:managed — do not remove this comment\n{$newEntry}",
@@ -375,132 +305,61 @@ PHP;
     }
 
     // -----------------------------------------------------------------------
-    // 3. Bootstrap registration
+    // 3. Bootstrap registration (delegated to ProviderRegistrar)
     // -----------------------------------------------------------------------
 
     protected function ensureBootstrapRegistration(GenerationOptions $options): array
     {
-        // Laravel 11+ uses bootstrap/app.php
-        $bootstrapPath = base_path('bootstrap/app.php');
-
-        if (file_exists($bootstrapPath)) {
-            return $this->registerInBootstrapApp($bootstrapPath, $options);
-        }
-
-        // Laravel ≤ 10 uses config/app.php providers array
-        $configAppPath = config_path('app.php');
-        if (file_exists($configAppPath)) {
-            return $this->registerInConfigApp($configAppPath, $options);
-        }
+        $registrar = new ProviderRegistrar($options->dryRun);
+        $outcome = $registrar->registerProvider(self::PROVIDER_FQN);
 
         return [
             'type' => $this->getName().'Bootstrap',
-            'name' => 'Bootstrap registration',
-            'status' => 'skipped',
-            'reason' => 'Could not locate bootstrap/app.php or config/app.php',
+            'name' => $outcome['target'],
+            'path' => $outcome['path'] ?? null,
+            'status' => $outcome['status'],
+            'reason' => $outcome['reason'] ?? null,
         ];
     }
 
-    /**
-     * Register ForceJsonApiServiceProvider in Laravel 11+ bootstrap/app.php.
-     *
-     * Appends ->withProviders([...]) or adds to an existing withProviders call,
-     * and registers the ForceJsonResponse middleware alias.
-     */
-    protected function registerInBootstrapApp(string $path, GenerationOptions $options): array
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    protected function putFile(string $path, string $content): void
     {
-        $content = file_get_contents($path);
-        $marker = 'ForceJsonApiServiceProvider';
-
-        if (str_contains($content, $marker)) {
-            return [
-                'type' => $this->getName().'Bootstrap',
-                'name' => 'bootstrap/app.php',
-                'path' => $path,
-                'status' => 'skipped',
-                'reason' => 'already registered',
-            ];
+        $dir = dirname($path);
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
         }
-
-        // Strategy: inject ->withProviders() before the final ->create() call
-        $providerLine = '    \\App\\Providers\\ForceJsonApiServiceProvider::class,';
-        $middlewareLine = '        \\App\\Http\\Middleware\\ForceJsonResponse::class,';
-
-        // Add withProviders block if there's a ->create() at the end
-        if (str_contains($content, '->create()')) {
-            $inject = <<<PHP
-
-    ->withProviders([
-{$providerLine}
-    ])
-    ->withMiddleware(function (\Illuminate\Foundation\Configuration\Middleware \$middleware) {
-        \$middleware->appendToGroup('api', [
-{$middlewareLine}
-        ]);
-    })
-PHP;
-            $content = str_replace('->create()', $inject."\n    ->create()", $content);
-        }
-
-        if (! $options->dryRun) {
-            file_put_contents($path, $content);
-        }
-
-        return [
-            'type' => $this->getName().'Bootstrap',
-            'name' => 'bootstrap/app.php',
-            'path' => $path,
-            'status' => 'success',
-            'action' => 'updated',
-        ];
+        file_put_contents($path, $content);
     }
 
     /**
-     * Register ForceJsonApiServiceProvider in Laravel ≤10 config/app.php.
+     * @return array<string, mixed>
      */
-    protected function registerInConfigApp(string $path, GenerationOptions $options): array
-    {
-        $content = file_get_contents($path);
-        $marker = 'ForceJsonApiServiceProvider';
-
-        if (str_contains($content, $marker)) {
-            return [
-                'type' => $this->getName().'Bootstrap',
-                'name' => 'config/app.php',
-                'path' => $path,
-                'status' => 'skipped',
-                'reason' => 'already registered',
-            ];
-        }
-
-        // Append just before the closing bracket of 'providers'
-        $providerLine = '        \\App\\Providers\\ForceJsonApiServiceProvider::class,';
-
-        $updated = preg_replace(
-            "/(App\\\\Providers\\\\[A-Za-z]+ServiceProvider::class,)\n(\s*\]\s*,?\s*\/\/ providers)/",
-            "$1\n{$providerLine}\n$2",
-            $content,
-        );
-
-        // Fallback: naive append before last ]; in the providers section
-        if ($updated === null || $updated === $content) {
-            $updated = str_replace(
-                "App\\Providers\\RouteServiceProvider::class,\n    ],",
-                "App\\Providers\\RouteServiceProvider::class,\n{$providerLine}\n    ],",
-                $content,
-            );
-        }
-
-        if (! $options->dryRun) {
-            file_put_contents($path, $updated);
-        }
-
-        return [
-            'type' => $this->getName().'Bootstrap',
-            'name' => 'config/app.php',
+    protected function result(
+        string $suffix,
+        string $name,
+        string $path,
+        string $status,
+        ?string $reason = null,
+        ?string $action = null,
+    ): array {
+        $out = [
+            'type' => $this->getName().$suffix,
+            'name' => $name,
             'path' => $path,
-            'status' => 'success',
-            'action' => 'updated',
+            'status' => $status,
         ];
+
+        if ($reason !== null) {
+            $out['reason'] = $reason;
+        }
+        if ($action !== null) {
+            $out['action'] = $action;
+        }
+
+        return $out;
     }
 }

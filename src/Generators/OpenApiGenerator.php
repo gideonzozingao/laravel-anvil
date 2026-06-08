@@ -60,13 +60,13 @@ final class OpenApiGenerator implements Generator
         }
 
         $properties = $this->buildSchemaProperties($meta);
-        $required   = $this->buildRequiredList($meta);
+        $required = $this->buildRequiredList($meta);
 
         $requiredBlock = '';
         if (! empty($required)) {
             $requiredBlock = "required:\n"
-                . implode("\n", array_map(fn($f) => "  - {$f}", $required))
-                . "\n";
+                .implode("\n", array_map(fn ($f) => "  - {$f}", $required))
+                ."\n";
         }
 
         $content = <<<YAML
@@ -90,13 +90,13 @@ YAML;
         $lines = [];
 
         foreach ($meta->columns as $col) {
-            $name        = $col['name'];
-            $nullable    = $col['nullable'] ?? false;
+            $name = $col['name'];
+            $nullable = $col['nullable'] ?? false;
             [$type, $format] = $this->mapColumnType($col['type'] ?? 'varchar');
 
             $lines[] = "    {$name}:";
             if ($nullable) {
-                $lines[] = "      nullable: true";
+                $lines[] = '      nullable: true';
             }
             $lines[] = "      type: {$type}";
             if ($format) {
@@ -116,10 +116,10 @@ YAML;
     protected function buildRequiredList(ModelMetadata $meta): array
     {
         return array_values(array_map(
-            fn($col) => $col['name'],
+            fn ($col) => $col['name'],
             array_filter(
                 $meta->columns,
-                fn($col) => ! ($col['nullable'] ?? false)
+                fn ($col) => ! ($col['nullable'] ?? false)
                     && ! in_array($col['name'], [
                         $meta->primaryKey,
                         'created_at',
@@ -136,13 +136,13 @@ YAML;
 
     protected function generatePaths(ModelMetadata $meta, GenerationOptions $options): array
     {
-        $model     = $meta->model;
-        $resource  = Helpers::modelToRouteName($model);   // Vehicle → vehicles
-        $tag       = $model;
-        $pathName  = $resource;
-        $path      = base_path("docs/openapi/paths/{$pathName}.yaml");
+        $model = $meta->model;
+        $resource = Helpers::modelToRouteName($model);   // Vehicle → vehicles
+        $tag = $model;
+        $pathName = $resource;
+        $path = base_path("docs/openapi/paths/{$pathName}.yaml");
         $schemaRef = "#/components/schemas/{$model}";
-        $idType    = $this->primaryKeyType($meta);
+        $idType = $this->primaryKeyType($meta);
 
         if (file_exists($path) && ! $options->force) {
             return $this->result('OpenAPI Paths', $model, $path, 'skipped');
@@ -313,7 +313,7 @@ YAML;
     {
         $path = base_path('docs/openapi/openapi.yaml');
         $appName = config('app.name', 'Laravel');
-        $appUrl  = config('app.url', 'http://localhost');
+        $appUrl = config('app.url', 'http://localhost');
 
         $content = <<<YAML
 openapi: 3.1.0
@@ -422,35 +422,24 @@ YAML;
     // -----------------------------------------------------------------------
 
     /**
-     * @return array{0: string, 1: string|null}  [openapi-type, format|null]
+     * @return array{0: string, 1: string|null} [openapi-type, format|null]
      */
     protected function mapColumnType(string $dbType): array
     {
         $type = strtolower(preg_replace('/\(.*\)/', '', trim($dbType)));
 
         return match (true) {
-            in_array($type, ['int', 'integer', 'smallint', 'mediumint'])
-                => ['integer', 'int32'],
-            in_array($type, ['bigint'])
-                => ['integer', 'int64'],
-            in_array($type, ['tinyint', 'boolean', 'bool'])
-                => ['boolean', null],
-            in_array($type, ['decimal', 'numeric', 'float', 'double', 'real'])
-                => ['number', 'float'],
-            in_array($type, ['date'])
-                => ['string', 'date'],
-            in_array($type, ['datetime', 'timestamp'])
-                => ['string', 'date-time'],
-            in_array($type, ['time'])
-                => ['string', null],
-            in_array($type, ['uuid'])
-                => ['string', 'uuid'],
-            in_array($type, ['json', 'jsonb'])
-                => ['object', null],
-            in_array($type, ['text', 'mediumtext', 'longtext'])
-                => ['string', null],
-            default
-                => ['string', null],
+            in_array($type, ['int', 'integer', 'smallint', 'mediumint']) => ['integer', 'int32'],
+            in_array($type, ['bigint']) => ['integer', 'int64'],
+            in_array($type, ['tinyint', 'boolean', 'bool']) => ['boolean', null],
+            in_array($type, ['decimal', 'numeric', 'float', 'double', 'real']) => ['number', 'float'],
+            in_array($type, ['date']) => ['string', 'date'],
+            in_array($type, ['datetime', 'timestamp']) => ['string', 'date-time'],
+            in_array($type, ['time']) => ['string', null],
+            in_array($type, ['uuid']) => ['string', 'uuid'],
+            in_array($type, ['json', 'jsonb']) => ['object', null],
+            in_array($type, ['text', 'mediumtext', 'longtext']) => ['string', null],
+            default => ['string', null],
         };
     }
 
@@ -459,9 +448,11 @@ YAML;
         foreach ($meta->columns as $col) {
             if ($col['name'] === $meta->primaryKey) {
                 [$type] = $this->mapColumnType($col['type'] ?? 'integer');
+
                 return $type;
             }
         }
+
         return 'integer';
     }
 
@@ -470,19 +461,19 @@ YAML;
         $lower = strtolower($name);
 
         return match (true) {
-            str_contains($lower, 'email')    => '"user@example.com"',
-            str_contains($lower, 'name')     => '"Example Name"',
-            str_contains($lower, 'phone')    => '"+1-555-0100"',
-            str_contains($lower, 'url')      => '"https://example.com"',
-            str_contains($lower, 'uuid')     => '"550e8400-e29b-41d4-a716-446655440000"',
-            str_contains($lower, 'status')   => '"active"',
+            str_contains($lower, 'email') => '"user@example.com"',
+            str_contains($lower, 'name') => '"Example Name"',
+            str_contains($lower, 'phone') => '"+1-555-0100"',
+            str_contains($lower, 'url') => '"https://example.com"',
+            str_contains($lower, 'uuid') => '"550e8400-e29b-41d4-a716-446655440000"',
+            str_contains($lower, 'status') => '"active"',
             str_contains($lower, 'currency') => '"USD"',
             str_contains($lower, 'price'),
-            str_contains($lower, 'amount')   => '99.99',
-            str_contains($lower, 'lat')      => '-6.314993',
+            str_contains($lower, 'amount') => '99.99',
+            str_contains($lower, 'lat') => '-6.314993',
             str_contains($lower, 'lng'),
-            str_contains($lower, 'lon')      => '143.955550',
-            default                          => null,
+            str_contains($lower, 'lon') => '143.955550',
+            default => null,
         };
     }
 

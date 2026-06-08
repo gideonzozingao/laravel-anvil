@@ -2,7 +2,6 @@
 
 namespace Zuqongtech\LaravelAnvil\Generators\OpenApi;
 
-use Illuminate\Support\Str;
 use Zuqongtech\LaravelAnvil\Contracts\Generator;
 use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 use Zuqongtech\LaravelAnvil\Support\Helpers;
@@ -13,19 +12,10 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiYamlSerializer;
 /**
  * Generates OpenAPI 3.1 component schemas for a model:
  *
- *  {Model}           — the full database entity (all columns)
- *  {Model}Resource   — the API response shape (excludes sensitive fields)
- *  {Model}Request    — the store/update request body (required + optional rules)
+ *  {Model}           — full database entity (all columns)
+ *  {Model}Resource   — API response shape (excludes sensitive fields)
+ *  {Model}Request    — store/update request body
  *  {Model}Collection — paginated wrapper referencing {Model}Resource
- *
- * Output location (configurable):
- *   openapi/schemas/{Model}.yaml
- *   openapi/schemas/{Model}Resource.yaml
- *   openapi/schemas/{Model}Request.yaml
- *   openapi/schemas/{Model}Collection.yaml
- *
- * When --openapi-single-file is active the schemas are instead returned
- * as a PHP array to be merged by OpenApiRootGenerator.
  */
 final class OpenApiSchemaGenerator implements Generator
 {
@@ -55,7 +45,7 @@ final class OpenApiSchemaGenerator implements Generator
 
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
-        $format   = config('laravel-anvil.openapi.format', 'yaml');
+        $format     = config('laravel-anvil.openapi.format', 'yaml');
         $splitFiles = config('laravel-anvil.openapi.split_files', true);
         $outputPath = base_path(config('laravel-anvil.openapi.output_path', 'openapi'));
 
@@ -79,11 +69,7 @@ final class OpenApiSchemaGenerator implements Generator
                 }
 
                 if (! $options->dryRun) {
-                    $this->serializer->writeFile(
-                        [$schemaName => $schema],
-                        $path,
-                        $format,
-                    );
+                    $this->serializer->writeFile([$schemaName => $schema], $path, $format);
                 }
 
                 $results[] = [
@@ -93,7 +79,6 @@ final class OpenApiSchemaGenerator implements Generator
                     'status' => 'success',
                 ];
             } else {
-                // Single-file mode: return raw array for RootGenerator to merge
                 $results[] = [
                     'type'       => $this->getName(),
                     'name'       => $schemaName,
@@ -117,14 +102,12 @@ final class OpenApiSchemaGenerator implements Generator
     public function buildSchemas(ModelMetadata $meta): array
     {
         return [
-            $meta->model                       => $this->buildEntitySchema($meta),
-            $meta->model . 'Resource'          => $this->buildResourceSchema($meta),
-            $meta->model . 'Request'           => $this->buildRequestSchema($meta),
-            $meta->model . 'Collection'        => $this->buildCollectionSchema($meta),
+            $meta->model              => $this->buildEntitySchema($meta),
+            $meta->model.'Resource'   => $this->buildResourceSchema($meta),
+            $meta->model.'Request'    => $this->buildRequestSchema($meta),
+            $meta->model.'Collection' => $this->buildCollectionSchema($meta),
         ];
     }
-
-    // ── Full entity schema ───────────────────────────────────────────────────
 
     /**
      * @return array<string, mixed>
@@ -139,10 +122,8 @@ final class OpenApiSchemaGenerator implements Generator
         foreach ($meta->columns as $col) {
             $name = $col['name'];
 
-            // FK → use integer type with a description note (not $ref on entity schema)
             $property = $this->mapper->column($col);
 
-            // Mark readOnly
             if (in_array($name, self::READ_ONLY_FIELDS, true)
                 || in_array($name, $meta->compositePrimaryKey, true)
                 || $name === $meta->primaryKey
@@ -150,7 +131,6 @@ final class OpenApiSchemaGenerator implements Generator
                 $property['readOnly'] = true;
             }
 
-            // Add FK description
             if (isset($fkMap[$name])) {
                 $refModel = Helpers::tableToModelName($fkMap[$name]);
                 $property['description'] = "Foreign key referencing {$refModel}";
@@ -158,10 +138,9 @@ final class OpenApiSchemaGenerator implements Generator
 
             $properties[$name] = $property;
 
-            // required: non-nullable, non-default, non-pk, non-timestamp
             if (
                 ! ($col['nullable'] ?? false)
-                && $col['default'] === null
+                && ($col['default'] ?? null) === null
                 && ! in_array($name, self::READ_ONLY_FIELDS, true)
                 && $name !== $meta->primaryKey
                 && ! in_array($name, $meta->compositePrimaryKey, true)
@@ -182,8 +161,6 @@ final class OpenApiSchemaGenerator implements Generator
         return $schema;
     }
 
-    // ── API Resource response schema ─────────────────────────────────────────
-
     /**
      * @return array<string, mixed>
      */
@@ -195,7 +172,6 @@ final class OpenApiSchemaGenerator implements Generator
         foreach ($meta->columns as $col) {
             $name = $col['name'];
 
-            // Exclude sensitive fields from API responses
             if (in_array($name, self::SENSITIVE_FIELDS, true)) {
                 continue;
             }
@@ -213,22 +189,29 @@ final class OpenApiSchemaGenerator implements Generator
 
             if (
                 ! ($col['nullable'] ?? false)
-                && $col['default'] === null
+                && ($col['default'] ?? null) === null
                 && ! in_array($name, self::READ_ONLY_FIELDS, true)
             ) {
                 $required[] = $name;
             }
         }
 
-        // Relationship links
+        // Relationship links — emit a BARE $ref (valid as a property value in
+        // OpenAPI 3.1 / JSON Schema 2020-12). The previous allOf-wrapper pattern
+        // — allOf: [{$ref: ...}] + nullable + readOnly — was a 3.0-era workaround
+        // for attaching siblings to a $ref, but it broke Swagger UI's resolver on
+        // self-referential and cyclic relationships (e.g. a Location whose
+        // `parent` is another Location, or Vehicle → Tenant → Location → parent).
+        // On hitting the cycle the resolver substitutes a non-object placeholder
+        // inside the allOf array, yielding "Elements in allOf must be objects".
+        // A bare circular $ref is resolved correctly and rendered as a
+        // collapsible recursive model.
         foreach ($meta->foreignKeys as $fk) {
             $relName  = Helpers::foreignKeyToRelationName($fk['column']);
             $relModel = Helpers::tableToModelName($fk['referenced_table']);
 
             $properties[$relName] = [
-                'allOf'    => [['$ref' => "#/components/schemas/{$relModel}Resource"]],
-                'nullable' => true,
-                'readOnly' => true,
+                '$ref' => "#/components/schemas/{$relModel}Resource",
             ];
         }
 
@@ -243,8 +226,6 @@ final class OpenApiSchemaGenerator implements Generator
 
         return $schema;
     }
-
-    // ── Request body schema (Store + Update combined, all optional for Update) ──
 
     /**
      * @return array<string, mixed>
@@ -273,15 +254,13 @@ final class OpenApiSchemaGenerator implements Generator
 
             $property = $this->mapper->column($col);
 
-            // Add validation hints to description
             $hints = [];
             if (isset($fkMap[$name])) {
                 $refModel = Helpers::tableToModelName($fkMap[$name]);
                 $hints[]  = "Must exist in {$fkMap[$name]}";
-                $property['description'] = implode('. ', $hints);
+                $property['description'] = "Must exist in {$fkMap[$name]} ({$refModel})";
             }
 
-            // Unique constraint hint
             foreach ($meta->uniqueConstraints as $constraint) {
                 $constraintCols = array_column($constraint['columns'], 'name');
                 if (in_array($name, $constraintCols, true)) {
@@ -296,7 +275,7 @@ final class OpenApiSchemaGenerator implements Generator
 
             $properties[$name] = $property;
 
-            if (! ($col['nullable'] ?? false) && $col['default'] === null) {
+            if (! ($col['nullable'] ?? false) && ($col['default'] ?? null) === null) {
                 $required[] = $name;
             }
         }
@@ -312,8 +291,6 @@ final class OpenApiSchemaGenerator implements Generator
 
         return $schema;
     }
-
-    // ── Paginated collection wrapper ──────────────────────────────────────────
 
     /**
      * @return array<string, mixed>

@@ -6,28 +6,25 @@ use Illuminate\Support\Str;
 use Zuqongtech\LaravelAnvil\Contracts\Generator;
 use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
+use Zuqongtech\LaravelAnvil\Support\ProviderRegistrar;
 
 /**
  * Registers API routes for each model.
  *
- * TWO MODES — selected automatically based on $options->api:
- *
  * ── Legacy mode  ($options->api === false) ────────────────────────────────
- *   Appends a versioned Route::prefix()/group() block to routes/api.php,
- *   pointing at the standard App\Http\Controllers\{Model}Controller.
- *   (Original behaviour, unchanged.)
+ *   Appends a versioned Route::prefix()/group() block to routes/api.php.
  *
  * ── Versioned API mode  ($options->api === true) ──────────────────────────
- *   1. Creates (or appends to) routes/api/v{n}.php — a dedicated route file
- *      per API version with all model routes collected in one place.
- *   2. Registers that file with the ForceJsonApiServiceProvider so it is
- *      loaded automatically with the correct middleware stack:
- *        - api
- *        - auth:sanctum  (configurable)
- *        - \App\Http\Middleware\ForceJsonResponse  (ensures JSON for ALL requests)
- *   3. Adds restore / forceDelete extra routes when the model uses SoftDeletes.
- *   4. Both modes are idempotent — running anvil:generate twice will not
- *      produce duplicate route registrations.
+ *   1. Creates / appends to routes/api/v{n}.php.
+ *   2. Ensures that file is wired into ForceJsonApiServiceProvider's $versions
+ *      map (idempotent) AND that the provider is registered in
+ *      bootstrap/providers.php — so the routes are actually live without any
+ *      manual step. ForceJsonServiceProviderGenerator creates the provider
+ *      itself; this generator only guarantees the connection, making the two
+ *      generators safe to run in any order.
+ *   3. Adds restore / forceDelete routes when the model uses SoftDeletes.
+ *
+ * Both modes are idempotent.
  */
 final class ApiRouteGenerator implements Generator
 {
@@ -67,15 +64,17 @@ final class ApiRouteGenerator implements Generator
             ];
         }
 
-        // Ensure the versioned route file exists
         $routeDir = base_path('routes/api');
         $routeFile = "{$routeDir}/{$versionSlug}.php";
         $this->ensureVersionedRouteFile($routeFile, $versionSlug);
 
         $existing = file_get_contents($routeFile);
 
-        // Idempotency
         if (str_contains($existing, "apiResource('{$slug}'")) {
+            // Even when the resource block is already present, make sure the
+            // route file is connected to the app (cheap, idempotent).
+            $this->ensureVersionedRouteLoaded($versionSlug, $options);
+
             return [
                 'type' => $this->getName(),
                 'name' => $slug,
@@ -84,27 +83,22 @@ final class ApiRouteGenerator implements Generator
             ];
         }
 
-        // Build route block
         $routeBlock = $this->buildVersionedRouteBlock($meta, $slug, $controllerFqn);
-
         file_put_contents($routeFile, $existing.$routeBlock);
 
-        // Ensure the versioned route file is loaded by the service provider
-        $this->ensureVersionedRouteLoaded($routeFile, $versionSlug, $options);
+        $connection = $this->ensureVersionedRouteLoaded($versionSlug, $options);
 
         return [
             'type' => $this->getName(),
             'name' => $slug,
             'path' => $routeFile,
             'status' => 'success',
+            'connection' => $connection,
         ];
     }
 
-    protected function buildVersionedRouteBlock(
-        ModelMetadata $meta,
-        string $slug,
-        string $controllerFqn,
-    ): string {
+    protected function buildVersionedRouteBlock(ModelMetadata $meta, string $slug, string $controllerFqn): string
+    {
         $softDeleteRoutes = '';
         if ($meta->softDeletes) {
             $softDeleteRoutes = <<<PHP
@@ -151,17 +145,10 @@ PHP;
 | API Routes — {$versionSlug}
 |--------------------------------------------------------------------------
 |
-| Routes in this file are automatically loaded by ForceJsonApiServiceProvider
-| and are wrapped in the following middleware stack:
-|
+| Loaded automatically by ForceJsonApiServiceProvider and wrapped in:
 |   - api
-|   - App\Http\Middleware\ForceJsonResponse  (all requests/responses locked to JSON)
+|   - App\Http\Middleware\ForceJsonResponse  (all I/O locked to JSON)
 |   - {$mwList}
-|
-| Every request received here MUST carry:
-|   Accept: application/json
-| Every response returned here WILL be:
-|   Content-Type: application/json
 |
 */
 
@@ -172,26 +159,51 @@ PHP
     }
 
     /**
-     * Ensure ForceJsonApiServiceProvider loads this version's route file.
-     * Delegates to the provider generator (called once per version, idempotent).
+     * Guarantee the versioned route file is connected to the application:
+     *   (a) registered in ForceJsonApiServiceProvider::$versions, and
+     *   (b) the provider itself registered in bootstrap/providers.php.
+     *
+     * Both steps are idempotent and complement ForceJsonServiceProviderGenerator.
+     *
+     * @return array<string, mixed>
      */
-    protected function ensureVersionedRouteLoaded(
-        string $routeFile,
-        string $versionSlug,
-        GenerationOptions $options,
-    ): void {
+    protected function ensureVersionedRouteLoaded(string $versionSlug, GenerationOptions $options): array
+    {
+        $result = ['version_map' => 'pending', 'bootstrap' => 'pending'];
+
         $providerPath = app_path('Providers/ForceJsonApiServiceProvider.php');
 
-        // The ForceJsonApiServiceProvider is created/updated by
-        // ForceJsonServiceProviderGenerator. Here we simply ensure it knows
-        // about this version's route file.  If the provider doesn't exist yet
-        // it will be created by ForceJsonServiceProviderGenerator; we just
-        // need to register the file path so it can be picked up.
-        // (The full provider generation happens in ForceJsonServiceProviderGenerator.)
+        // (a) Ensure the $versions map contains this slug — only possible once the
+        // provider exists. When it doesn't yet, ForceJsonServiceProviderGenerator
+        // will create it (with this version already present) later in the run.
+        if (file_exists($providerPath) && ! $options->dryRun) {
+            $content = file_get_contents($providerPath);
+
+            if (! str_contains($content, "'{$versionSlug}' =>")) {
+                $entry = "        '{$versionSlug}' => 'routes/api/{$versionSlug}.php',";
+                $content = str_replace(
+                    '// anvil:managed — do not remove this comment',
+                    "// anvil:managed — do not remove this comment\n{$entry}",
+                    $content,
+                );
+                file_put_contents($providerPath, $content);
+            }
+
+            $result['version_map'] = 'linked';
+        } else {
+            $result['version_map'] = 'deferred-to-provider-generator';
+        }
+
+        // (b) Ensure the provider is registered in the app bootstrap.
+        $registrar = new ProviderRegistrar($options->dryRun);
+        $outcome = $registrar->registerProvider('App\\Providers\\ForceJsonApiServiceProvider');
+        $result['bootstrap'] = $outcome['status'];
+
+        return $result;
     }
 
     // -----------------------------------------------------------------------
-    // Legacy mode (unchanged from original ApiRouteGenerator)
+    // Legacy mode
     // -----------------------------------------------------------------------
 
     protected function generateLegacy(ModelMetadata $meta, GenerationOptions $options): array

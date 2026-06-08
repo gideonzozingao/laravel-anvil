@@ -71,10 +71,10 @@ final class GenerationOrchestrator
                     }
                 } catch (\Throwable $e) {
                     $modelResults['artifacts'][] = [
-                        'type'      => $generator->getName(),
-                        'status'    => 'failed',
+                        'type' => $generator->getName(),
+                        'status' => 'failed',
                         'generator' => $generator->getName(),
-                        'error'     => $e->getMessage(),
+                        'error' => $e->getMessage(),
                     ];
                 }
             }
@@ -115,10 +115,10 @@ final class GenerationOrchestrator
                     }
                 } catch (\Throwable $e) {
                     $results[] = [
-                        'type'      => $generator->getName(),
-                        'status'    => 'failed',
+                        'type' => $generator->getName(),
+                        'status' => 'failed',
                         'generator' => $generator->getName(),
-                        'error'     => $e->getMessage(),
+                        'error' => $e->getMessage(),
                     ];
                 }
             }

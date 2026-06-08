@@ -25,7 +25,7 @@ final class OpenApiTypeMapper
      */
     public function column(array $column): array
     {
-        $raw  = $column['type'] ?? 'varchar';
+        $raw = $column['type'] ?? 'varchar';
         $name = strtolower($column['name']);
 
         $property = $this->resolveType($raw, $name);
@@ -75,81 +75,60 @@ final class OpenApiTypeMapper
 
         return match (true) {
             // ── Integer family ───────────────────────────────────────────
-            in_array($type, ['bigint', 'int8', 'serial8'])
-                => ['type' => 'integer', 'format' => 'int64'],
+            in_array($type, ['bigint', 'int8', 'serial8']) => ['type' => 'integer', 'format' => 'int64'],
 
-            in_array($type, ['int', 'integer', 'int4', 'serial', 'serial4'])
-                => ['type' => 'integer', 'format' => 'int32'],
+            in_array($type, ['int', 'integer', 'int4', 'serial', 'serial4']) => ['type' => 'integer', 'format' => 'int32'],
 
-            in_array($type, ['mediumint'])
-                => ['type' => 'integer', 'format' => 'int32'],
+            in_array($type, ['mediumint']) => ['type' => 'integer', 'format' => 'int32'],
 
-            in_array($type, ['smallint', 'int2', 'serial2'])
-                => ['type' => 'integer', 'format' => 'int16'],
+            in_array($type, ['smallint', 'int2', 'serial2']) => ['type' => 'integer', 'format' => 'int16'],
 
             // tinyint(1) treated as boolean
-            $type === 'tinyint' && str_contains($rawType, '(1)')
-                => ['type' => 'boolean'],
+            $type === 'tinyint' && str_contains($rawType, '(1)') => ['type' => 'boolean'],
 
-            in_array($type, ['tinyint'])
-                => ['type' => 'integer', 'format' => 'int8'],
+            in_array($type, ['tinyint']) => ['type' => 'integer', 'format' => 'int8'],
 
             // ── Decimal / float family ───────────────────────────────────
-            in_array($type, ['decimal', 'numeric'])
-                => ['type' => 'number', 'format' => 'decimal'],
+            in_array($type, ['decimal', 'numeric']) => ['type' => 'number', 'format' => 'decimal'],
 
-            in_array($type, ['float', 'real', 'float4'])
-                => ['type' => 'number', 'format' => 'float'],
+            in_array($type, ['float', 'real', 'float4']) => ['type' => 'number', 'format' => 'float'],
 
-            in_array($type, ['double', 'double precision', 'float8'])
-                => ['type' => 'number', 'format' => 'double'],
+            in_array($type, ['double', 'double precision', 'float8']) => ['type' => 'number', 'format' => 'double'],
 
             // ── Boolean ──────────────────────────────────────────────────
-            in_array($type, ['boolean', 'bool'])
-                => ['type' => 'boolean'],
+            in_array($type, ['boolean', 'bool']) => ['type' => 'boolean'],
 
             // ── Date / time family ───────────────────────────────────────
-            $type === 'date'
-                => ['type' => 'string', 'format' => 'date'],
+            $type === 'date' => ['type' => 'string', 'format' => 'date'],
 
-            in_array($type, ['datetime', 'timestamp', 'timestamptz'])
-                => ['type' => 'string', 'format' => 'date-time'],
+            in_array($type, ['datetime', 'timestamp', 'timestamptz']) => ['type' => 'string', 'format' => 'date-time'],
 
-            in_array($type, ['time', 'timetz'])
-                => ['type' => 'string', 'format' => 'time'],
+            in_array($type, ['time', 'timetz']) => ['type' => 'string', 'format' => 'time'],
 
-            $type === 'year'
-                => ['type' => 'integer', 'format' => 'int32'],
+            $type === 'year' => ['type' => 'integer', 'format' => 'int32'],
 
             // ── UUID ─────────────────────────────────────────────────────
-            in_array($type, ['uuid', 'guid'])
-                => ['type' => 'string', 'format' => 'uuid'],
+            in_array($type, ['uuid', 'guid']) => ['type' => 'string', 'format' => 'uuid'],
 
             // ── JSON ─────────────────────────────────────────────────────
-            in_array($type, ['json', 'jsonb'])
-                => ['type' => 'object'],
+            in_array($type, ['json', 'jsonb']) => ['type' => 'object'],
 
             // ── Binary ───────────────────────────────────────────────────
             in_array($type, ['binary', 'varbinary', 'blob',
-                             'tinyblob', 'mediumblob', 'longblob'])
-                => ['type' => 'string', 'format' => 'binary'],
+                'tinyblob', 'mediumblob', 'longblob']) => ['type' => 'string', 'format' => 'binary'],
 
             // ── Text family ───────────────────────────────────────────────
-            in_array($type, ['text', 'tinytext', 'mediumtext', 'longtext', 'clob'])
-                => ['type' => 'string'],
+            in_array($type, ['text', 'tinytext', 'mediumtext', 'longtext', 'clob']) => ['type' => 'string'],
 
             // ── String family (with name-based format hints) ─────────────
             in_array($type, ['char', 'character',
-                             'varchar', 'character varying',
-                             'nchar', 'nvarchar', 'string'])
-                => $this->stringWithFormatHint($columnName),
+                'varchar', 'character varying',
+                'nchar', 'nvarchar', 'string']) => $this->stringWithFormatHint($columnName),
 
             // ── Network types (PostgreSQL) ────────────────────────────────
-            in_array($type, ['inet', 'cidr'])
-                => ['type' => 'string', 'format' => 'ipv4'],
+            in_array($type, ['inet', 'cidr']) => ['type' => 'string', 'format' => 'ipv4'],
 
-            $type === 'macaddr'
-                => ['type' => 'string', 'format' => 'mac'],
+            $type === 'macaddr' => ['type' => 'string', 'format' => 'mac'],
 
             // ── Fallback ──────────────────────────────────────────────────
             default => ['type' => 'string'],
@@ -192,26 +171,19 @@ final class OpenApiTypeMapper
         $name = strtolower($columnName);
 
         return match (true) {
-            str_contains($name, 'email')
-                => ['type' => 'string', 'format' => 'email'],
+            str_contains($name, 'email') => ['type' => 'string', 'format' => 'email'],
 
-            str_contains($name, 'url') || str_contains($name, 'website') || str_contains($name, 'link')
-                => ['type' => 'string', 'format' => 'uri'],
+            str_contains($name, 'url') || str_contains($name, 'website') || str_contains($name, 'link') => ['type' => 'string', 'format' => 'uri'],
 
-            str_contains($name, 'uuid') || str_contains($name, 'guid')
-                => ['type' => 'string', 'format' => 'uuid'],
+            str_contains($name, 'uuid') || str_contains($name, 'guid') => ['type' => 'string', 'format' => 'uuid'],
 
-            str_contains($name, 'password') || str_contains($name, 'secret') || str_contains($name, 'token')
-                => ['type' => 'string', 'format' => 'password'],
+            str_contains($name, 'password') || str_contains($name, 'secret') || str_contains($name, 'token') => ['type' => 'string', 'format' => 'password'],
 
-            str_contains($name, 'ip') || str_contains($name, 'ip_address')
-                => ['type' => 'string', 'format' => 'ipv4'],
+            str_contains($name, 'ip') || str_contains($name, 'ip_address') => ['type' => 'string', 'format' => 'ipv4'],
 
-            str_contains($name, 'color') || str_contains($name, 'colour')
-                => ['type' => 'string', 'pattern' => '^#[0-9a-fA-F]{6}$'],
+            str_contains($name, 'color') || str_contains($name, 'colour') => ['type' => 'string', 'pattern' => '^#[0-9a-fA-F]{6}$'],
 
-            str_contains($name, 'phone') || str_contains($name, 'mobile')
-                => ['type' => 'string', 'pattern' => '^\+?[0-9\s\-\(\)]+$'],
+            str_contains($name, 'phone') || str_contains($name, 'mobile') => ['type' => 'string', 'pattern' => '^\+?[0-9\s\-\(\)]+$'],
 
             default => ['type' => 'string'],
         };
@@ -225,9 +197,9 @@ final class OpenApiTypeMapper
     {
         return match ($openApiType) {
             'integer' => (int) $default,
-            'number'  => (float) $default,
+            'number' => (float) $default,
             'boolean' => (bool) $default,
-            default   => (string) $default,
+            default => (string) $default,
         };
     }
 
@@ -257,13 +229,13 @@ final class OpenApiTypeMapper
     public static function paginatedCollection(string $modelName): array
     {
         return [
-            'type'       => 'object',
+            'type' => 'object',
             'properties' => [
-                'data'  => [
-                    'type'  => 'array',
+                'data' => [
+                    'type' => 'array',
                     'items' => ['$ref' => "#/components/schemas/{$modelName}Resource"],
                 ],
-                'meta'  => ['$ref' => '#/components/schemas/PaginationMeta'],
+                'meta' => ['$ref' => '#/components/schemas/PaginationMeta'],
                 'links' => ['$ref' => '#/components/schemas/PaginationLinks'],
             ],
         ];
@@ -277,14 +249,14 @@ final class OpenApiTypeMapper
     public static function paginationMetaSchema(): array
     {
         return [
-            'type'       => 'object',
+            'type' => 'object',
             'properties' => [
                 'current_page' => ['type' => 'integer'],
-                'from'         => ['type' => 'integer', 'nullable' => true],
-                'last_page'    => ['type' => 'integer'],
-                'per_page'     => ['type' => 'integer'],
-                'to'           => ['type' => 'integer', 'nullable' => true],
-                'total'        => ['type' => 'integer'],
+                'from' => ['type' => 'integer', 'nullable' => true],
+                'last_page' => ['type' => 'integer'],
+                'per_page' => ['type' => 'integer'],
+                'to' => ['type' => 'integer', 'nullable' => true],
+                'total' => ['type' => 'integer'],
             ],
         ];
     }
@@ -297,12 +269,12 @@ final class OpenApiTypeMapper
     public static function paginationLinksSchema(): array
     {
         return [
-            'type'       => 'object',
+            'type' => 'object',
             'properties' => [
                 'first' => ['type' => 'string', 'format' => 'uri', 'nullable' => true],
-                'last'  => ['type' => 'string', 'format' => 'uri', 'nullable' => true],
-                'prev'  => ['type' => 'string', 'format' => 'uri', 'nullable' => true],
-                'next'  => ['type' => 'string', 'format' => 'uri', 'nullable' => true],
+                'last' => ['type' => 'string', 'format' => 'uri', 'nullable' => true],
+                'prev' => ['type' => 'string', 'format' => 'uri', 'nullable' => true],
+                'next' => ['type' => 'string', 'format' => 'uri', 'nullable' => true],
             ],
         ];
     }
@@ -315,13 +287,13 @@ final class OpenApiTypeMapper
     public static function validationErrorSchema(): array
     {
         return [
-            'type'       => 'object',
+            'type' => 'object',
             'properties' => [
                 'message' => ['type' => 'string', 'example' => 'The given data was invalid.'],
-                'errors'  => [
-                    'type'                 => 'object',
+                'errors' => [
+                    'type' => 'object',
                     'additionalProperties' => [
-                        'type'  => 'array',
+                        'type' => 'array',
                         'items' => ['type' => 'string'],
                     ],
                 ],
@@ -337,7 +309,7 @@ final class OpenApiTypeMapper
     public static function unauthenticatedSchema(): array
     {
         return [
-            'type'       => 'object',
+            'type' => 'object',
             'properties' => [
                 'message' => ['type' => 'string', 'example' => 'Unauthenticated.'],
             ],
@@ -352,7 +324,7 @@ final class OpenApiTypeMapper
     public static function notFoundSchema(): array
     {
         return [
-            'type'       => 'object',
+            'type' => 'object',
             'properties' => [
                 'message' => ['type' => 'string', 'example' => 'Record not found.'],
             ],

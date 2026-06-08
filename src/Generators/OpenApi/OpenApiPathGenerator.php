@@ -50,34 +50,35 @@ final class OpenApiPathGenerator implements Generator
 
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
-        $format     = config('laravel-anvil.openapi.format', 'yaml');
+        $format = config('laravel-anvil.openapi.format', 'yaml');
         $splitFiles = config('laravel-anvil.openapi.split_files', true);
         $outputPath = base_path(config('laravel-anvil.openapi.output_path', 'openapi'));
-        $version    = config('laravel-anvil.openapi.api_version', config('laravel-anvil.api_version', 'v1'));
-        $security   = config('laravel-anvil.openapi.security', 'sanctum');
+        $version = config('laravel-anvil.openapi.api_version', config('laravel-anvil.api_version', 'v1'));
+        $security = config('laravel-anvil.openapi.security', 'sanctum');
 
-        $slug    = Str::plural(Str::kebab($meta->model));
+        $slug = Str::plural(Str::kebab($meta->model));
         $pkParam = $this->pkParamName($meta);
-        $tag     = Str::headline(Str::plural($meta->model));
+        $tag = Str::headline(Str::plural($meta->model));
 
-        $paths  = $this->buildPaths($meta, $slug, $pkParam, $tag, $version, $security);
+        $paths = $this->buildPaths($meta, $slug, $pkParam, $tag, $version, $security);
         $results = [];
 
         foreach ($paths as $pathKey => $pathDef) {
             $safeKey = str_replace(['/', '{', '}'], ['_', '', ''], ltrim($pathKey, '/'));
 
             if ($splitFiles) {
-                $ext  = $format === 'json' ? 'json' : 'yaml';
+                $ext = $format === 'json' ? 'json' : 'yaml';
                 $path = "{$outputPath}/paths/{$safeKey}.{$ext}";
 
                 if (file_exists($path) && ! $options->force) {
                     $results[] = [
-                        'type'   => $this->getName(),
-                        'name'   => $pathKey,
-                        'path'   => $path,
+                        'type' => $this->getName(),
+                        'name' => $pathKey,
+                        'path' => $path,
                         'status' => 'skipped',
                         'reason' => 'already exists',
                     ];
+
                     continue;
                 }
 
@@ -86,18 +87,18 @@ final class OpenApiPathGenerator implements Generator
                 }
 
                 $results[] = [
-                    'type'   => $this->getName(),
-                    'name'   => $pathKey,
-                    'path'   => $path,
+                    'type' => $this->getName(),
+                    'name' => $pathKey,
+                    'path' => $path,
                     'status' => 'success',
                 ];
             } else {
                 $results[] = [
-                    'type'      => $this->getName(),
-                    'name'      => $pathKey,
-                    'status'    => 'merged',
-                    'path_key'  => $pathKey,
-                    'path_def'  => $pathDef,
+                    'type' => $this->getName(),
+                    'name' => $pathKey,
+                    'status' => 'merged',
+                    'path_key' => $pathKey,
+                    'path_def' => $pathDef,
                 ];
             }
         }
@@ -123,7 +124,7 @@ final class OpenApiPathGenerator implements Generator
         $paths = [];
 
         $collectionPath = "/api/{$version}/{$slug}";
-        $itemPath       = "/api/{$version}/{$slug}/{{$pkParam}}";
+        $itemPath = "/api/{$version}/{$slug}/{{$pkParam}}";
 
         $securityBlock = $security !== 'none'
             ? [[$security => []]]
@@ -131,21 +132,21 @@ final class OpenApiPathGenerator implements Generator
 
         // ── Collection: GET + POST ───────────────────────────────────────────
         $paths[$collectionPath] = [
-            'get'  => $this->buildIndexOperation($meta, $slug, $tag, $securityBlock),
+            'get' => $this->buildIndexOperation($meta, $slug, $tag, $securityBlock),
             'post' => $this->buildStoreOperation($meta, $slug, $tag, $securityBlock),
         ];
 
         // ── Item: GET + PUT + PATCH + DELETE ─────────────────────────────────
         $paths[$itemPath] = [
-            'get'    => $this->buildShowOperation($meta, $slug, $tag, $pkParam, $securityBlock),
-            'put'    => $this->buildUpdateOperation($meta, $slug, $tag, $pkParam, $securityBlock),
-            'patch'  => $this->buildPatchOperation($meta, $slug, $tag, $pkParam, $securityBlock),
+            'get' => $this->buildShowOperation($meta, $slug, $tag, $pkParam, $securityBlock),
+            'put' => $this->buildUpdateOperation($meta, $slug, $tag, $pkParam, $securityBlock),
+            'patch' => $this->buildPatchOperation($meta, $slug, $tag, $pkParam, $securityBlock),
             'delete' => $this->buildDestroyOperation($meta, $slug, $tag, $pkParam, $securityBlock),
         ];
 
         // ── Soft-delete extras ────────────────────────────────────────────────
         if ($meta->softDeletes) {
-            $restorePath     = "/api/{$version}/{$slug}/{{$pkParam}}/restore";
+            $restorePath = "/api/{$version}/{$slug}/{{$pkParam}}/restore";
             $forceDeletePath = "/api/{$version}/{$slug}/{{$pkParam}}/force";
 
             $paths[$restorePath] = [
@@ -173,15 +174,15 @@ final class OpenApiPathGenerator implements Generator
 
         return [
             'operationId' => "{$slug}.index",
-            'summary'     => "List all {$model}s",
+            'summary' => "List all {$model}s",
             'description' => "Returns a paginated list of {$model} records.",
-            'tags'        => [$tag],
-            'security'    => $security,
-            'parameters'  => $this->paginationParameters(),
-            'responses'   => [
+            'tags' => [$tag],
+            'security' => $security,
+            'parameters' => $this->paginationParameters(),
+            'responses' => [
                 '200' => [
                     'description' => "Paginated list of {$model} records",
-                    'content'     => [
+                    'content' => [
                         'application/json' => [
                             'schema' => ['$ref' => "#/components/schemas/{$model}Collection"],
                         ],
@@ -203,13 +204,13 @@ final class OpenApiPathGenerator implements Generator
 
         return [
             'operationId' => "{$slug}.store",
-            'summary'     => "Create a {$model}",
+            'summary' => "Create a {$model}",
             'description' => "Creates and persists a new {$model} record.",
-            'tags'        => [$tag],
-            'security'    => $security,
+            'tags' => [$tag],
+            'security' => $security,
             'requestBody' => [
                 'required' => true,
-                'content'  => [
+                'content' => [
                     'application/json' => [
                         'schema' => ['$ref' => "#/components/schemas/{$model}Request"],
                     ],
@@ -218,7 +219,7 @@ final class OpenApiPathGenerator implements Generator
             'responses' => [
                 '201' => [
                     'description' => "{$model} created successfully",
-                    'content'     => [
+                    'content' => [
                         'application/json' => [
                             'schema' => ['$ref' => "#/components/schemas/{$model}Resource"],
                         ],
@@ -242,15 +243,15 @@ final class OpenApiPathGenerator implements Generator
 
         return [
             'operationId' => "{$slug}.show",
-            'summary'     => "Get a {$model}",
+            'summary' => "Get a {$model}",
             'description' => "Returns a single {$model} by its primary key.",
-            'tags'        => [$tag],
-            'security'    => $security,
-            'parameters'  => [$this->pkParameter($pkParam, $meta)],
-            'responses'   => [
+            'tags' => [$tag],
+            'security' => $security,
+            'parameters' => [$this->pkParameter($pkParam, $meta)],
+            'responses' => [
                 '200' => [
                     'description' => "{$model} found",
-                    'content'     => [
+                    'content' => [
                         'application/json' => [
                             'schema' => ['$ref' => "#/components/schemas/{$model}Resource"],
                         ],
@@ -274,14 +275,14 @@ final class OpenApiPathGenerator implements Generator
 
         return [
             'operationId' => "{$slug}.update",
-            'summary'     => "Replace a {$model}",
+            'summary' => "Replace a {$model}",
             'description' => "Fully replaces an existing {$model} record (PUT semantics — all fields required).",
-            'tags'        => [$tag],
-            'security'    => $security,
-            'parameters'  => [$this->pkParameter($pkParam, $meta)],
+            'tags' => [$tag],
+            'security' => $security,
+            'parameters' => [$this->pkParameter($pkParam, $meta)],
             'requestBody' => [
                 'required' => true,
-                'content'  => [
+                'content' => [
                     'application/json' => [
                         'schema' => ['$ref' => "#/components/schemas/{$model}Request"],
                     ],
@@ -290,7 +291,7 @@ final class OpenApiPathGenerator implements Generator
             'responses' => [
                 '200' => [
                     'description' => "{$model} updated",
-                    'content'     => [
+                    'content' => [
                         'application/json' => [
                             'schema' => ['$ref' => "#/components/schemas/{$model}Resource"],
                         ],
@@ -316,14 +317,14 @@ final class OpenApiPathGenerator implements Generator
         // Build a partial (all-optional) version of the request schema inline
         return [
             'operationId' => "{$slug}.patch",
-            'summary'     => "Partially update a {$model}",
+            'summary' => "Partially update a {$model}",
             'description' => "Updates only the supplied fields of an existing {$model} (PATCH semantics).",
-            'tags'        => [$tag],
-            'security'    => $security,
-            'parameters'  => [$this->pkParameter($pkParam, $meta)],
+            'tags' => [$tag],
+            'security' => $security,
+            'parameters' => [$this->pkParameter($pkParam, $meta)],
             'requestBody' => [
                 'required' => true,
-                'content'  => [
+                'content' => [
                     'application/json' => [
                         'schema' => [
                             'allOf' => [
@@ -337,7 +338,7 @@ final class OpenApiPathGenerator implements Generator
             'responses' => [
                 '200' => [
                     'description' => "{$model} partially updated",
-                    'content'     => [
+                    'content' => [
                         'application/json' => [
                             'schema' => ['$ref' => "#/components/schemas/{$model}Resource"],
                         ],
@@ -366,12 +367,12 @@ final class OpenApiPathGenerator implements Generator
 
         return [
             'operationId' => "{$slug}.destroy",
-            'summary'     => "Delete a {$model}",
+            'summary' => "Delete a {$model}",
             'description' => $description,
-            'tags'        => [$tag],
-            'security'    => $security,
-            'parameters'  => [$this->pkParameter($pkParam, $meta)],
-            'responses'   => [
+            'tags' => [$tag],
+            'security' => $security,
+            'parameters' => [$this->pkParameter($pkParam, $meta)],
+            'responses' => [
                 '204' => ['description' => 'No Content — deleted successfully'],
                 '401' => ['$ref' => '#/components/responses/Unauthenticated'],
                 '404' => ['$ref' => '#/components/responses/NotFound'],
@@ -391,15 +392,15 @@ final class OpenApiPathGenerator implements Generator
 
         return [
             'operationId' => "{$slug}.restore",
-            'summary'     => "Restore a soft-deleted {$model}",
+            'summary' => "Restore a soft-deleted {$model}",
             'description' => "Restores a previously soft-deleted {$model} record.",
-            'tags'        => [$tag],
-            'security'    => $security,
-            'parameters'  => [$this->pkParameter($pkParam, $meta)],
-            'responses'   => [
+            'tags' => [$tag],
+            'security' => $security,
+            'parameters' => [$this->pkParameter($pkParam, $meta)],
+            'responses' => [
                 '200' => [
                     'description' => "{$model} restored",
-                    'content'     => [
+                    'content' => [
                         'application/json' => [
                             'schema' => ['$ref' => "#/components/schemas/{$model}Resource"],
                         ],
@@ -423,12 +424,12 @@ final class OpenApiPathGenerator implements Generator
 
         return [
             'operationId' => "{$slug}.forceDelete",
-            'summary'     => "Permanently delete a {$model}",
+            'summary' => "Permanently delete a {$model}",
             'description' => "Permanently removes the {$model} record. Cannot be undone.",
-            'tags'        => [$tag],
-            'security'    => $security,
-            'parameters'  => [$this->pkParameter($pkParam, $meta)],
-            'responses'   => [
+            'tags' => [$tag],
+            'security' => $security,
+            'parameters' => [$this->pkParameter($pkParam, $meta)],
+            'responses' => [
                 '204' => ['description' => 'No Content — permanently deleted'],
                 '401' => ['$ref' => '#/components/responses/Unauthenticated'],
                 '404' => ['$ref' => '#/components/responses/NotFound'],
@@ -443,17 +444,17 @@ final class OpenApiPathGenerator implements Generator
     /** @return array<string, mixed> */
     protected function pkParameter(string $pkParam, ModelMetadata $meta): array
     {
-        $pkCol  = collect($meta->columns)->firstWhere('name', $meta->primaryKey ?? 'id');
-        $type   = ($pkCol && str_contains(strtolower($pkCol['type'] ?? ''), 'uuid'))
+        $pkCol = collect($meta->columns)->firstWhere('name', $meta->primaryKey ?? 'id');
+        $type = ($pkCol && str_contains(strtolower($pkCol['type'] ?? ''), 'uuid'))
             ? ['type' => 'string', 'format' => 'uuid']
             : ['type' => 'integer', 'format' => 'int64'];
 
         return [
-            'name'        => $pkParam,
-            'in'          => 'path',
-            'required'    => true,
+            'name' => $pkParam,
+            'in' => 'path',
+            'required' => true,
             'description' => "The {$meta->model} primary key",
-            'schema'      => $type,
+            'schema' => $type,
         ];
     }
 
@@ -462,18 +463,18 @@ final class OpenApiPathGenerator implements Generator
     {
         return [
             [
-                'name'        => 'page',
-                'in'          => 'query',
-                'required'    => false,
+                'name' => 'page',
+                'in' => 'query',
+                'required' => false,
                 'description' => 'Page number',
-                'schema'      => ['type' => 'integer', 'minimum' => 1, 'default' => 1],
+                'schema' => ['type' => 'integer', 'minimum' => 1, 'default' => 1],
             ],
             [
-                'name'        => 'per_page',
-                'in'          => 'query',
-                'required'    => false,
+                'name' => 'per_page',
+                'in' => 'query',
+                'required' => false,
                 'description' => 'Records per page',
-                'schema'      => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100, 'default' => 15],
+                'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100, 'default' => 15],
             ],
         ];
     }

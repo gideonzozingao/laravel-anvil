@@ -389,7 +389,7 @@ return [
             'default_viewany' => true,
             'ownership_column' => 'user_id',
         ],
-         
+
         'api_routes' => [
             'version' => env('DB_INTROSPECTION_API_VERSION', 'v1'),
             'middleware' => ['auth:sanctum'],
@@ -439,14 +439,20 @@ return [
         ],
 
     ],
-'openapi' => [
-    'output_path'   => 'openapi',
-    'format'        => 'yaml',        // yaml | json
-    'split_files'   => true,
-    'version'       => '3.1.0',
-    'title'         => env('APP_NAME', 'Laravel API'),
-    'api_url'       => env('APP_URL', 'http://localhost'),
-    'security'      => 'sanctum',     // sanctum | passport | none
-    'publish_ui'    => false,
-],
+    'openapi' => [
+        'title' => env('ANVIL_OPENAPI_TITLE', "Laravel Anvil"),
+        'output_path' => 'openapi',
+        'format' => 'yaml',        // yaml | json
+        'split_files' => true,
+        'version' => '3.1.0',
+        'api_url' => env('APP_URL', 'http://localhost'),
+        'security' => 'sanctum',     // sanctum | passport | none
+        'publish_ui' => false,
+        'docs' => [
+        'enabled'    => env('ANVIL_DOCS_ENABLED', true),
+        'route'      => env('ANVIL_DOCS_ROUTE', 'docs'),   // serves /docs and /docs/{file}
+        'middleware' => ['web'],                            // add 'auth' to gate it in prod
+        'ui_version' => '5.17.14',                          // swagger-ui-dist CDN version
+    ],
+    ],
 ];

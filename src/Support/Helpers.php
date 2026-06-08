@@ -396,9 +396,9 @@ class Helpers
     }
 
     public static function modelToRouteName(string $model): string
-{
-    return Str::kebab(
-        Str::pluralStudly($model)
-    );
-}
+    {
+        return Str::kebab(
+            Str::pluralStudly($model)
+        );
+    }
 }

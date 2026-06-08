@@ -58,9 +58,13 @@ class GenerateModelsFromDatabase extends Command
     protected $description = 'Generate a complete Laravel application scaffold from live database introspection';
 
     protected DatabaseInspector $inspector;
+
     protected RelationshipDetector $relationshipDetector;
+
     protected ConstraintAnalyzer $constraintAnalyzer;
+
     protected FileWriter $fileWriter;
+
     protected GenerationOrchestrator $orchestrator;
 
     // -----------------------------------------------------------------------
@@ -101,7 +105,7 @@ class GenerateModelsFromDatabase extends Command
         $this->setupComponents($options);
         $this->displayGenerationPlan($options);
 
-        $allTables       = $this->inspector->getAllTables();
+        $allTables = $this->inspector->getAllTables();
         $tablesToProcess = $this->filterTables($allTables, $options);
 
         if (empty($tablesToProcess)) {
@@ -110,7 +114,7 @@ class GenerateModelsFromDatabase extends Command
             return Command::SUCCESS;
         }
 
-        $this->info('📊 Found ' . count($tablesToProcess) . " table(s) to process.\n");
+        $this->info('📊 Found '.count($tablesToProcess)." table(s) to process.\n");
 
         if ($options->withInverse) {
             $this->info('🔗 Building relationship map...');
@@ -131,7 +135,7 @@ class GenerateModelsFromDatabase extends Command
         // Confirmation guard for large schemas
         $threshold = config('laravel-anvil.validation.confirm_threshold', 50);
         if (count($tablesToProcess) >= $threshold && ! $options->force) {
-            if (! $this->confirm('⚠️  About to process ' . count($tablesToProcess) . ' tables. Continue?')) {
+            if (! $this->confirm('⚠️  About to process '.count($tablesToProcess).' tables. Continue?')) {
                 $this->info('Aborted.');
 
                 return Command::SUCCESS;
@@ -152,7 +156,7 @@ class GenerateModelsFromDatabase extends Command
 
         // Swagger UI URL hint
         if ($options->openApiUi && ! $options->dryRun) {
-            $url = config('app.url') . '/docs';
+            $url = config('app.url').'/docs';
             $this->info("🌐 Swagger UI available at: {$url}");
         }
 
@@ -166,13 +170,13 @@ class GenerateModelsFromDatabase extends Command
     protected function setupComponents(GenerationOptions $options): void
     {
         $conn = $options->getConnection();
-        $this->inspector            = new DatabaseInspector($conn);
+        $this->inspector = new DatabaseInspector($conn);
         $this->relationshipDetector = new RelationshipDetector($this->inspector);
-        $this->constraintAnalyzer   = new ConstraintAnalyzer($this->inspector);
-        $this->fileWriter           = new FileWriter(base_path(), $options->dryRun);
-        $this->orchestrator         = app(GenerationOrchestrator::class);
+        $this->constraintAnalyzer = new ConstraintAnalyzer($this->inspector);
+        $this->fileWriter = new FileWriter(base_path(), $options->dryRun);
+        $this->orchestrator = app(GenerationOrchestrator::class);
 
-        $driver   = $this->inspector->getDriver();
+        $driver = $this->inspector->getDriver();
         $database = $this->inspector->getDatabaseName();
         $this->info("🔍 Connection [{$conn}] — driver: {$driver} — database: {$database}");
 
@@ -186,7 +190,7 @@ class GenerateModelsFromDatabase extends Command
         }
 
         if ($options->openApi) {
-            $fmt  = strtoupper($options->openApiFormat);
+            $fmt = strtoupper($options->openApiFormat);
             $mode = $options->openApiSingleFile ? 'single-file' : 'split-files';
             $this->info("📄 OpenAPI 3.1 — format: {$fmt} — mode: {$mode}");
         }
@@ -217,7 +221,7 @@ class GenerateModelsFromDatabase extends Command
     protected function generateArtifacts(array $tables, GenerationOptions $options): array
     {
         $allResults = [];
-        $bar        = $this->output->createProgressBar(count($tables));
+        $bar = $this->output->createProgressBar(count($tables));
         $bar->setFormat(' %current%/%max% [%bar%] %percent:3s%% — %message%');
         $bar->setMessage('Starting...');
         $bar->start();
@@ -237,7 +241,7 @@ class GenerateModelsFromDatabase extends Command
                     $meta->constraintAnalysis = $this->constraintAnalyzer->analyzeTable($table);
                 }
 
-                $artifactResults   = [];
+                $artifactResults = [];
                 $needsOrchestrator = $options->controllers || $options->resources
                     || $options->observers || $options->policies
                     || $options->formRequests || $options->services
@@ -249,12 +253,12 @@ class GenerateModelsFromDatabase extends Command
 
                 if ($needsOrchestrator) {
                     $orchestratorResults = $this->orchestrator->generate([$meta], $options);
-                    $artifactResults     = $orchestratorResults[0]['artifacts'] ?? [];
+                    $artifactResults = $orchestratorResults[0]['artifacts'] ?? [];
                 }
 
                 $allResults[] = [
-                    'table'     => $table,
-                    'model'     => $modelResult,
+                    'table' => $table,
+                    'model' => $modelResult,
                     'artifacts' => $artifactResults,
                 ];
             } catch (\Exception $e) {
@@ -278,7 +282,7 @@ class GenerateModelsFromDatabase extends Command
     {
         $modelName = Helpers::tableToModelName($table);
         $namespace = $options->getNamespace();
-        $basePath  = $options->getPath();
+        $basePath = $options->getPath();
 
         if (! Helpers::isValidClassName($modelName)) {
             throw new \Exception("Invalid model name: {$modelName}");
@@ -297,16 +301,16 @@ class GenerateModelsFromDatabase extends Command
             }
         }
 
-        $metadata            = $this->inspector->getTableMetadata($table);
-        $columns             = $metadata['columns'];
-        $foreignKeys         = $metadata['foreign_keys'];
-        $primaryKey          = $metadata['primary_key'];
+        $metadata = $this->inspector->getTableMetadata($table);
+        $columns = $metadata['columns'];
+        $foreignKeys = $metadata['foreign_keys'];
+        $primaryKey = $metadata['primary_key'];
         $compositePrimaryKey = $metadata['composite_primary_key'];
-        $indexes             = $metadata['indexes'];
-        $uniqueConstraints   = $metadata['unique_constraints'];
+        $indexes = $metadata['indexes'];
+        $uniqueConstraints = $metadata['unique_constraints'];
 
-        $columnNames    = array_column($columns, 'name');
-        $hasTimestamps  = in_array('created_at', $columnNames) && in_array('updated_at', $columnNames);
+        $columnNames = array_column($columns, 'name');
+        $hasTimestamps = in_array('created_at', $columnNames) && in_array('updated_at', $columnNames);
         $hasSoftDeletes = in_array('deleted_at', $columnNames);
 
         $constraintAnalysis = $options->withConstraints
@@ -338,17 +342,17 @@ class GenerateModelsFromDatabase extends Command
         $writeResult = $this->fileWriter->writeModel($builder->build(), $namespace, $modelName, $basePath);
 
         return [
-            'table'                 => $table,
-            'model'                 => $modelName,
-            'status'                => $writeResult['written'] ? 'success' : 'failed',
-            'path'                  => $writeResult['relative_path'],
-            'existed'               => $writeResult['existed'],
-            'message'               => $writeResult['message'],
-            'columns'               => count($columns),
-            'relationships'         => count($foreignKeys),
+            'table' => $table,
+            'model' => $modelName,
+            'status' => $writeResult['written'] ? 'success' : 'failed',
+            'path' => $writeResult['relative_path'],
+            'existed' => $writeResult['existed'],
+            'message' => $writeResult['message'],
+            'columns' => count($columns),
+            'relationships' => count($foreignKeys),
             'inverse_relationships' => count($inverseRelations),
-            'indexes'               => count($indexes),
-            'unique_constraints'    => count($uniqueConstraints),
+            'indexes' => count($indexes),
+            'unique_constraints' => count($uniqueConstraints),
         ];
     }
 
@@ -361,11 +365,11 @@ class GenerateModelsFromDatabase extends Command
         $generators = $options->getEnabledGenerators();
 
         if (! empty($generators)) {
-            $this->info('📋 Generation plan: ' . implode(', ', $generators));
+            $this->info('📋 Generation plan: '.implode(', ', $generators));
 
             if ($options->api) {
                 $versionString = $options->getApiVersionString();
-                $versionSlug   = $options->getApiVersionSlug();
+                $versionSlug = $options->getApiVersionSlug();
                 $this->line("   API version  : {$versionString}");
                 $this->line("   Controllers  : App\\Http\\Controllers\\Api\\{$versionString}\\");
                 $this->line("   Route file   : routes/api/{$versionSlug}.php");
@@ -386,7 +390,7 @@ class GenerateModelsFromDatabase extends Command
     {
         $this->info('📊 Summary');
 
-        $modelStats    = ['success' => 0, 'skipped' => 0, 'failed' => 0];
+        $modelStats = ['success' => 0, 'skipped' => 0, 'failed' => 0];
         $artifactStats = [];
 
         foreach ($results as $result) {
@@ -399,7 +403,7 @@ class GenerateModelsFromDatabase extends Command
                 $artifacts = isset($artifact['type']) ? [$artifact] : (array) $artifact;
                 foreach ($artifacts as $a) {
                     $type = $a['type'] ?? 'unknown';
-                    $s    = $a['status'] ?? 'unknown';
+                    $s = $a['status'] ?? 'unknown';
                     $artifactStats[$type] ??= ['success' => 0, 'skipped' => 0, 'failed' => 0, 'merged' => 0, 'updated' => 0, 'dry-run' => 0];
                     if (isset($artifactStats[$type][$s])) {
                         $artifactStats[$type][$s]++;
@@ -413,12 +417,22 @@ class GenerateModelsFromDatabase extends Command
 
         foreach ($artifactStats as $type => $stats) {
             $parts = [];
-            if (($stats['success'] ?? 0) > 0) { $parts[] = "✅ {$stats['success']}"; }
-            if (($stats['merged']  ?? 0) > 0) { $parts[] = "🔀 {$stats['merged']} merged"; }
-            if (($stats['updated'] ?? 0) > 0) { $parts[] = "🔄 {$stats['updated']} updated"; }
-            if (($stats['skipped'] ?? 0) > 0) { $parts[] = "⏭️  {$stats['skipped']} skipped"; }
-            if (($stats['failed']  ?? 0) > 0) { $parts[] = "❌ {$stats['failed']} failed"; }
-            $this->line("   {$type}: " . implode('  ', $parts));
+            if (($stats['success'] ?? 0) > 0) {
+                $parts[] = "✅ {$stats['success']}";
+            }
+            if (($stats['merged'] ?? 0) > 0) {
+                $parts[] = "🔀 {$stats['merged']} merged";
+            }
+            if (($stats['updated'] ?? 0) > 0) {
+                $parts[] = "🔄 {$stats['updated']} updated";
+            }
+            if (($stats['skipped'] ?? 0) > 0) {
+                $parts[] = "⏭️  {$stats['skipped']} skipped";
+            }
+            if (($stats['failed'] ?? 0) > 0) {
+                $parts[] = "❌ {$stats['failed']} failed";
+            }
+            $this->line("   {$type}: ".implode('  ', $parts));
         }
 
         // Finalization results (OpenAPI root spec, Swagger UI)
@@ -429,19 +443,19 @@ class GenerateModelsFromDatabase extends Command
                 $icon = match ($r['status'] ?? '') {
                     'success' => '✅',
                     'dry-run' => '🔸',
-                    'failed'  => '❌',
-                    default   => '•',
+                    'failed' => '❌',
+                    default => '•',
                 };
                 $name = $r['name'] ?? $r['type'] ?? '?';
                 $path = isset($r['path']) ? " → {$r['path']}" : '';
-                $url  = isset($r['url'])  ? " 🌐 {$r['url']}" : '';
+                $url = isset($r['url']) ? " 🌐 {$r['url']}" : '';
                 $this->line("      {$icon} {$name}{$path}{$url}");
             }
         }
 
         // API scaffold summary
         if ($options->api) {
-            $versionSlug   = $options->getApiVersionSlug();
+            $versionSlug = $options->getApiVersionSlug();
             $versionString = $options->getApiVersionString();
             $this->newLine();
             $this->info("🚀 Versioned API ({$versionString}) scaffold complete.");
@@ -473,7 +487,7 @@ class GenerateModelsFromDatabase extends Command
     {
         $issues = $this->relationshipDetector->validateForeignKeys();
         if (! empty($issues)) {
-            $this->warn('⚠️  FK issues: ' . count($issues));
+            $this->warn('⚠️  FK issues: '.count($issues));
             foreach ($issues as $i) {
                 $this->line("   - {$i['table']}.{$i['column']}: {$i['issue']}");
             }
@@ -486,7 +500,7 @@ class GenerateModelsFromDatabase extends Command
     {
         $issues = $this->constraintAnalyzer->validateConstraintIntegrity($tables);
         if (! empty($issues)) {
-            $this->warn('⚠️  Constraint issues: ' . count($issues));
+            $this->warn('⚠️  Constraint issues: '.count($issues));
             foreach ($issues as $i) {
                 $this->line("   - [{$i['type']}] {$i['message']}");
             }
@@ -513,10 +527,10 @@ class GenerateModelsFromDatabase extends Command
                 $this->line("Table: <comment>{$table}</comment>");
                 foreach ($analysis['recommendations'] as $rec) {
                     $icon = match ($rec['type']) {
-                        'warning'      => '⚠️ ',
-                        'performance'  => '⚡',
+                        'warning' => '⚠️ ',
+                        'performance' => '⚡',
                         'optimization' => '🔧',
-                        default        => 'ℹ️ ',
+                        default => 'ℹ️ ',
                     };
                     $this->line("  {$icon} {$rec['message']}");
                     $this->line("     → {$rec['suggestion']}");

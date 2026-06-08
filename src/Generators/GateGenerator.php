@@ -42,8 +42,8 @@ final class GateGenerator implements Generator
     {
         if ($options->dryRun) {
             return [
-                'type'   => $this->getName(),
-                'name'   => 'Gate definitions for ' . $meta->model,
+                'type' => $this->getName(),
+                'name' => 'Gate definitions for '.$meta->model,
                 'status' => 'dry-run',
             ];
         }
@@ -51,8 +51,8 @@ final class GateGenerator implements Generator
         $this->appendGates($meta, $options);
 
         return [
-            'type'   => $this->getName(),
-            'name'   => 'Gate definitions for ' . $meta->model,
+            'type' => $this->getName(),
+            'name' => 'Gate definitions for '.$meta->model,
             'status' => 'success',
         ];
     }
@@ -60,7 +60,7 @@ final class GateGenerator implements Generator
     protected function appendGates(ModelMetadata $meta, GenerationOptions $options): void
     {
         $providerPath = app_path('Providers/AuthServiceProvider.php');
-        $gatePath     = app_path('Providers/GateServiceProvider.php');
+        $gatePath = app_path('Providers/GateServiceProvider.php');
 
         $gateBlock = $this->buildGateBlock($meta, $options);
 
@@ -73,8 +73,8 @@ final class GateGenerator implements Generator
 
     protected function buildGateBlock(ModelMetadata $meta, GenerationOptions $options): string
     {
-        $model     = $meta->model;
-        $slug      = Str::kebab($model);
+        $model = $meta->model;
+        $slug = Str::kebab($model);
         $namespace = trim($options->getNamespace(), '\\');
         $fullModel = "\\{$namespace}\\{$model}";
 
@@ -85,20 +85,20 @@ final class GateGenerator implements Generator
         // (i.e. both parameters would be typed `User $user`), PHP raises a
         // fatal "Duplicate parameter name" error. We detect this by comparing
         // the short class name against the Laravel auth user model class basename.
-        $authUserModel  = class_basename(config('auth.providers.users.model', 'App\\Models\\User'));
+        $authUserModel = class_basename(config('auth.providers.users.model', 'App\\Models\\User'));
         $isSelfReferential = $model === $authUserModel;
 
         // The authenticated user is always "$user".
         // The model parameter is "$variable" — disambiguated when self-referential.
         $variable = $isSelfReferential
-            ? 'target' . $model          // e.g. $targetUser
+            ? 'target'.$model          // e.g. $targetUser
             : lcfirst($model);           // e.g. $post
 
         $ownerCheck = $hasOwnership && ! $isSelfReferential
             ? "\$user->id === \${$variable}->user_id"
             : ($isSelfReferential ? "\$user->id === \${$variable}->id" : 'true');
 
-        $lines   = [];
+        $lines = [];
         $lines[] = "        // --- {$model} gates ---";
         $lines[] = "        Gate::define('viewAny-{$slug}', fn (\\App\\Models\\User \$user) => true);";
         $lines[] = "        Gate::define('view-{$slug}', fn (\\App\\Models\\User \$user, {$fullModel} \${$variable}) => true);";
@@ -119,7 +119,7 @@ final class GateGenerator implements Generator
         $content = file_get_contents($path);
 
         // Idempotency: skip if gates for this model already present
-        if (str_contains($content, Str::kebab($model) . "' gates")) {
+        if (str_contains($content, Str::kebab($model)."' gates")) {
             return;
         }
 
@@ -175,7 +175,7 @@ PHP;
         $content = file_get_contents($path);
 
         // Idempotency
-        if (str_contains($content, Str::kebab($model) . "' gates")) {
+        if (str_contains($content, Str::kebab($model)."' gates")) {
             return;
         }
 
@@ -195,7 +195,7 @@ PHP;
     protected function findMethodEnd(string $source, int $offset): int|false
     {
         $depth = 1;
-        $len   = strlen($source);
+        $len = strlen($source);
 
         for ($i = $offset; $i < $len; $i++) {
             if ($source[$i] === '{') {
