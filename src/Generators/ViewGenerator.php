@@ -50,12 +50,12 @@ final class ViewGenerator implements Generator
         $title     = Str::headline($meta->model);                      // Vehicle Category
         $titlePl   = Str::headline(Str::pluralStudly($meta->model));   // Vehicle Categories
         $layout    = config('anvil.web.layout', 'layouts.anvil');
-        $pk        = $meta->primaryKey ?? 'id';
+        $pk        = $this->resolvePk($meta);
 
         $dir = resource_path('views/'.$slug);
 
         $formCols  = $this->formColumns($meta);
-        $tableCols = $this->tableColumns($meta);
+        $tableCols = $this->tableColumns($meta, $pk);
         $showCols  = $this->showColumns($meta);
 
         $base = [
@@ -66,7 +66,7 @@ final class ViewGenerator implements Generator
             '%SLUG%'         => $slug,
             '%VAR%'          => $var,
             '%PLURAL_VAR%'   => $pluralVar,
-            '%PK%'           => $pk,
+            '%PK%'           => $pk ?? '',
         ];
 
         $files = [
@@ -143,28 +143,48 @@ final class ViewGenerator implements Generator
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 min-h-screen">
+    {{-- Collapsible sidebar (links discovered at runtime) --}}
     @include('layouts._anvil-nav')
 
-    <main class="max-w-6xl mx-auto px-4 py-8">
-        @if (session('success'))
-            <div class="mb-6 rounded-md bg-green-50 border border-green-200 px-4 py-3 text-green-800">
-                {{ session('success') }}
+    {{-- Main column — padding shifts to make room for the sidebar on desktop --}}
+    <div id="anvil-main" class="lg:pl-64 transition-[padding] duration-300 ease-in-out min-h-screen flex flex-col">
+        {{-- Top bar with the sidebar toggle --}}
+        <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-gray-200">
+            <div class="flex items-center gap-3 h-16 px-4">
+                <button type="button" data-anvil-toggle
+                        class="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                        aria-label="Toggle navigation">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+                <h1 class="text-base font-semibold text-gray-700 truncate">@yield('title', config('app.name', 'Laravel'))</h1>
             </div>
-        @endif
+        </header>
 
-        @if ($errors->any())
-            <div class="mb-6 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-red-800">
-                <p class="font-semibold mb-1">Please fix the following:</p>
-                <ul class="list-disc list-inside text-sm">
-                    @foreach ($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                    @endforeach
-                </ul>
+        <main class="flex-1">
+            <div class="max-w-6xl mx-auto px-4 py-8 w-full">
+                @if (session('success'))
+                    <div class="mb-6 rounded-md bg-green-50 border border-green-200 px-4 py-3 text-green-800">
+                        {{ session('success') }}
+                    </div>
+                @endif
+
+                @if ($errors->any())
+                    <div class="mb-6 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-red-800">
+                        <p class="font-semibold mb-1">Please fix the following:</p>
+                        <ul class="list-disc list-inside text-sm">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                @yield('content')
             </div>
-        @endif
-
-        @yield('content')
-    </main>
+        </main>
+    </div>
 </body>
 </html>
 BLADE;
@@ -235,58 +255,111 @@ BLADE;
         ->values();
 @endphp
 
-<nav class="bg-[#1a1a2e] text-white shadow-lg sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto px-4">
-        <div class="flex items-center justify-between gap-4 py-3">
-            {{-- Brand --}}
-            <a href="{{ url('/') }}" class="flex items-center gap-2 shrink-0 group">
-                <span class="text-2xl leading-none">&#9874;</span>
-                <span class="text-lg font-bold tracking-wide group-hover:text-indigo-300 transition">
-                    {{ config('app.name', 'Laravel') }}
-                </span>
-                <span class="hidden sm:inline text-[11px] uppercase tracking-widest opacity-50 mt-1">Admin</span>
-            </a>
+{{-- Backdrop (mobile only, shown when the sidebar is open) --}}
+<div id="anvil-backdrop" class="fixed inset-0 z-40 bg-black/50 hidden lg:hidden"></div>
 
-            {{-- Desktop links --}}
-            <div class="hidden md:flex items-center gap-1 flex-wrap justify-end">
-                @forelse ($anvilNavItems as $item)
-                    <a href="{{ $item->url }}"
-                       class="px-3 py-2 rounded-md text-sm font-medium transition whitespace-nowrap
-                              {{ $item->active
-                                    ? 'bg-white/15 text-white'
-                                    : 'text-gray-300 hover:bg-white/10 hover:text-white' }}">
-                        {{ $item->label }}
-                    </a>
-                @empty
-                    <span class="text-sm text-gray-400">No resources yet</span>
-                @endforelse
-            </div>
-
-            {{-- Mobile toggle --}}
-            <button type="button"
-                    class="md:hidden inline-flex items-center justify-center rounded-md p-2 text-gray-300 hover:bg-white/10 hover:text-white"
-                    onclick="document.getElementById('anvil-mobile-nav').classList.toggle('hidden')"
-                    aria-label="Toggle navigation">
-                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-            </button>
-        </div>
-
-        {{-- Mobile menu --}}
-        <div id="anvil-mobile-nav" class="md:hidden hidden pb-3 space-y-1">
-            @foreach ($anvilNavItems as $item)
-                <a href="{{ $item->url }}"
-                   class="block px-3 py-2 rounded-md text-base font-medium
-                          {{ $item->active
-                                ? 'bg-white/15 text-white'
-                                : 'text-gray-300 hover:bg-white/10 hover:text-white' }}">
-                    {{ $item->label }}
-                </a>
-            @endforeach
-        </div>
+{{-- Sidebar --}}
+<aside id="anvil-sidebar"
+       class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-[#1a1a2e] text-gray-200
+              transform -translate-x-full lg:translate-x-0 transition-transform duration-300 ease-in-out">
+    {{-- Brand --}}
+    <div class="flex h-16 shrink-0 items-center gap-2 border-b border-white/10 px-5">
+        <a href="{{ url('/') }}" class="flex items-center gap-2 group">
+            <span class="text-2xl leading-none">&#9874;</span>
+            <span class="font-bold tracking-wide text-white group-hover:text-indigo-300 transition">
+                {{ config('app.name', 'Laravel') }}
+            </span>
+        </a>
+        {{-- Close (mobile) --}}
+        <button type="button" data-anvil-toggle
+                class="ml-auto rounded-md p-1 text-gray-400 hover:bg-white/10 hover:text-white lg:hidden"
+                aria-label="Close navigation">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
     </div>
-</nav>
+
+    {{-- Links (scroll independently when there are many resources) --}}
+    <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        @forelse ($anvilNavItems as $item)
+            <a href="{{ $item->url }}" data-anvil-link
+               class="group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition
+                      {{ $item->active
+                            ? 'bg-white/10 text-white'
+                            : 'text-gray-400 hover:bg-white/5 hover:text-white' }}">
+                <span class="h-1.5 w-1.5 rounded-full transition
+                             {{ $item->active ? 'bg-indigo-400' : 'bg-gray-600 group-hover:bg-gray-400' }}"></span>
+                <span class="truncate">{{ $item->label }}</span>
+            </a>
+        @empty
+            <p class="px-3 py-2 text-sm text-gray-500">No resources yet.</p>
+        @endforelse
+    </nav>
+
+    {{-- Footer --}}
+    <div class="shrink-0 border-t border-white/10 px-5 py-3 text-xs text-gray-500">
+        &#9874; Forged by Anvil
+    </div>
+</aside>
+
+<script>
+(function () {
+    var sidebar  = document.getElementById('anvil-sidebar');
+    var main     = document.getElementById('anvil-main');
+    var backdrop = document.getElementById('anvil-backdrop');
+    if (!sidebar || !main) { return; }
+
+    var KEY = 'anvil-sidebar-open';
+    var desktop = window.matchMedia('(min-width: 1024px)');
+
+    function apply(open) {
+        sidebar.classList.toggle('-translate-x-full', !open);
+        sidebar.classList.toggle('translate-x-0', open);
+        sidebar.classList.toggle('lg:-translate-x-full', !open);
+        sidebar.classList.toggle('lg:translate-x-0', open);
+        main.classList.toggle('lg:pl-64', open);
+        main.classList.toggle('lg:pl-0', !open);
+        if (backdrop) { backdrop.classList.toggle('hidden', !open); }
+    }
+
+    function setOpen(open, persist) {
+        apply(open);
+        if (persist && desktop.matches) {
+            try { localStorage.setItem(KEY, open ? '1' : '0'); } catch (e) {}
+        }
+    }
+
+    function desktopPref() {
+        try { var s = localStorage.getItem(KEY); if (s !== null) { return s === '1'; } } catch (e) {}
+        return true; // open by default on desktop
+    }
+
+    // Initial state: remember the choice on desktop, always closed on mobile.
+    setOpen(desktop.matches ? desktopPref() : false, false);
+
+    document.querySelectorAll('[data-anvil-toggle]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var isClosed = sidebar.classList.contains('-translate-x-full');
+            setOpen(isClosed, true);
+        });
+    });
+
+    if (backdrop) {
+        backdrop.addEventListener('click', function () { setOpen(false, false); });
+    }
+
+    // On mobile, following a link should close the overlay.
+    document.querySelectorAll('[data-anvil-link]').forEach(function (a) {
+        a.addEventListener('click', function () { if (!desktop.matches) { setOpen(false, false); } });
+    });
+
+    // Re-apply the correct state when crossing the desktop breakpoint.
+    desktop.addEventListener('change', function (e) {
+        setOpen(e.matches ? desktopPref() : false, false);
+    });
+})();
+</script>
 BLADE;
 
         return str_replace('%NAMESPACE%', $namespace, $tpl);
@@ -405,7 +478,7 @@ BLADE;
         return $this->apply($tpl, $base);
     }
 
-    protected function renderShow(array $base, array $showCols, string $pk): string
+    protected function renderShow(array $base, array $showCols, ?string $pk): string
     {
         $rows = '';
         foreach ($showCols as $col) {
@@ -416,15 +489,20 @@ BLADE;
                 ."            </div>\n";
         }
 
+        // Only show a "#<id>" badge when the model has a real key column,
+        // otherwise printing $model->%PK% would throw under strict attributes.
+        $pkBadge      = $pk ? ' #{{ $%VAR%->'.$pk.' }}' : '';
+        $pkBadgeTitle = $pk ? ' #{{ $%VAR%->'.$pk.' }}' : '';
+
         $tpl = <<<'BLADE'
 @extends('%LAYOUT%')
 
-@section('title', '%TITLE% #{{ $%VAR%->%PK% }}')
+@section('title', '%TITLE%%PK_BADGE_TITLE%')
 
 @section('content')
     <div class="max-w-2xl mx-auto">
         <div class="flex items-center justify-between mb-6">
-            <h1 class="text-2xl font-bold">%TITLE% #{{ $%VAR%->%PK% }}</h1>
+            <h1 class="text-2xl font-bold">%TITLE%%PK_BADGE%</h1>
             <div>
                 <a href="{{ route('%SLUG%.edit', $%VAR%) }}" class="btn-primary">Edit</a>
                 <a href="{{ route('%SLUG%.index') }}" class="btn-secondary">Back</a>
@@ -437,7 +515,11 @@ BLADE;
 @endsection
 BLADE;
 
-        return $this->apply($tpl, ['%SHOW_ROWS%' => $rows] + $base);
+        return $this->apply($tpl, [
+            '%SHOW_ROWS%'       => $rows,
+            '%PK_BADGE_TITLE%'  => $pkBadgeTitle,
+            '%PK_BADGE%'        => $pkBadge,
+        ] + $base);
     }
 
     protected function renderForm(array $base, array $formCols, string $var): string
@@ -507,14 +589,17 @@ BLADE;
     }
 
     /** Columns shown as table columns on index (pk + a few scalars). */
-    protected function tableColumns(ModelMetadata $meta): array
+    protected function tableColumns(ModelMetadata $meta, ?string $pk): array
     {
         $sensitive = ['password', 'remember_token'];
         $skip = ['deleted_at', 'updated_at'];
         $names = [];
 
-        $pk = $meta->primaryKey ?? 'id';
-        $names[] = $pk;
+        // Only lead with the key column when it actually exists, so the view
+        // never prints $record->id on a table that has no such attribute.
+        if ($pk !== null) {
+            $names[] = $pk;
+        }
 
         foreach ($meta->columns as $c) {
             if (count($names) >= 5) {
@@ -530,7 +615,39 @@ BLADE;
             $names[] = $n;
         }
 
+        // Fallback: a key-less table with only skipped columns still needs at
+        // least one column to render a meaningful row.
+        if (empty($names) && ! empty($meta->columns)) {
+            $names[] = $meta->columns[0]['name'];
+        }
+
         return $names;
+    }
+
+    /**
+     * Resolve the primary key to a column that genuinely exists on the model,
+     * so generated views never reference a missing attribute (which throws under
+     * Model::preventAccessingMissingAttributes()). Falls back through:
+     * detected PK → first composite-PK column → "id" if present → first column →
+     * null (only when the table has no columns at all).
+     */
+    protected function resolvePk(ModelMetadata $meta): ?string
+    {
+        $columns = array_column($meta->columns, 'name');
+
+        $candidates = array_merge(
+            [$meta->primaryKey],
+            $meta->compositePrimaryKey ?? [],
+            ['id'],
+        );
+
+        foreach ($candidates as $cand) {
+            if (is_string($cand) && $cand !== '' && in_array($cand, $columns, true)) {
+                return $cand;
+            }
+        }
+
+        return $columns[0] ?? null;
     }
 
     /** Columns shown on the show page (all non-sensitive). */
