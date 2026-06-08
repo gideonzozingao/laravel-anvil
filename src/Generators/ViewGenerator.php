@@ -27,56 +27,54 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class ViewGenerator implements Generator
 {
-    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->web ?? false;
     }
 
-    #[\Override]
     public function getName(): string
     {
         return 'View';
     }
 
-    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $results = [];
 
         $results[] = $this->ensureLayout($options);
+        $results[] = $this->ensureNav($options);
 
-        $slug = Helpers::modelToRouteName($meta->model);          // vehicle-categories
-        $var = lcfirst($meta->model);                            // vehicleCategory
+        $slug      = Helpers::modelToRouteName($meta->model);          // vehicle-categories
+        $var       = lcfirst($meta->model);                            // vehicleCategory
         $pluralVar = lcfirst(Str::pluralStudly($meta->model));         // vehicleCategories
-        $title = Str::headline($meta->model);                      // Vehicle Category
-        $titlePl = Str::headline(Str::pluralStudly($meta->model));   // Vehicle Categories
-        $layout = config('anvil.web.layout', 'layouts.anvil');
-        $pk = $meta->primaryKey ?? 'id';
+        $title     = Str::headline($meta->model);                      // Vehicle Category
+        $titlePl   = Str::headline(Str::pluralStudly($meta->model));   // Vehicle Categories
+        $layout    = config('anvil.web.layout', 'layouts.anvil');
+        $pk        = $meta->primaryKey ?? 'id';
 
         $dir = resource_path('views/'.$slug);
 
-        $formCols = $this->formColumns($meta);
+        $formCols  = $this->formColumns($meta);
         $tableCols = $this->tableColumns($meta);
-        $showCols = $this->showColumns($meta);
+        $showCols  = $this->showColumns($meta);
 
         $base = [
-            '%LAYOUT%' => $layout,
-            '%MODEL%' => $meta->model,
-            '%TITLE%' => $title,
+            '%LAYOUT%'       => $layout,
+            '%MODEL%'        => $meta->model,
+            '%TITLE%'        => $title,
             '%TITLE_PLURAL%' => $titlePl,
-            '%SLUG%' => $slug,
-            '%VAR%' => $var,
-            '%PLURAL_VAR%' => $pluralVar,
-            '%PK%' => $pk,
+            '%SLUG%'         => $slug,
+            '%VAR%'          => $var,
+            '%PLURAL_VAR%'   => $pluralVar,
+            '%PK%'           => $pk,
         ];
 
         $files = [
-            'index.blade.php' => $this->renderIndex($base, $tableCols),
+            'index.blade.php'  => $this->renderIndex($base, $tableCols),
             'create.blade.php' => $this->renderCreate($base),
-            'edit.blade.php' => $this->renderEdit($base),
-            'show.blade.php' => $this->renderShow($base, $showCols, $pk),
-            '_form.blade.php' => $this->renderForm($base, $formCols, $var),
+            'edit.blade.php'   => $this->renderEdit($base),
+            'show.blade.php'   => $this->renderShow($base, $showCols, $pk),
+            '_form.blade.php'  => $this->renderForm($base, $formCols, $var),
         ];
 
         foreach ($files as $name => $content) {
@@ -84,7 +82,6 @@ final class ViewGenerator implements Generator
 
             if (file_exists($path) && ! $options->force) {
                 $results[] = $this->result($name, $path, 'skipped', 'already exists');
-
                 continue;
             }
 
@@ -146,12 +143,7 @@ final class ViewGenerator implements Generator
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 min-h-screen">
-    <nav class="bg-[#1a1a2e] text-white">
-        <div class="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
-            <span class="text-lg font-bold tracking-wide">&#9874; {{ config('app.name', 'Laravel') }}</span>
-            <span class="text-xs opacity-60">Admin</span>
-        </div>
-    </nav>
+    @include('layouts._anvil-nav')
 
     <main class="max-w-6xl mx-auto px-4 py-8">
         @if (session('success'))
@@ -179,17 +171,136 @@ BLADE;
     }
 
     // -----------------------------------------------------------------------
-    // View renderers
+    // Navigation partial (once) — resources discovered at runtime
+    // -----------------------------------------------------------------------
+
+    /**
+     * Write resources/views/layouts/_anvil-nav.blade.php once.
+     *
+     * The partial builds its links at render time by scanning named routes that
+     * end in ".index" whose controller lives in App\Http\Controllers\Web\, so it
+     * lists every web-scaffold resource automatically and stays correct as
+     * resources are added or removed — no regeneration required. It is fully
+     * self-contained (framework classes only; no runtime dependency on Anvil).
+     */
+    protected function ensureNav(GenerationOptions $options): array
+    {
+        $layout = config('anvil.web.layout', 'layouts.anvil');
+        $layoutDir = dirname(resource_path('views/'.str_replace('.', '/', $layout).'.blade.php'));
+        $path = $layoutDir.'/_anvil-nav.blade.php';
+
+        if (! config('anvil.web.generate_nav', true)) {
+            return $this->result('_anvil-nav.blade.php', $path, 'skipped', 'nav disabled');
+        }
+
+        if (file_exists($path) && ! $options->force) {
+            return $this->result('_anvil-nav.blade.php', $path, 'skipped', 'already exists');
+        }
+
+        if (! $options->dryRun) {
+            if (! is_dir($layoutDir)) {
+                mkdir($layoutDir, 0755, true);
+            }
+            file_put_contents($path, $this->navTemplate());
+        }
+
+        return $this->result('_anvil-nav.blade.php', $path, 'success', 'nav created');
+    }
+
+    protected function navTemplate(): string
+    {
+        $namespace = addslashes(config('anvil.web.controller_namespace', 'App\\Http\\Controllers\\Web'));
+
+        $tpl = <<<'BLADE'
+@php
+    /**
+     * Anvil web navigation — links discovered at runtime from the registered
+     * routes. Every "<resource>.index" route whose controller is in the web
+     * scaffold namespace becomes a nav item. Edit freely; it is plain Blade.
+     */
+    $anvilNavItems = collect(app('router')->getRoutes()->getRoutesByName())
+        ->filter(fn ($route, $name) => str_ends_with($name, '.index')
+            && str_contains((string) $route->getActionName(), '%NAMESPACE%'))
+        ->map(function ($route, $name) {
+            $base = \Illuminate\Support\Str::beforeLast($name, '.index');
+
+            return (object) [
+                'name'   => $name,
+                'label'  => \Illuminate\Support\Str::headline(str_replace('-', ' ', $base)),
+                'url'    => route($name),
+                'active' => request()->routeIs($base . '.*'),
+            ];
+        })
+        ->sortBy('label')
+        ->values();
+@endphp
+
+<nav class="bg-[#1a1a2e] text-white shadow-lg sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4">
+        <div class="flex items-center justify-between gap-4 py-3">
+            {{-- Brand --}}
+            <a href="{{ url('/') }}" class="flex items-center gap-2 shrink-0 group">
+                <span class="text-2xl leading-none">&#9874;</span>
+                <span class="text-lg font-bold tracking-wide group-hover:text-indigo-300 transition">
+                    {{ config('app.name', 'Laravel') }}
+                </span>
+                <span class="hidden sm:inline text-[11px] uppercase tracking-widest opacity-50 mt-1">Admin</span>
+            </a>
+
+            {{-- Desktop links --}}
+            <div class="hidden md:flex items-center gap-1 flex-wrap justify-end">
+                @forelse ($anvilNavItems as $item)
+                    <a href="{{ $item->url }}"
+                       class="px-3 py-2 rounded-md text-sm font-medium transition whitespace-nowrap
+                              {{ $item->active
+                                    ? 'bg-white/15 text-white'
+                                    : 'text-gray-300 hover:bg-white/10 hover:text-white' }}">
+                        {{ $item->label }}
+                    </a>
+                @empty
+                    <span class="text-sm text-gray-400">No resources yet</span>
+                @endforelse
+            </div>
+
+            {{-- Mobile toggle --}}
+            <button type="button"
+                    class="md:hidden inline-flex items-center justify-center rounded-md p-2 text-gray-300 hover:bg-white/10 hover:text-white"
+                    onclick="document.getElementById('anvil-mobile-nav').classList.toggle('hidden')"
+                    aria-label="Toggle navigation">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            </button>
+        </div>
+
+        {{-- Mobile menu --}}
+        <div id="anvil-mobile-nav" class="md:hidden hidden pb-3 space-y-1">
+            @foreach ($anvilNavItems as $item)
+                <a href="{{ $item->url }}"
+                   class="block px-3 py-2 rounded-md text-base font-medium
+                          {{ $item->active
+                                ? 'bg-white/15 text-white'
+                                : 'text-gray-300 hover:bg-white/10 hover:text-white' }}">
+                    {{ $item->label }}
+                </a>
+            @endforeach
+        </div>
+    </div>
+</nav>
+BLADE;
+
+        return str_replace('%NAMESPACE%', $namespace, $tpl);
+    }
     // -----------------------------------------------------------------------
 
     protected function renderIndex(array $base, array $tableCols): string
     {
         $head = '';
-        $row = '';
+        $row  = '';
         foreach ($tableCols as $col) {
             $label = $this->label($col);
             $head .= "                <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">{$label}</th>\n";
-            $row .= "                    <td class=\"px-4 py-3 text-sm text-gray-700\">{{ \$%VAR%->{$col} }}</td>\n";
+            $row  .= "                    <td class=\"px-4 py-3 text-sm text-gray-700\">{{ \$%VAR%->{$col} }}</td>\n";
         }
 
         $tpl = <<<'BLADE'
@@ -346,10 +457,10 @@ BLADE;
 
     protected function formField(array $col): string
     {
-        $name = $col['name'];
+        $name  = $col['name'];
         $label = $this->label($name);
-        $type = $this->inputType($col);
-        $req = ($col['nullable'] ?? false) ? '' : ' required';
+        $type  = $this->inputType($col);
+        $req   = ($col['nullable'] ?? false) ? '' : ' required';
 
         $valueExpr = "old('{$name}', optional(\$%VAR% ?? null)->{$name})";
 
@@ -440,7 +551,7 @@ BLADE;
     protected function inputType(array $col): string
     {
         $name = strtolower($col['name']);
-        $raw = strtolower($col['type'] ?? 'varchar');
+        $raw  = strtolower($col['type'] ?? 'varchar');
         $type = preg_replace('/\(.*\)/', '', $raw);
 
         if (str_starts_with($raw, 'enum')) {
@@ -516,9 +627,9 @@ BLADE;
     protected function result(string $name, string $path, string $status, ?string $reason = null): array
     {
         $out = [
-            'type' => $this->getName(),
-            'name' => $name,
-            'path' => $path,
+            'type'   => $this->getName(),
+            'name'   => $name,
+            'path'   => $path,
             'status' => $status,
         ];
 

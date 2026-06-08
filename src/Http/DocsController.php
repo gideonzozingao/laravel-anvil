@@ -2,6 +2,7 @@
 
 namespace Zuqongtech\LaravelAnvil\Http;
 
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Symfony\Component\Yaml\Yaml;
 
@@ -12,9 +13,9 @@ use Symfony\Component\Yaml\Yaml;
  * Routes (registered by LaravelAnvilServiceProvider when
  * config('anvil.openapi.docs.enabled') is true):
  *
- *   GET {prefix}                      → Swagger UI HTML page
- *   GET {prefix}/openapi.{yaml|json}  → the root spec, BUNDLED
- *   GET {prefix}/{file}               → any split $ref file (raw)
+ *   GET {prefix}                      → Swagger UI HTML page          (ui)
+ *   GET {prefix}/openapi.{yaml|json}  → the root spec, BUNDLED        (spec)
+ *   GET {prefix}/{file}               → any split $ref file (raw)     (spec)
  *
  * Why bundle the root spec:
  *   In split-file mode the root references external files
@@ -23,12 +24,73 @@ use Symfony\Component\Yaml\Yaml;
  *   which only resolve against the document they live in — and a path file has
  *   no `components` section, so Swagger UI throws "JSON Pointer evaluation
  *   failed ... 'components'". Bundling inlines the external files into one
- *   self-contained docfinal ument so every #/components/... ref resolves. In
+ *   self-contained document so every #/components/... ref resolves. In
  *   single-file mode there are no external refs, so bundling is a harmless
  *   no-op.
  */
 class DocsController
 {
+    // -----------------------------------------------------------------------
+    // Public actions (referenced by the registered routes)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Render the Swagger UI HTML page.
+     */
+    public function ui(Request $request): Response
+    {
+        $ext     = $this->extension();
+        $specUrl = url($this->prefix().'/openapi.'.$ext);
+
+        return new Response(
+            $this->html($specUrl),
+            200,
+            ['Content-Type' => 'text/html; charset=UTF-8'],
+        );
+    }
+
+    /**
+     * Serve the OpenAPI spec. The root file is bundled into a single
+     * self-contained document; any other split file is served raw (handy for
+     * debugging). Path-traversal is guarded via realpath() containment.
+     */
+    public function spec(Request $request, ?string $file = null): Response
+    {
+        $base = $this->specBasePath();
+        $ext  = $this->extension();
+
+        if (! is_dir($base)) {
+            return $this->missingSpecResponse();
+        }
+
+        $rootName = 'openapi.'.$ext;
+        $file = $file ?: $rootName;
+
+        $candidate = realpath($base.DIRECTORY_SEPARATOR.$file);
+        $baseReal  = realpath($base);
+
+        if ($candidate === false || $baseReal === false || ! str_starts_with($candidate, $baseReal)) {
+            return new Response("Spec file not found: {$file}", 404, ['Content-Type' => 'text/plain']);
+        }
+
+        $isJson      = str_ends_with($candidate, '.json');
+        $contentType = $isJson ? 'application/json' : 'application/yaml';
+
+        $body = ($file === $rootName)
+            ? $this->bundle($candidate, $isJson ? 'json' : 'yaml')
+            : file_get_contents($candidate);
+
+        if ($body === false) {
+            return $this->missingSpecResponse();
+        }
+
+        return new Response($body, 200, [
+            'Content-Type'                => $contentType,
+            'Access-Control-Allow-Origin' => '*',
+            'Cache-Control'               => 'no-cache',
+        ]);
+    }
+
     // -----------------------------------------------------------------------
     // Bundler
     // -----------------------------------------------------------------------
@@ -216,7 +278,7 @@ class DocsController
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     #swagger-ui .topbar { display: none; }
- 
+
     .anvil-header {
       background: #1a1a2e;
       color: #fff;
@@ -273,10 +335,10 @@ class DocsController
           <stop offset="1" stop-color="#D7190D"/>
         </linearGradient>
       </defs>
- 
+
       <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#anvil-bg)"/>
       <rect x="25.5" y="25.5" width="461" height="461" rx="106.5" fill="none" stroke="#3a3f5e" stroke-width="3"/>
- 
+
       <g transform="translate(256 300) rotate(-45)" stroke="#15131c" stroke-linejoin="round">
         <rect x="-15" y="-118" width="30" height="272" rx="15" fill="url(#anvil-red)" stroke-width="3"/>
         <rect x="-16" y="118" width="32" height="8" rx="4" fill="#9e120a" stroke="none"/>
@@ -286,7 +348,7 @@ class DocsController
         <rect x="40" y="-150" width="22" height="54" rx="7" fill="#8B94A8" stroke="none"/>
         <rect x="-58" y="-148" width="14" height="40" rx="6" fill="#FBFCFF" opacity="0.6" stroke="none"/>
       </g>
- 
+
       <g transform="translate(256 300) rotate(45)" stroke="#15131c" stroke-linejoin="round">
         <rect x="-15" y="-118" width="30" height="272" rx="15" fill="url(#anvil-red)" stroke-width="3"/>
         <rect x="-16" y="118" width="32" height="8" rx="4" fill="#9e120a" stroke="none"/>
@@ -296,22 +358,22 @@ class DocsController
         <rect x="-62" y="-150" width="22" height="54" rx="7" fill="#8B94A8" stroke="none"/>
         <rect x="44" y="-148" width="14" height="40" rx="6" fill="#FBFCFF" opacity="0.6" stroke="none"/>
       </g>
- 
+
       <ellipse cx="256" cy="410" rx="116" ry="16" fill="#000000" opacity="0.28"/>
- 
+
       <g stroke="#15131c" stroke-width="4" stroke-linejoin="round">
         <path d="M212 292 L300 292 L288 330 L320 354 L336 398 L176 398 L192 354 L224 330 Z" fill="url(#anvil-steel)"/>
         <path d="M116 270 L162 252 L358 252 L358 276 L300 292 L164 292 L140 286 Z" fill="url(#anvil-steel)"/>
       </g>
- 
+
       <rect x="172" y="255" width="180" height="9" rx="4.5" fill="#FFFFFF" opacity="0.65"/>
       <path d="M224 330 L288 330 L283 344 L229 344 Z" fill="#0d0f1f" opacity="0.12"/>
- 
+
       <g fill="#FF6A4A">
         <path d="M372 222 l5 12 12 5 -12 5 -5 12 -5 -12 -12 -5 12 -5 z"/>
         <circle cx="392" cy="250" r="4"/>
       </g>
-    </svg> 
+    </svg>
     <span class="anvil-title">{$title}</span>
     <span class="anvil-divider"></span>
     <span class="anvil-sub">API Documentation</span>
