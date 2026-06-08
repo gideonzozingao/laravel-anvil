@@ -23,23 +23,23 @@ class DocsCommand extends Command
     public function handle(): int
     {
         $enabled = (bool) config('anvil.openapi.docs.enabled', false);
-        $prefix  = trim((string) config('anvil.openapi.docs.route', 'docs'), '/');
-        $ext     = config('anvil.openapi.format', 'yaml') === 'json' ? 'json' : 'yaml';
+        $prefix = trim((string) config('anvil.openapi.docs.route', 'docs'), '/');
+        $ext = config('anvil.openapi.format', 'yaml') === 'json' ? 'json' : 'yaml';
 
-        $specDir  = base_path(config('anvil.openapi.output_path', 'openapi'));
+        $specDir = base_path(config('anvil.openapi.output_path', 'openapi'));
         $specFile = "{$specDir}/openapi.{$ext}";
-        $exists   = file_exists($specFile);
+        $exists = file_exists($specFile);
 
-        $appUrl  = rtrim((string) config('app.url', 'http://localhost'), '/');
+        $appUrl = rtrim((string) config('app.url', 'http://localhost'), '/');
         $docsUrl = "{$appUrl}/{$prefix}";
         $specUrl = "{$docsUrl}/openapi.{$ext}";
 
         if ($this->option('json')) {
             $this->line(json_encode([
-                'enabled'     => $enabled,
-                'docs_url'    => $docsUrl,
-                'spec_url'    => $specUrl,
-                'spec_file'   => $specFile,
+                'enabled' => $enabled,
+                'docs_url' => $docsUrl,
+                'spec_url' => $specUrl,
+                'spec_file' => $specFile,
                 'spec_exists' => $exists,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
@@ -53,7 +53,7 @@ class DocsCommand extends Command
             [
                 ['Swagger UI', $docsUrl],
                 ['Spec URL', $specUrl],
-                ['Spec file', $specFile . ($exists ? '' : '  (not generated yet)')],
+                ['Spec file', $specFile.($exists ? '' : '  (not generated yet)')],
                 ['Routes', $enabled ? 'enabled' : 'disabled'],
             ],
         );
@@ -83,13 +83,13 @@ class DocsCommand extends Command
     protected function openInBrowser(string $url): void
     {
         $binary = match (true) {
-            stripos(PHP_OS_FAMILY, 'Darwin') !== false  => 'open',
+            stripos(PHP_OS_FAMILY, 'Darwin') !== false => 'open',
             stripos(PHP_OS_FAMILY, 'Windows') !== false => 'start',
-            default                                      => 'xdg-open',
+            default => 'xdg-open',
         };
 
         if (function_exists('exec')) {
-            @exec(escapeshellcmd($binary) . ' ' . escapeshellarg($url) . ' > /dev/null 2>&1 &');
+            @exec(escapeshellcmd($binary).' '.escapeshellarg($url).' > /dev/null 2>&1 &');
             $this->info("🌐 Opening {$url} …");
         }
     }

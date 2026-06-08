@@ -2,7 +2,9 @@
 
 namespace Zuqongtech\LaravelAnvil;
 
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Zuqongtech\LaravelAnvil\Console\DocsCommand;
 use Zuqongtech\LaravelAnvil\Console\GenerateModelsFromDatabase;
 use Zuqongtech\LaravelAnvil\Generators\ApiControllerGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ApiRouteGenerator;
@@ -23,17 +25,21 @@ use Zuqongtech\LaravelAnvil\Generators\ResourceGenerator;
 use Zuqongtech\LaravelAnvil\Generators\SeederGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ServiceGenerator;
 use Zuqongtech\LaravelAnvil\Generators\TestGenerator;
+use Zuqongtech\LaravelAnvil\Http\DocsController;
 use Zuqongtech\LaravelAnvil\Support\GenerationOrchestrator;
 
 class LaravelAnvilServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // The codebase reads config under two historical keys: older generators
-        // use config('anvil.*'), while the OpenAPI generators, GenerationOptions,
-        // and the console command use config('laravel-anvil.*'). Merging the same
-        // file under BOTH keys makes every lookup resolve correctly without having
-        // to touch dozens of call sites.
+
+        /***********************************************************************
+         The codebase reads config under two historical keys: older generators
+        use config('anvil.*'), while the OpenAPI generators, GenerationOptions,
+        and the console command use config('laravel-anvil.*'). Merging the same
+        file under BOTH keys makes every lookup resolve correctly without having
+         to touch dozens of call sites.
+         * ***********************************************************************/
         $this->mergeConfigFrom(__DIR__.'/../config/anvil.php', 'anvil');
         $this->mergeConfigFrom(__DIR__.'/../config/anvil.php', 'laravel-anvil');
 
@@ -62,7 +68,6 @@ class LaravelAnvilServiceProvider extends ServiceProvider
             // bootstrap/providers.php, so the versioned routes wire themselves up.
             ForceJsonServiceProviderGenerator::class,  // --api
             ApiControllerGenerator::class,             // --api
-
             // OpenAPI 3.1 — Root orchestrates Schema + Path and writes the root
             // spec in finalize(). Only this entry is registered; it drives the
             // other two internally, so they must NOT be registered separately.
@@ -101,12 +106,12 @@ class LaravelAnvilServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if (config('anvil.openapi.docs.enabled', false)) {
-        $this->registerDocsRoutes();
-    }
+            $this->registerDocsRoutes();
+        }
         if ($this->app->runningInConsole()) {
             $this->commands([
-                    \Zuqongtech\LaravelAnvil\Console\GenerateModelsFromDatabase::class,
-                    \Zuqongtech\LaravelAnvil\Console\DocsCommand::class, 
+                GenerateModelsFromDatabase::class,
+                DocsCommand::class,
             ]);
 
             $this->publishes([
@@ -119,19 +124,18 @@ class LaravelAnvilServiceProvider extends ServiceProvider
         }
     }
 
-
     protected function registerDocsRoutes(): void
-{
-    $prefix     = trim(config('anvil.openapi.docs.route', 'docs'), '/');
-    $middleware = config('anvil.openapi.docs.middleware', ['web']);
+    {
+        $prefix = trim(config('anvil.openapi.docs.route', 'docs'), '/');
+        $middleware = config('anvil.openapi.docs.middleware', ['web']);
 
-    \Illuminate\Support\Facades\Route::middleware($middleware)->group(function () use ($prefix) {
-        \Illuminate\Support\Facades\Route::get($prefix, [\Zuqongtech\LaravelAnvil\Http\DocsController::class, 'ui'])
-            ->name('anvil.docs');
+        Route::middleware($middleware)->group(function () use ($prefix) {
+            Route::get($prefix, [DocsController::class, 'ui'])
+                ->name('anvil.docs');
 
-        \Illuminate\Support\Facades\Route::get($prefix.'/{file}', [\Zuqongtech\LaravelAnvil\Http\DocsController::class, 'spec'])
-            ->where('file', '.*')
-            ->name('anvil.docs.spec');
-    });
-}
+            Route::get($prefix.'/{file}', [DocsController::class, 'spec'])
+                ->where('file', '.*')
+                ->name('anvil.docs.spec');
+        });
+    }
 }

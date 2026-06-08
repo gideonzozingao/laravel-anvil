@@ -440,7 +440,7 @@ return [
 
     ],
     'openapi' => [
-        'title' => env('ANVIL_OPENAPI_TITLE', "Laravel Anvil"),
+        'title' => env('ANVIL_OPENAPI_TITLE', 'Laravel Anvil'),
         'output_path' => 'openapi',
         'format' => 'yaml',        // yaml | json
         'split_files' => true,
@@ -449,10 +449,10 @@ return [
         'security' => 'sanctum',     // sanctum | passport | none
         'publish_ui' => false,
         'docs' => [
-        'enabled'    => env('ANVIL_DOCS_ENABLED', true),
-        'route'      => env('ANVIL_DOCS_ROUTE', 'docs'),   // serves /docs and /docs/{file}
-        'middleware' => ['web'],                            // add 'auth' to gate it in prod
-        'ui_version' => '5.17.14',                          // swagger-ui-dist CDN version
-    ],
+            'enabled' => env('ANVIL_DOCS_ENABLED', true),
+            'route' => env('ANVIL_DOCS_ROUTE', 'docs'),   // serves /docs and /docs/{file}
+            'middleware' => ['web'],                            // add 'auth' to gate it in prod
+            'ui_version' => '5.17.14',                          // swagger-ui-dist CDN version
+        ],
     ],
 ];

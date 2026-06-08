@@ -32,7 +32,7 @@ class DocsController
 {
     public function ui(Request $request): Response
     {
-        $ext     = $this->extension();
+        $ext = $this->extension();
         $specUrl = url($this->prefix().'/openapi.'.$ext);
 
         return new Response(
@@ -45,7 +45,7 @@ class DocsController
     public function spec(Request $request, ?string $file = null): Response
     {
         $base = $this->specBasePath();
-        $ext  = $this->extension();
+        $ext = $this->extension();
 
         if (! is_dir($base)) {
             return $this->missingSpecResponse();
@@ -55,13 +55,13 @@ class DocsController
         $file = $file ?: $rootName;
 
         $candidate = realpath($base.DIRECTORY_SEPARATOR.$file);
-        $baseReal  = realpath($base);
+        $baseReal = realpath($base);
 
         if ($candidate === false || $baseReal === false || ! str_starts_with($candidate, $baseReal)) {
             return new Response("Spec file not found: {$file}", 404, ['Content-Type' => 'text/plain']);
         }
 
-        $isJson      = str_ends_with($candidate, '.json');
+        $isJson = str_ends_with($candidate, '.json');
         $contentType = $isJson ? 'application/json' : 'application/yaml';
 
         // The root spec is bundled; sub-files are served raw (handy for debugging).
@@ -70,9 +70,9 @@ class DocsController
             : file_get_contents($candidate);
 
         return new Response($body, 200, [
-            'Content-Type'                => $contentType,
+            'Content-Type' => $contentType,
             'Access-Control-Allow-Origin' => '*',
-            'Cache-Control'               => 'no-cache',
+            'Cache-Control' => 'no-cache',
         ]);
     }
 
@@ -142,7 +142,7 @@ class DocsController
         [$relFile, $fragment] = array_pad(explode('#', $ref, 2), 2, '');
         $relFile = preg_replace('#^\./#', '', (string) $relFile);
 
-        $target   = realpath($base.DIRECTORY_SEPARATOR.$relFile);
+        $target = realpath($base.DIRECTORY_SEPARATOR.$relFile);
         $baseReal = realpath($base);
 
         if ($target === false || $baseReal === false || ! str_starts_with($target, $baseReal)) {
@@ -241,14 +241,14 @@ class DocsController
 
     protected function missingSpecResponse(): Response
     {
-        $msg = "OpenAPI spec not found. Run: php artisan anvil:generate --openapi";
+        $msg = 'OpenAPI spec not found. Run: php artisan anvil:generate --openapi';
 
         return new Response($msg, 404, ['Content-Type' => 'text/plain']);
     }
 
     protected function html(string $specUrl): string
     {
-        $title   = config('anvil.openapi.title', config('app.name', 'API Docs'));
+        $title = config('anvil.openapi.title', config('app.name', 'API Docs'));
         $version = config('anvil.openapi.docs.ui_version', '5.17.14');
 
         return <<<HTML
@@ -261,20 +261,109 @@ class DocsController
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@{$version}/swagger-ui.css" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     #swagger-ui .topbar { display: none; }
+ 
     .anvil-header {
-      background: #1a1a2e; color: #fff; padding: 16px 24px;
-      display: flex; align-items: center; gap: 12px;
-      font-size: 18px; font-weight: 600; letter-spacing: 0.5px;
+      background: #1a1a2e;
+      color: #fff;
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
     }
-    .anvil-header span { opacity: 0.6; font-size: 13px; font-weight: 400; }
+    .anvil-logo {
+      width: 46px;
+      height: 46px;
+      flex: 0 0 auto;
+      display: block;
+    }
+    .anvil-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      line-height: 1;
+    }
+    .anvil-divider {
+      width: 1px;
+      height: 26px;
+      background: rgba(255, 255, 255, 0.18);
+      margin: 0 2px;
+    }
+    .anvil-sub {
+      font-size: 13px;
+      font-weight: 400;
+      opacity: 0.55;
+      letter-spacing: 0.2px;
+    }
   </style>
 </head>
 <body>
-  <div class="anvil-header">
-    &#9874; {$title} <span>API Documentation</span>
-  </div>
+  <header class="anvil-header">
+    <svg class="anvil-logo" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Laravel Anvil logo">
+      <defs>
+        <linearGradient id="anvil-bg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#272b46"/>
+          <stop offset="1" stop-color="#14152a"/>
+        </linearGradient>
+        <linearGradient id="anvil-steel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#F6F8FD"/>
+          <stop offset="0.55" stop-color="#DDE3EF"/>
+          <stop offset="1" stop-color="#B7C0D2"/>
+        </linearGradient>
+        <linearGradient id="anvil-head" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#E7ECF5"/>
+          <stop offset="1" stop-color="#9AA4B8"/>
+        </linearGradient>
+        <linearGradient id="anvil-red" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#FF4133"/>
+          <stop offset="1" stop-color="#D7190D"/>
+        </linearGradient>
+      </defs>
+ 
+      <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#anvil-bg)"/>
+      <rect x="25.5" y="25.5" width="461" height="461" rx="106.5" fill="none" stroke="#3a3f5e" stroke-width="3"/>
+ 
+      <g transform="translate(256 300) rotate(-45)" stroke="#15131c" stroke-linejoin="round">
+        <rect x="-15" y="-118" width="30" height="272" rx="15" fill="url(#anvil-red)" stroke-width="3"/>
+        <rect x="-16" y="118" width="32" height="8" rx="4" fill="#9e120a" stroke="none"/>
+        <rect x="-16" y="132" width="32" height="8" rx="4" fill="#9e120a" stroke="none"/>
+        <rect x="-23" y="-106" width="46" height="22" rx="6" fill="url(#anvil-head)" stroke-width="2.5"/>
+        <rect x="-66" y="-154" width="132" height="62" rx="12" fill="url(#anvil-head)" stroke-width="3"/>
+        <rect x="40" y="-150" width="22" height="54" rx="7" fill="#8B94A8" stroke="none"/>
+        <rect x="-58" y="-148" width="14" height="40" rx="6" fill="#FBFCFF" opacity="0.6" stroke="none"/>
+      </g>
+ 
+      <g transform="translate(256 300) rotate(45)" stroke="#15131c" stroke-linejoin="round">
+        <rect x="-15" y="-118" width="30" height="272" rx="15" fill="url(#anvil-red)" stroke-width="3"/>
+        <rect x="-16" y="118" width="32" height="8" rx="4" fill="#9e120a" stroke="none"/>
+        <rect x="-16" y="132" width="32" height="8" rx="4" fill="#9e120a" stroke="none"/>
+        <rect x="-23" y="-106" width="46" height="22" rx="6" fill="url(#anvil-head)" stroke-width="2.5"/>
+        <rect x="-66" y="-154" width="132" height="62" rx="12" fill="url(#anvil-head)" stroke-width="3"/>
+        <rect x="-62" y="-150" width="22" height="54" rx="7" fill="#8B94A8" stroke="none"/>
+        <rect x="44" y="-148" width="14" height="40" rx="6" fill="#FBFCFF" opacity="0.6" stroke="none"/>
+      </g>
+ 
+      <ellipse cx="256" cy="410" rx="116" ry="16" fill="#000000" opacity="0.28"/>
+ 
+      <g stroke="#15131c" stroke-width="4" stroke-linejoin="round">
+        <path d="M212 292 L300 292 L288 330 L320 354 L336 398 L176 398 L192 354 L224 330 Z" fill="url(#anvil-steel)"/>
+        <path d="M116 270 L162 252 L358 252 L358 276 L300 292 L164 292 L140 286 Z" fill="url(#anvil-steel)"/>
+      </g>
+ 
+      <rect x="172" y="255" width="180" height="9" rx="4.5" fill="#FFFFFF" opacity="0.65"/>
+      <path d="M224 330 L288 330 L283 344 L229 344 Z" fill="#0d0f1f" opacity="0.12"/>
+ 
+      <g fill="#FF6A4A">
+        <path d="M372 222 l5 12 12 5 -12 5 -5 12 -5 -12 -12 -5 12 -5 z"/>
+        <circle cx="392" cy="250" r="4"/>
+      </g>
+    </svg> 
+    <span class="anvil-title">{$title}</span>
+    <span class="anvil-divider"></span>
+    <span class="anvil-sub">API Documentation</span>
+  </header>
+
   <div id="swagger-ui"></div>
   <script src="https://unpkg.com/swagger-ui-dist@{$version}/swagger-ui-bundle.js"></script>
   <script src="https://unpkg.com/swagger-ui-dist@{$version}/swagger-ui-standalone-preset.js"></script>

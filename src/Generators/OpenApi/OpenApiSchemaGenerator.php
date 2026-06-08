@@ -45,26 +45,27 @@ final class OpenApiSchemaGenerator implements Generator
 
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
-        $format     = config('laravel-anvil.openapi.format', 'yaml');
-        $splitFiles = config('laravel-anvil.openapi.split_files', true);
-        $outputPath = base_path(config('laravel-anvil.openapi.output_path', 'openapi'));
+        $format = config('anvil.openapi.format', 'yaml');
+        $splitFiles = config('anvil.openapi.split_files', true);
+        $outputPath = base_path(config('anvil.openapi.output_path', 'openapi'));
 
         $schemas = $this->buildSchemas($meta);
         $results = [];
 
         foreach ($schemas as $schemaName => $schema) {
             if ($splitFiles) {
-                $ext  = $format === 'json' ? 'json' : 'yaml';
+                $ext = $format === 'json' ? 'json' : 'yaml';
                 $path = "{$outputPath}/schemas/{$schemaName}.{$ext}";
 
                 if (file_exists($path) && ! $options->force) {
                     $results[] = [
-                        'type'   => $this->getName(),
-                        'name'   => $schemaName,
-                        'path'   => $path,
+                        'type' => $this->getName(),
+                        'name' => $schemaName,
+                        'path' => $path,
                         'status' => 'skipped',
                         'reason' => 'already exists',
                     ];
+
                     continue;
                 }
 
@@ -73,16 +74,16 @@ final class OpenApiSchemaGenerator implements Generator
                 }
 
                 $results[] = [
-                    'type'   => $this->getName(),
-                    'name'   => $schemaName,
-                    'path'   => $path,
+                    'type' => $this->getName(),
+                    'name' => $schemaName,
+                    'path' => $path,
                     'status' => 'success',
                 ];
             } else {
                 $results[] = [
-                    'type'       => $this->getName(),
-                    'name'       => $schemaName,
-                    'status'     => 'merged',
+                    'type' => $this->getName(),
+                    'name' => $schemaName,
+                    'status' => 'merged',
                     'schema_key' => $schemaName,
                     'schema_def' => $schema,
                 ];
@@ -102,9 +103,9 @@ final class OpenApiSchemaGenerator implements Generator
     public function buildSchemas(ModelMetadata $meta): array
     {
         return [
-            $meta->model              => $this->buildEntitySchema($meta),
-            $meta->model.'Resource'   => $this->buildResourceSchema($meta),
-            $meta->model.'Request'    => $this->buildRequestSchema($meta),
+            $meta->model => $this->buildEntitySchema($meta),
+            $meta->model.'Resource' => $this->buildResourceSchema($meta),
+            $meta->model.'Request' => $this->buildRequestSchema($meta),
             $meta->model.'Collection' => $this->buildCollectionSchema($meta),
         ];
     }
@@ -115,7 +116,7 @@ final class OpenApiSchemaGenerator implements Generator
     protected function buildEntitySchema(ModelMetadata $meta): array
     {
         $properties = [];
-        $required   = [];
+        $required = [];
 
         $fkMap = array_column($meta->foreignKeys, 'referenced_table', 'column');
 
@@ -150,7 +151,7 @@ final class OpenApiSchemaGenerator implements Generator
         }
 
         $schema = [
-            'type'       => 'object',
+            'type' => 'object',
             'properties' => $properties,
         ];
 
@@ -167,7 +168,7 @@ final class OpenApiSchemaGenerator implements Generator
     protected function buildResourceSchema(ModelMetadata $meta): array
     {
         $properties = [];
-        $required   = [];
+        $required = [];
 
         foreach ($meta->columns as $col) {
             $name = $col['name'];
@@ -207,7 +208,7 @@ final class OpenApiSchemaGenerator implements Generator
         // A bare circular $ref is resolved correctly and rendered as a
         // collapsible recursive model.
         foreach ($meta->foreignKeys as $fk) {
-            $relName  = Helpers::foreignKeyToRelationName($fk['column']);
+            $relName = Helpers::foreignKeyToRelationName($fk['column']);
             $relModel = Helpers::tableToModelName($fk['referenced_table']);
 
             $properties[$relName] = [
@@ -216,7 +217,7 @@ final class OpenApiSchemaGenerator implements Generator
         }
 
         $schema = [
-            'type'       => 'object',
+            'type' => 'object',
             'properties' => $properties,
         ];
 
@@ -233,7 +234,7 @@ final class OpenApiSchemaGenerator implements Generator
     protected function buildRequestSchema(ModelMetadata $meta): array
     {
         $properties = [];
-        $required   = [];
+        $required = [];
 
         $skipCols = array_merge(
             [$meta->primaryKey, 'created_at', 'updated_at', 'deleted_at', 'remember_token'],
@@ -257,7 +258,7 @@ final class OpenApiSchemaGenerator implements Generator
             $hints = [];
             if (isset($fkMap[$name])) {
                 $refModel = Helpers::tableToModelName($fkMap[$name]);
-                $hints[]  = "Must exist in {$fkMap[$name]}";
+                $hints[] = "Must exist in {$fkMap[$name]}";
                 $property['description'] = "Must exist in {$fkMap[$name]} ({$refModel})";
             }
 
@@ -281,7 +282,7 @@ final class OpenApiSchemaGenerator implements Generator
         }
 
         $schema = [
-            'type'       => 'object',
+            'type' => 'object',
             'properties' => $properties,
         ];
 

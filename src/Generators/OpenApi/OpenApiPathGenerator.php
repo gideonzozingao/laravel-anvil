@@ -50,11 +50,11 @@ final class OpenApiPathGenerator implements Generator
 
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
-        $format = config('laravel-anvil.openapi.format', 'yaml');
-        $splitFiles = config('laravel-anvil.openapi.split_files', true);
-        $outputPath = base_path(config('laravel-anvil.openapi.output_path', 'openapi'));
-        $version = config('laravel-anvil.openapi.api_version', config('laravel-anvil.api_version', 'v1'));
-        $security = config('laravel-anvil.openapi.security', 'sanctum');
+        $format = config('anvil.openapi.format', 'yaml');
+        $splitFiles = config('anvil.openapi.split_files', true);
+        $outputPath = base_path(config('anvil.openapi.output_path', 'openapi'));
+        $version = config('anvil.openapi.api_version', config('laravel-anvil.api_version', 'v1'));
+        $security = config('anvil.openapi.security', 'sanctum');
 
         $slug = Str::plural(Str::kebab($meta->model));
         $pkParam = $this->pkParamName($meta);
