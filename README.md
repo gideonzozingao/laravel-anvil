@@ -11,8 +11,6 @@ in either **pure Blade + Tailwind** or **Blade + Livewire**.
 
 Point it at a database, run one command, and get working code you own.
 
----
-
 ## Table of contents
 
 - [Why Anvil](#why-anvil)
@@ -46,8 +44,6 @@ tables without timestamps, and so on).
 
 The output is plain Laravel code with no runtime dependency on Anvil. Generate
 it, commit it, edit it freely — Anvil is a build-time tool, not a framework.
-
----
 
 ## Requirements
 
