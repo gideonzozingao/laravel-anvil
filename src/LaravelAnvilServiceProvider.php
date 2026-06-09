@@ -31,7 +31,7 @@ use Zuqongtech\LaravelAnvil\Generators\WebRouteGenerator;
 use Zuqongtech\LaravelAnvil\Http\DocsController;
 use Zuqongtech\LaravelAnvil\Support\GenerationOrchestrator;
 use Zuqongtech\LaravelAnvil\Console\GenerateWebCommand;
-
+use Zuqongtech\LaravelAnvil\Generators\LivewireComponentGenerator;
 class LaravelAnvilServiceProvider extends ServiceProvider
 {
     #[\Override]
@@ -82,6 +82,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
             WebControllerGenerator::class,
             WebRouteGenerator::class,
             ViewGenerator::class,
+            LivewireComponentGenerator::class, 
         ];
 
         // Bind generators. The OpenAPI Root generator depends on the Schema and

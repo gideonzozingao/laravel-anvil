@@ -29,6 +29,7 @@ class GenerateWebCommand extends Command
     use RunsGenerationPipeline;
 
     protected $signature = 'anvil:generate-web
+                            {--stack=blade   : Frontend stack — "blade" (Blade + Tailwind) or "livewire" (Blade + Livewire)}
                             {--tables=*      : Limit generation to specific tables}
                             {--only=*        : Alias for --tables}
                             {--ignore=*      : Exclude specific tables}
@@ -61,6 +62,13 @@ class GenerateWebCommand extends Command
 
         $this->info("✅ Configuration valid.\n");
 
+        $stack = strtolower((string) $this->option('stack'));
+        if (! in_array($stack, ['blade', 'livewire'], true)) {
+            $this->error("Unknown --stack '{$stack}'. Use 'blade' or 'livewire'.");
+
+            return Command::FAILURE;
+        }
+
         // Allow overriding the layout the generated views extend, without
         // touching config/anvil.php.
         if ($layout = $this->option('layout')) {
@@ -78,6 +86,7 @@ class GenerateWebCommand extends Command
         $options = GenerationOptions::fromArray([
             'models'        => ! $this->option('skip-models'),
             'web'           => true,
+            'stack'         => $stack,
             'form_requests' => true,
             'services'      => true,
             'force'         => (bool) $this->option('force'),
@@ -92,7 +101,7 @@ class GenerateWebCommand extends Command
             'ignore'        => $this->option('ignore') ?? [],
         ]);
 
-        $this->info('🌐 Anvil — Web Scaffold');
+        $this->info('🌐 Anvil — Web Scaffold ('.($stack === 'livewire' ? 'Blade + Livewire' : 'Blade + Tailwind').')');
         $this->newLine();
 
         return $this->runPipeline($options);

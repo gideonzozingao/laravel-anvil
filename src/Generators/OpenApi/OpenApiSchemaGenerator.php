@@ -7,6 +7,7 @@ use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 use Zuqongtech\LaravelAnvil\Support\Helpers;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
 use Zuqongtech\LaravelAnvil\Support\OpenApiTypeMapper;
+use Zuqongtech\LaravelAnvil\Support\OpenApiYamlSerializer;
 
 /**
  * Generates OpenAPI 3.1 component schemas for a model:
@@ -26,6 +27,15 @@ final class OpenApiSchemaGenerator implements Generator
     private const READ_ONLY_FIELDS = [
         'id', 'created_at', 'updated_at', 'deleted_at',
     ];
+
+    /**
+     * Dependencies are default-constructible so this generator works whether it
+     * is resolved through the container (autowired) or built with a bare `new`.
+     */
+    public function __construct(
+        private readonly OpenApiTypeMapper $mapper = new OpenApiTypeMapper,
+        private readonly OpenApiYamlSerializer $serializer = new OpenApiYamlSerializer,
+    ) {}
 
     #[\Override]
     public function supports(GenerationOptions $options): bool
@@ -195,15 +205,9 @@ final class OpenApiSchemaGenerator implements Generator
         }
 
         // Relationship links — emit a BARE $ref (valid as a property value in
-        // OpenAPI 3.1 / JSON Schema 2020-12). The previous allOf-wrapper pattern
-        // — allOf: [{$ref: ...}] + nullable + readOnly — was a 3.0-era workaround
-        // for attaching siblings to a $ref, but it broke Swagger UI's resolver on
-        // self-referential and cyclic relationships (e.g. a Location whose
-        // `parent` is another Location, or Vehicle → Tenant → Location → parent).
-        // On hitting the cycle the resolver substitutes a non-object placeholder
-        // inside the allOf array, yielding "Elements in allOf must be objects".
-        // A bare circular $ref is resolved correctly and rendered as a
-        // collapsible recursive model.
+        // OpenAPI 3.1). The allOf-wrapper pattern broke Swagger UI's resolver on
+        // self-referential / cyclic relationships ("Elements in allOf must be
+        // objects"); a bare circular $ref resolves and renders as a recursive model.
         foreach ($meta->foreignKeys as $fk) {
             $relName = Helpers::foreignKeyToRelationName($fk['column']);
             $relModel = Helpers::tableToModelName($fk['referenced_table']);

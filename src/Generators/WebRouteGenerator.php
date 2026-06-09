@@ -23,22 +23,19 @@ final class WebRouteGenerator implements Generator
 {
     private const MARKER = '// anvil:web-routes — do not remove this comment';
 
-    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->web ?? false;
     }
 
-    #[\Override]
     public function getName(): string
     {
         return 'WebRoute';
     }
 
-    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
-        $slug = Helpers::modelToRouteName($meta->model);
+        $slug          = Helpers::modelToRouteName($meta->model);
         $controllerFqn = "\\App\\Http\\Controllers\\Web\\{$meta->model}Controller";
 
         if ($options->dryRun) {
@@ -63,7 +60,7 @@ final class WebRouteGenerator implements Generator
             ];
         }
 
-        $block = $this->buildRouteBlock($meta, $slug, $controllerFqn);
+        $block = $this->buildRouteBlock($meta, $slug, $controllerFqn, $options);
 
         // Insert the resource line just after the marker so all anvil web routes
         // stay grouped together within the configured middleware group.
@@ -88,9 +85,18 @@ final class WebRouteGenerator implements Generator
         ];
     }
 
-    protected function buildRouteBlock(ModelMetadata $meta, string $slug, string $controllerFqn): string
+    protected function buildRouteBlock(ModelMetadata $meta, string $slug, string $controllerFqn, GenerationOptions $options): string
     {
         $lines = [];
+
+        if ($options->isLivewire()) {
+            // Livewire stack: only the GET endpoints are routed through the
+            // controller; create/update/delete happen inside the components.
+            $lines[] = "    Route::resource('{$slug}', {$controllerFqn}::class)->only(['index', 'create', 'show', 'edit']);";
+
+            return implode("\n", $lines);
+        }
+
         $lines[] = "    Route::resource('{$slug}', {$controllerFqn}::class);";
 
         if ($meta->softDeletes) {

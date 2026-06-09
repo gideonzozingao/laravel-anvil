@@ -49,6 +49,7 @@ final class GenerationOptions
 
         // ── Web scaffold flag ────────────────────────────────────────────────
         public bool $web = false,
+        public string $stack = 'blade',
 
         // ── OpenAPI flags ────────────────────────────────────────────────────
         public bool $openApi = false,
@@ -191,6 +192,7 @@ final class GenerationOptions
             api: $options['api'] ?? false,
             apiVersion: (int) ($options['api_version'] ?? 1),
             web: $options['web'] ?? false,
+            stack: $options['stack'] ?? 'blade',
             openApi: $options['open_api'] ?? false,
             openApiFormat: $options['open_api_format'] ?? 'yaml',
             openApiSingleFile: $options['open_api_single_file'] ?? false,
@@ -264,6 +266,22 @@ final class GenerationOptions
     public function getWebControllerNamespace(): string
     {
         return config('anvil.web.controller_namespace', 'App\\Http\\Controllers\\Web');
+    }
+
+    /**
+     * Frontend stack for the web scaffold: 'blade' (default) or 'livewire'.
+     */
+    public function isLivewire(): bool
+    {
+        return strtolower($this->stack) === 'livewire';
+    }
+
+    /**
+     * Namespace for generated Livewire components, e.g. "App\Livewire".
+     */
+    public function getLivewireNamespace(): string
+    {
+        return config('anvil.web.livewire.namespace', 'App\\Livewire');
     }
 
     public function hasSpecificTables(): bool
@@ -341,6 +359,7 @@ final class GenerationOptions
             'api' => $this->api,
             'api_version' => $this->apiVersion,
             'web' => $this->web,
+            'stack' => $this->stack,
             'open_api' => $this->openApi,
             'open_api_format' => $this->openApiFormat,
             'open_api_single_file' => $this->openApiSingleFile,

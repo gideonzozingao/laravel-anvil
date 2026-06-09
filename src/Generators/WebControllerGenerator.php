@@ -25,23 +25,20 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 final class WebControllerGenerator implements Generator
 {
-    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->web ?? false;
     }
 
-    #[\Override]
     public function getName(): string
     {
         return 'WebController';
     }
 
-    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $controllerName = $meta->model.'Controller';
-        $dir = app_path('Http/Controllers/Web');
+        $dir  = app_path('Http/Controllers/Web');
         $path = "{$dir}/{$controllerName}.php";
 
         if (file_exists($path) && ! $options->force) {
@@ -73,14 +70,18 @@ final class WebControllerGenerator implements Generator
 
     protected function build(ModelMetadata $meta, GenerationOptions $options): string
     {
-        $model = $meta->model;
-        $service = $model.'Service';
-        $storeReq = 'Store'.$model.'Request';
+        if ($options->isLivewire()) {
+            return $this->buildLivewire($meta, $options);
+        }
+
+        $model     = $meta->model;
+        $service   = $model.'Service';
+        $storeReq  = 'Store'.$model.'Request';
         $updateReq = 'Update'.$model.'Request';
-        $var = lcfirst($model);
+        $var       = lcfirst($model);
         $pluralVar = lcfirst(Str::pluralStudly($model));
-        $slug = Helpers::modelToRouteName($model);
-        $title = Str::headline($model);
+        $slug      = Helpers::modelToRouteName($model);
+        $title     = Str::headline($model);
         $namespace = trim($options->getNamespace(), '\\');
         $fullModel = $namespace.'\\'.$model;
 
@@ -210,6 +211,70 @@ class {$model}Controller extends Controller
             ->route('{$slug}.index')
             ->with('success', '{$title} deleted.');
     }{$softDeleteMethods}
+}
+
+PHP;
+    }
+
+    /**
+     * Livewire stack: the controller only renders the Blade wrapper views that
+     * mount the Livewire components. All writes happen inside the components, so
+     * there are no store/update/destroy actions here (and no write routes).
+     */
+    protected function buildLivewire(ModelMetadata $meta, GenerationOptions $options): string
+    {
+        $model = $meta->model;
+        $slug  = Helpers::modelToRouteName($model);
+
+        return <<<PHP
+<?php
+
+namespace App\Http\Controllers\Web;
+
+use App\Http\Controllers\Controller;
+use Illuminate\View\View;
+
+/**
+ * Web (Livewire) controller for {$model}.
+ *
+ * Only the GET endpoints live here — each renders a thin Blade view that mounts
+ * the matching Livewire component. Creating, updating and deleting {$model}
+ * records is handled inside those components (App\Livewire\\...), not here, so
+ * this controller has no store/update/destroy actions.
+ */
+class {$model}Controller extends Controller
+{
+    /**
+     * List {$model} records (renders <livewire:{$slug}.index/>).
+     */
+    public function index(): View
+    {
+        return view('{$slug}.index');
+    }
+
+    /**
+     * Show the create form (renders <livewire:{$slug}.form/>).
+     */
+    public function create(): View
+    {
+        return view('{$slug}.create');
+    }
+
+    /**
+     * Show a single {$model} (renders <livewire:{$slug}.show :record-id/>).
+     */
+    public function show(int|string \$id): View
+    {
+        return view('{$slug}.show', ['recordId' => \$id]);
+    }
+
+    /**
+     * Show the edit form (renders <livewire:{$slug}.form :record-id/>).
+     */
+    public function edit(int|string \$id): View
+    {
+        return view('{$slug}.edit', ['recordId' => \$id]);
+    }
 }
 
 PHP;

@@ -5,34 +5,25 @@ namespace Zuqongtech\LaravelAnvil\Generators\OpenApi;
 use Illuminate\Support\Str;
 use Zuqongtech\LaravelAnvil\Contracts\Generator;
 use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
-use Zuqongtech\LaravelAnvil\Support\Helpers;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
+use Zuqongtech\LaravelAnvil\Support\OpenApiYamlSerializer;
 
 /**
  * Generates OpenAPI 3.1 path definitions for a model's REST endpoints.
  *
- * For each model two path files are written:
- *
- *  openapi/paths/{slug}.yaml           →  GET  /v1/{slug}     (index)
- *                                         POST /v1/{slug}     (store)
- *
- *  openapi/paths/{slug}_{id}.yaml      →  GET    /v1/{slug}/{id}   (show)
- *                                         PUT    /v1/{slug}/{id}   (update)
- *                                         DELETE /v1/{slug}/{id}   (destroy)
- *
- * When soft-deletes are detected, two additional paths are written:
- *
- *  openapi/paths/{slug}_{id}_restore.yaml   →  PATCH /v1/{slug}/{id}/restore
- *  openapi/paths/{slug}_{id}_force.yaml     →  DELETE /v1/{slug}/{id}/force
- *
- * Path parameters, security schemes, and response $refs are all inferred
- * from the model metadata and the package config.
- *
- * Single-file mode: returns raw path arrays instead of writing files,
- * to be merged by OpenApiRootGenerator.
+ * Split-file mode writes one file per path under openapi/paths/; single-file
+ * mode returns raw path arrays to be merged by OpenApiRootGenerator.
  */
 final class OpenApiPathGenerator implements Generator
 {
+    /**
+     * Default-constructible so the generator works whether resolved through the
+     * container (autowired) or built with a bare `new`.
+     */
+    public function __construct(
+        private readonly OpenApiYamlSerializer $serializer = new OpenApiYamlSerializer,
+    ) {}
+
     #[\Override]
     public function supports(GenerationOptions $options): bool
     {
@@ -122,19 +113,17 @@ final class OpenApiPathGenerator implements Generator
         $paths = [];
 
         $collectionPath = "/api/{$version}/{$slug}";
-        $itemPath = "/api/{$version}/{$slug}/{{$pkParam}}";
+        $itemPath = "/api/{$version}/{$slug}/{{ $pkParam }}";
 
         $securityBlock = $security !== 'none'
             ? [[$security => []]]
             : [];
 
-        // ── Collection: GET + POST ───────────────────────────────────────────
         $paths[$collectionPath] = [
             'get' => $this->buildIndexOperation($meta, $slug, $tag, $securityBlock),
             'post' => $this->buildStoreOperation($meta, $slug, $tag, $securityBlock),
         ];
 
-        // ── Item: GET + PUT + PATCH + DELETE ─────────────────────────────────
         $paths[$itemPath] = [
             'get' => $this->buildShowOperation($meta, $slug, $tag, $pkParam, $securityBlock),
             'put' => $this->buildUpdateOperation($meta, $slug, $tag, $pkParam, $securityBlock),
@@ -142,10 +131,9 @@ final class OpenApiPathGenerator implements Generator
             'delete' => $this->buildDestroyOperation($meta, $slug, $tag, $pkParam, $securityBlock),
         ];
 
-        // ── Soft-delete extras ────────────────────────────────────────────────
         if ($meta->softDeletes) {
-            $restorePath = "/api/{$version}/{$slug}/{{$pkParam}}/restore";
-            $forceDeletePath = "/api/{$version}/{$slug}/{{$pkParam}}/force";
+            $restorePath = "/api/{$version}/{$slug}/{{ $pkParam }}/restore";
+            $forceDeletePath = "/api/{$version}/{$slug}/{{ $pkParam }}/force";
 
             $paths[$restorePath] = [
                 'patch' => $this->buildRestoreOperation($meta, $slug, $tag, $pkParam, $securityBlock),
@@ -159,15 +147,9 @@ final class OpenApiPathGenerator implements Generator
         return $paths;
     }
 
-    // ── Individual operations ─────────────────────────────────────────────────
-
     /** @return array<string, mixed> */
-    protected function buildIndexOperation(
-        ModelMetadata $meta,
-        string $slug,
-        string $tag,
-        array $security,
-    ): array {
+    protected function buildIndexOperation(ModelMetadata $meta, string $slug, string $tag, array $security): array
+    {
         $model = $meta->model;
 
         return [
@@ -192,12 +174,8 @@ final class OpenApiPathGenerator implements Generator
     }
 
     /** @return array<string, mixed> */
-    protected function buildStoreOperation(
-        ModelMetadata $meta,
-        string $slug,
-        string $tag,
-        array $security,
-    ): array {
+    protected function buildStoreOperation(ModelMetadata $meta, string $slug, string $tag, array $security): array
+    {
         $model = $meta->model;
 
         return [
@@ -230,13 +208,8 @@ final class OpenApiPathGenerator implements Generator
     }
 
     /** @return array<string, mixed> */
-    protected function buildShowOperation(
-        ModelMetadata $meta,
-        string $slug,
-        string $tag,
-        string $pkParam,
-        array $security,
-    ): array {
+    protected function buildShowOperation(ModelMetadata $meta, string $slug, string $tag, string $pkParam, array $security): array
+    {
         $model = $meta->model;
 
         return [
@@ -262,13 +235,8 @@ final class OpenApiPathGenerator implements Generator
     }
 
     /** @return array<string, mixed> */
-    protected function buildUpdateOperation(
-        ModelMetadata $meta,
-        string $slug,
-        string $tag,
-        string $pkParam,
-        array $security,
-    ): array {
+    protected function buildUpdateOperation(ModelMetadata $meta, string $slug, string $tag, string $pkParam, array $security): array
+    {
         $model = $meta->model;
 
         return [
@@ -303,16 +271,10 @@ final class OpenApiPathGenerator implements Generator
     }
 
     /** @return array<string, mixed> */
-    protected function buildPatchOperation(
-        ModelMetadata $meta,
-        string $slug,
-        string $tag,
-        string $pkParam,
-        array $security,
-    ): array {
+    protected function buildPatchOperation(ModelMetadata $meta, string $slug, string $tag, string $pkParam, array $security): array
+    {
         $model = $meta->model;
 
-        // Build a partial (all-optional) version of the request schema inline
         return [
             'operationId' => "{$slug}.patch",
             'summary' => "Partially update a {$model}",
@@ -327,7 +289,7 @@ final class OpenApiPathGenerator implements Generator
                         'schema' => [
                             'allOf' => [
                                 ['$ref' => "#/components/schemas/{$model}Request"],
-                                ['required' => []],   // Override: no fields required for PATCH
+                                ['required' => []],
                             ],
                         ],
                     ],
@@ -350,13 +312,8 @@ final class OpenApiPathGenerator implements Generator
     }
 
     /** @return array<string, mixed> */
-    protected function buildDestroyOperation(
-        ModelMetadata $meta,
-        string $slug,
-        string $tag,
-        string $pkParam,
-        array $security,
-    ): array {
+    protected function buildDestroyOperation(ModelMetadata $meta, string $slug, string $tag, string $pkParam, array $security): array
+    {
         $model = $meta->model;
 
         $description = $meta->softDeletes
@@ -379,13 +336,8 @@ final class OpenApiPathGenerator implements Generator
     }
 
     /** @return array<string, mixed> */
-    protected function buildRestoreOperation(
-        ModelMetadata $meta,
-        string $slug,
-        string $tag,
-        string $pkParam,
-        array $security,
-    ): array {
+    protected function buildRestoreOperation(ModelMetadata $meta, string $slug, string $tag, string $pkParam, array $security): array
+    {
         $model = $meta->model;
 
         return [
@@ -411,13 +363,8 @@ final class OpenApiPathGenerator implements Generator
     }
 
     /** @return array<string, mixed> */
-    protected function buildForceDeleteOperation(
-        ModelMetadata $meta,
-        string $slug,
-        string $tag,
-        string $pkParam,
-        array $security,
-    ): array {
+    protected function buildForceDeleteOperation(ModelMetadata $meta, string $slug, string $tag, string $pkParam, array $security): array
+    {
         $model = $meta->model;
 
         return [

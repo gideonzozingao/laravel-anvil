@@ -22,19 +22,16 @@ use Zuqongtech\LaravelAnvil\Support\ProviderRegistrar;
  */
 final class RepositoryGenerator implements Generator
 {
-    #[\Override]
     public function supports(GenerationOptions $options): bool
     {
         return $options->repositories ?? false;
     }
 
-    #[\Override]
     public function getName(): string
     {
         return 'Repository';
     }
 
-    #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $results = [];
@@ -156,6 +153,12 @@ PHP;
         $pk = $meta->primaryKey ?? 'id';
         $pkType = $this->pkPhpType($meta);
 
+        // Order by a column that actually exists. `latest()` defaults to
+        // created_at, which blows up on tables without timestamps (e.g. legacy
+        // or framework-managed tables like auth_group).
+        $orderColumn = $this->orderColumn($meta);
+        $orderExpr = $orderColumn !== null ? "->latest('{$orderColumn}')" : '';
+
         $softDeleteMethods = $meta->softDeletes ? <<<PHP
 
 
@@ -166,7 +169,7 @@ PHP;
 
     public function paginateTrashed(int \$perPage = 15): LengthAwarePaginator
     {
-        return {$model}::onlyTrashed()->latest()->paginate(\$perPage);
+        return {$model}::onlyTrashed(){$orderExpr}->paginate(\$perPage);
     }
 PHP
             : '';
@@ -196,7 +199,7 @@ class {$name} implements {$iface}
             }
         }
 
-        return \$query->latest()->paginate(\$perPage);
+        return \$query{$orderExpr}->paginate(\$perPage);
     }
 
     public function findOrFail({$pkType} \${$pk}): {$model}
@@ -301,10 +304,10 @@ PHP;
         }
 
         return [
-            'type' => $this->getName().'Provider',
-            'name' => 'RepositoryServiceProvider',
-            'path' => $path,
-            'status' => $created ? 'success' : 'updated',
+            'type'         => $this->getName().'Provider',
+            'name'         => 'RepositoryServiceProvider',
+            'path'         => $path,
+            'status'       => $created ? 'success' : 'updated',
             'registration' => $registration,
         ];
     }
@@ -312,6 +315,33 @@ PHP;
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
+
+    /**
+     * Pick a column to order paginated listings by, guaranteed to exist on the
+     * table: created_at (when the table has timestamps) → primary key →
+     * "id" → first column → null (only when the table has no columns).
+     * Returning null means "no ORDER BY", which keeps the query valid on tables
+     * that have nothing sensible to sort on.
+     */
+    protected function orderColumn(ModelMetadata $meta): ?string
+    {
+        $columns = array_column($meta->columns, 'name');
+
+        if (in_array('created_at', $columns, true)) {
+            return 'created_at';
+        }
+
+        $pk = $meta->primaryKey;
+        if (is_string($pk) && $pk !== '' && in_array($pk, $columns, true)) {
+            return $pk;
+        }
+
+        if (in_array('id', $columns, true)) {
+            return 'id';
+        }
+
+        return $columns[0] ?? null;
+    }
 
     protected function pkPhpType(ModelMetadata $meta): string
     {

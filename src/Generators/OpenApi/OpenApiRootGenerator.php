@@ -8,18 +8,17 @@ use Zuqongtech\LaravelAnvil\Contracts\Generator;
 use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
 use Zuqongtech\LaravelAnvil\Support\OpenApiTypeMapper;
+use Zuqongtech\LaravelAnvil\Support\OpenApiYamlSerializer;
 
 /**
  * Assembles the root OpenAPI 3.1 specification document.
  *
- * Per-model pass (generate) collects schemas + paths via the schema/path
- * generators. The finalization pass (finalize) writes the root document once
- * and optionally publishes Swagger UI.
+ * Per-model pass (generate) drives the schema + path generators. The
+ * finalization pass (finalize) writes the root document once and optionally
+ * publishes Swagger UI.
  *
  * Split-file mode references external files via JSON-Pointer fragments that
- * target the real inner key of each file (the schema name, or the URL path),
- * so both schemas and operations resolve correctly in Swagger UI. Single-file
- * mode inlines everything into one self-contained document.
+ * target the real inner key of each file; single-file mode inlines everything.
  */
 final class OpenApiRootGenerator implements Generator
 {
@@ -31,6 +30,16 @@ final class OpenApiRootGenerator implements Generator
 
     /** @var list<string> Tags collected across all models */
     private array $collectedTags = [];
+
+    /**
+     * Dependencies are default-constructible so this generator works whether it
+     * is resolved through the container (autowired) or built with a bare `new`.
+     */
+    public function __construct(
+        private readonly OpenApiSchemaGenerator $schemaGenerator = new OpenApiSchemaGenerator,
+        private readonly OpenApiPathGenerator $pathGenerator = new OpenApiPathGenerator,
+        private readonly OpenApiYamlSerializer $serializer = new OpenApiYamlSerializer,
+    ) {}
 
     #[\Override]
     public function supports(GenerationOptions $options): bool
@@ -72,22 +81,56 @@ final class OpenApiRootGenerator implements Generator
     }
 
     // -----------------------------------------------------------------------
+    // Finalization — write the root spec once, after every model is processed
+    // -----------------------------------------------------------------------
+
+    public function finalize(GenerationOptions $options): array
+    {
+        if (! ($options->openApi ?? false)) {
+            return [];
+        }
+
+        $format = config('anvil.openapi.format', 'yaml');
+        $ext = $format === 'json' ? 'json' : 'yaml';
+        $splitFiles = config('anvil.openapi.split_files', true);
+        $outputPath = base_path(config('anvil.openapi.output_path', 'openapi'));
+        $rootFile = "{$outputPath}/openapi.{$ext}";
+
+        if ($options->dryRun) {
+            return [[
+                'type' => $this->getName(),
+                'name' => "openapi.{$ext}",
+                'path' => $rootFile,
+                'status' => 'dry-run',
+            ]];
+        }
+
+        $spec = $splitFiles
+            ? $this->buildSplitRootSpec($outputPath, $ext)
+            : $this->buildMergedSpec();
+
+        $this->serializer->writeFile($spec, $rootFile, $format);
+
+        $results = [[
+            'type' => $this->getName(),
+            'name' => "openapi.{$ext}",
+            'path' => $rootFile,
+            'status' => 'success',
+        ]];
+
+        if ($options->openApiUi ?? false) {
+            $results[] = $this->publishSwaggerUi($rootFile, $outputPath);
+        }
+
+        return $results;
+    }
+
+    // -----------------------------------------------------------------------
     // Root spec builders
     // -----------------------------------------------------------------------
 
     /**
      * Build a root spec that references split files via JSON-Pointer fragments.
-     *
-     * Each schema file (e.g. schemas/Post.yaml) wraps its definition under a
-     * top-level key (`Post:`); each path file (e.g. paths/api_v1_posts.yaml)
-     * wraps operations under the real URL path (`/api/v1/posts:`). We read those
-     * real keys back off disk and reference them precisely:
-     *
-     *   components.schemas.Post:
-     *     $ref: './schemas/Post.yaml#/Post'
-     *
-     *   paths./api/v1/posts:
-     *     $ref: './paths/api_v1_posts.yaml#/~1api~1v1~1posts'
      *
      * @return array<string, mixed>
      */
@@ -95,7 +138,6 @@ final class OpenApiRootGenerator implements Generator
     {
         $spec = $this->baseSpec();
 
-        // ── Schema files → component schema refs (fragment-targeted) ─────────
         foreach (glob("{$outputPath}/schemas/*.{$ext}") ?: [] as $file) {
             $name = pathinfo($file, PATHINFO_FILENAME);
 
@@ -106,18 +148,15 @@ final class OpenApiRootGenerator implements Generator
             }
         }
 
-        // Shared component schemas have no external file — inline them.
         $spec['components']['schemas'] = array_merge(
             $spec['components']['schemas'] ?? [],
             $this->sharedSchemas(),
         );
 
-        // ── Path files → path item refs keyed by the REAL URL path ──────────
         foreach (glob("{$outputPath}/paths/*.{$ext}") ?: [] as $file) {
             $name = pathinfo($file, PATHINFO_FILENAME);
 
             foreach ($this->topLevelKeys($file, $ext) as $pathKey) {
-                // OpenAPI requires the map key to be the actual URL template.
                 $spec['paths'][$pathKey] = [
                     '$ref' => "./paths/{$name}.{$ext}#/{$this->pointer($pathKey)}",
                 ];
@@ -233,7 +272,6 @@ final class OpenApiRootGenerator implements Generator
 
     /**
      * Escape a key for use as a JSON Pointer reference fragment.
-     * RFC 6901: "~" → "~0", "/" → "~1".
      */
     protected function pointer(string $key): string
     {
