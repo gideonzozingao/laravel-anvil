@@ -34,8 +34,6 @@ Point it at a database, run one command, and get working code you own.
 - [Contributing](#contributing)
 - [License](#license)
 
----
-
 ## Why Anvil
 
 Most generators work from migrations or hand-written model definitions. Anvil
@@ -53,10 +51,10 @@ it, commit it, edit it freely — Anvil is a build-time tool, not a framework.
 
 ## Requirements
 
-| Requirement | Version |
-| --- | --- |
-| PHP | `^8.3` |
-| Laravel | `^11.0 \|\| ^12.0` |
+| Requirement    | Version                                    |
+| -------------- | ------------------------------------------ |
+| PHP            | `^8.3`                                     |
+| Laravel        | `^11.0 \|\| ^12.0`                         |
 | `symfony/yaml` | `^6.0 \|\| ^7.0` (pulled in automatically) |
 
 Optional, depending on what you generate:
@@ -66,8 +64,6 @@ Optional, depending on what you generate:
 
 The generated web scaffold styles itself with **Tailwind CSS via CDN** out of
 the box, so no front-end build step is required to see it working.
-
----
 
 ## Installation
 
@@ -89,8 +85,6 @@ This writes `config/anvil.php`. For the Livewire stack, install Livewire too:
 ```bash
 composer require livewire/livewire
 ```
-
----
 
 ## Quick start
 
@@ -114,8 +108,6 @@ php artisan anvil:generate-web --stack=livewire --tables=posts
 
 Preview anything without writing files by adding `--dry-run`.
 
----
-
 ## Commands
 
 Anvil ships three Artisan commands.
@@ -132,55 +124,55 @@ php artisan anvil:generate [options]
 
 **Artifact flags**
 
-| Flag | Generates |
-| --- | --- |
-| `--all` | Every artifact type below |
-| `--models` | Eloquent models (always on) |
-| `--controllers` | Resource controllers |
-| `--resources` | API resource classes |
-| `--observers` | Model observers |
-| `--policies` | Authorization policies |
-| `--form-requests` | `StoreXxx` / `UpdateXxx` form requests |
-| `--services` | Service classes with lifecycle hooks |
-| `--repositories` | Repository interface + Eloquent implementation |
-| `--gates` | Gate definitions appended to your auth provider |
-| `--api-routes` | `apiResource` routes appended to `routes/api.php` |
-| `--factories` | Model factories with Faker-inferred definitions |
-| `--seeders` | Database seeders |
-| `--migrations` | Reverse-engineered `Schema::create()` migrations |
-| `--events` | `Created` / `Updated` / `Deleted` event classes |
-| `--tests` | Feature tests for the CRUD endpoints |
+| Flag              | Generates                                         |
+| ----------------- | ------------------------------------------------- |
+| `--all`           | Every artifact type below                         |
+| `--models`        | Eloquent models (always on)                       |
+| `--controllers`   | Resource controllers                              |
+| `--resources`     | API resource classes                              |
+| `--observers`     | Model observers                                   |
+| `--policies`      | Authorization policies                            |
+| `--form-requests` | `StoreXxx` / `UpdateXxx` form requests            |
+| `--services`      | Service classes with lifecycle hooks              |
+| `--repositories`  | Repository interface + Eloquent implementation    |
+| `--gates`         | Gate definitions appended to your auth provider   |
+| `--api-routes`    | `apiResource` routes appended to `routes/api.php` |
+| `--factories`     | Model factories with Faker-inferred definitions   |
+| `--seeders`       | Database seeders                                  |
+| `--migrations`    | Reverse-engineered `Schema::create()` migrations  |
+| `--events`        | `Created` / `Updated` / `Deleted` event classes   |
+| `--tests`         | Feature tests for the CRUD endpoints              |
 
 **API & docs flags**
 
-| Flag | Description |
-| --- | --- |
-| `--api` | Generate a versioned JSON API scaffold with JSON enforcement |
-| `--api-version=1` | Version for `--api` (accepts `1`, `v1`, `V1`) |
-| `--openapi` | Generate an OpenAPI 3.1 specification |
-| `--openapi-format=yaml` | `yaml` (default) or `json` |
-| `--openapi-single-file` | Merge schemas + paths into one file |
-| `--openapi-ui` | Publish a static Swagger UI to `public/docs/` |
+| Flag                    | Description                                                  |
+| ----------------------- | ------------------------------------------------------------ |
+| `--api`                 | Generate a versioned JSON API scaffold with JSON enforcement |
+| `--api-version=1`       | Version for `--api` (accepts `1`, `v1`, `V1`)                |
+| `--openapi`             | Generate an OpenAPI 3.1 specification                        |
+| `--openapi-format=yaml` | `yaml` (default) or `json`                                   |
+| `--openapi-single-file` | Merge schemas + paths into one file                          |
+| `--openapi-ui`          | Publish a static Swagger UI to `public/docs/`                |
 
 **Targeting & behaviour flags**
 
-| Flag | Description |
-| --- | --- |
-| `--namespace=App\Models` | Namespace for generated models |
-| `--connection=` | Database connection to introspect |
-| `--tables=*` | Limit to specific tables (repeatable) |
-| `--ignore=*` | Exclude specific tables (repeatable) |
-| `--only=*` | Alias for `--tables` |
-| `--path=app` | Base path for generated models |
-| `--force` | Overwrite existing files without prompting |
-| `--backup` | Back up existing files before overwriting |
-| `--dry-run` | Preview without writing files |
-| `--with-phpdoc` | Add PHPDoc blocks to models |
-| `--with-inverse` | Generate inverse relationships |
-| `--with-constraints` | Embed constraint metadata in model comments |
-| `--validate-fk` | Validate all foreign-key references |
-| `--analyze-constraints` | Print a constraint summary before generating |
-| `--show-recommendations` | Print schema optimisation suggestions |
+| Flag                     | Description                                  |
+| ------------------------ | -------------------------------------------- |
+| `--namespace=App\Models` | Namespace for generated models               |
+| `--connection=`          | Database connection to introspect            |
+| `--tables=*`             | Limit to specific tables (repeatable)        |
+| `--ignore=*`             | Exclude specific tables (repeatable)         |
+| `--only=*`               | Alias for `--tables`                         |
+| `--path=app`             | Base path for generated models               |
+| `--force`                | Overwrite existing files without prompting   |
+| `--backup`               | Back up existing files before overwriting    |
+| `--dry-run`              | Preview without writing files                |
+| `--with-phpdoc`          | Add PHPDoc blocks to models                  |
+| `--with-inverse`         | Generate inverse relationships               |
+| `--with-constraints`     | Embed constraint metadata in model comments  |
+| `--validate-fk`          | Validate all foreign-key references          |
+| `--analyze-constraints`  | Print a constraint summary before generating |
+| `--show-recommendations` | Print schema optimisation suggestions        |
 
 > **Note** — files that already exist are skipped unless you pass `--force`.
 > When iterating on a schema, `--force` (optionally with `--backup`) is what you
@@ -196,21 +188,21 @@ views — for the chosen tables. The web scaffold reuses the same **services** a
 php artisan anvil:generate-web [options]
 ```
 
-| Flag | Description |
-| --- | --- |
-| `--stack=blade` | Front-end stack: `blade` (Blade + Tailwind) or `livewire` (Blade + Livewire) |
-| `--tables=*` | Limit to specific tables |
-| `--only=*` | Alias for `--tables` |
-| `--ignore=*` | Exclude specific tables |
-| `--connection=` | Database connection to introspect |
-| `--namespace=App\Models` | Namespace of the models the scaffold references |
-| `--path=app` | Base path for generated models |
-| `--layout=` | Blade layout the views should extend (overrides config) |
-| `--skip-models` | Don't (re)generate models — assume they already exist |
-| `--no-inverse` | Skip inverse-relationship detection when generating models |
-| `--force` | Overwrite existing files |
-| `--backup` | Back up existing files before overwriting |
-| `--dry-run` | Preview without writing files |
+| Flag                     | Description                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `--stack=blade`          | Front-end stack: `blade` (Blade + Tailwind) or `livewire` (Blade + Livewire) |
+| `--tables=*`             | Limit to specific tables                                                     |
+| `--only=*`               | Alias for `--tables`                                                         |
+| `--ignore=*`             | Exclude specific tables                                                      |
+| `--connection=`          | Database connection to introspect                                            |
+| `--namespace=App\Models` | Namespace of the models the scaffold references                              |
+| `--path=app`             | Base path for generated models                                               |
+| `--layout=`              | Blade layout the views should extend (overrides config)                      |
+| `--skip-models`          | Don't (re)generate models — assume they already exist                        |
+| `--no-inverse`           | Skip inverse-relationship detection when generating models                   |
+| `--force`                | Overwrite existing files                                                     |
+| `--backup`               | Back up existing files before overwriting                                    |
+| `--dry-run`              | Preview without writing files                                                |
 
 ### `anvil:docs`
 
@@ -222,8 +214,6 @@ php artisan anvil:docs            # human-readable summary
 php artisan anvil:docs --json     # machine-readable
 php artisan anvil:docs --open     # open the docs URL in your browser
 ```
-
----
 
 ## The web scaffold
 
@@ -264,8 +254,6 @@ component**:
 Both stacks delegate persistence to the generated `Service` classes, so business
 logic lives in one place regardless of front end.
 
----
-
 ## The versioned API scaffold
 
 `--api` generates a versioned, JSON-only API:
@@ -279,8 +267,6 @@ logic lives in one place regardless of front end.
 ```bash
 php artisan anvil:generate --api --api-version=2 --tables=posts
 ```
-
----
 
 ## OpenAPI & Swagger UI
 
@@ -307,8 +293,6 @@ php artisan anvil:docs
 
 > Regenerate with `--force` after schema changes — existing spec files are
 > otherwise left untouched.
-
----
 
 ## Configuration
 
@@ -358,8 +342,6 @@ return [
 ];
 ```
 
----
-
 ## Architecture
 
 Anvil is built around a small, explicit pipeline:
@@ -379,8 +361,6 @@ Anvil is built around a small, explicit pipeline:
   into the metadata every generator consumes.
 - **`LaravelAnvilServiceProvider`** — registers the commands and the generator
   list.
-
----
 
 ## Extending Anvil
 
@@ -421,8 +401,6 @@ Register it in your own service provider by adding the class to Anvil's
 generator list. Resolve generators **through the container** (`app()->make()`)
 rather than `new`, so any constructor dependencies autowire correctly.
 
----
-
 ## Working with legacy schemas
 
 Anvil aims to be robust against databases that don't follow Laravel
@@ -438,8 +416,6 @@ conventions:
 
 If you hit a schema shape that isn't handled well, please open an issue with the
 DDL — these cases are exactly what hardens the tool.
-
----
 
 ## Security
 
@@ -457,15 +433,11 @@ few notes:
   `roave/security-advisories`, Larastan/PHPStan, and a SAST pass (Psalm taint
   analysis, Semgrep, or progpilot).
 
----
-
 ## Contributing
 
 Issues and pull requests are welcome. Please include the database DDL (or a
 minimal reproduction) for any generation bug, and run the test suite plus static
 analysis before submitting.
-
----
 
 ## License
 
