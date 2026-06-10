@@ -34,6 +34,7 @@ class GenerateWebCommand extends Command
                             {--only=*        : Alias for --tables}
                             {--ignore=*      : Exclude specific tables}
                             {--connection=   : Database connection to introspect}
+                            {--schema=       : Schema(s) to generate from: name, csv list, or "all"}
                             {--namespace=App\\Models : Namespace of the models the scaffold references}
                             {--path=app      : Base path for generated models}
                             {--layout=       : Blade layout the views should @extends (overrides config anvil.web.layout)}
@@ -84,21 +85,22 @@ class GenerateWebCommand extends Command
         // explicitly (the web scaffold depends on the latter two); models are on
         // unless skipped so the command produces a working CRUD from scratch.
         $options = GenerationOptions::fromArray([
-            'models' => ! $this->option('skip-models'),
-            'web' => true,
-            'stack' => $stack,
+            'models'        => ! $this->option('skip-models'),
+            'web'           => true,
+            'stack'         => $stack,
             'form_requests' => true,
-            'services' => true,
-            'force' => (bool) $this->option('force'),
-            'backup' => (bool) $this->option('backup'),
-            'dry_run' => (bool) $this->option('dry-run'),
-            'with_phpdoc' => true,
-            'with_inverse' => ! $this->option('no-inverse'),
-            'namespace' => $this->option('namespace'),
-            'path' => $this->option('path'),
-            'connection' => $this->option('connection'),
-            'tables' => $tables,
-            'ignore' => $this->option('ignore') ?? [],
+            'services'      => true,
+            'force'         => (bool) $this->option('force'),
+            'backup'        => (bool) $this->option('backup'),
+            'dry_run'       => (bool) $this->option('dry-run'),
+            'with_phpdoc'   => true,
+            'with_inverse'  => ! $this->option('no-inverse'),
+            'namespace'     => $this->option('namespace'),
+            'path'          => $this->option('path'),
+            'connection'    => $this->option('connection'),
+            'schemas'       => $this->option('schema'),
+            'tables'        => $tables,
+            'ignore'        => $this->option('ignore') ?? [],
         ]);
 
         $this->info('🌐 Anvil — Web Scaffold ('.($stack === 'livewire' ? 'Blade + Livewire' : 'Blade + Tailwind').')');

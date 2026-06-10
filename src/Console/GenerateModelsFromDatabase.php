@@ -45,6 +45,7 @@ class GenerateModelsFromDatabase extends Command
                             {--openapi-ui             : Publish Swagger UI to public/docs/}
                             {--namespace=App\\Models  : Namespace for generated models}
                             {--connection=            : Database connection to introspect}
+                            {--schema=                : Schema(s) to generate from: name, csv list, or "all" (default: connection default)}
                             {--tables=*               : Limit generation to specific tables}
                             {--ignore=*               : Exclude specific tables}
                             {--only=*                 : Alias for --tables}

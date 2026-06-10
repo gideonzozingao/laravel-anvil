@@ -74,6 +74,7 @@ final class GenerationOptions
         public ?string $connection = null,
         public array $tables = [],
         public array $ignore = [],
+        public array $schemas = [],
     ) {}
 
     // -----------------------------------------------------------------------
@@ -151,6 +152,7 @@ final class GenerationOptions
             connection: $command->option('connection'),
             tables: $command->option('tables') ?? [],
             ignore: $command->option('ignore') ?? [],
+            schemas: self::normalizeSchemas($command->hasOption('schema') ? $command->option('schema') : []),
         );
     }
 
@@ -211,6 +213,7 @@ final class GenerationOptions
             connection: $options['connection'] ?? null,
             tables: $options['tables'] ?? [],
             ignore: $options['ignore'] ?? [],
+            schemas: self::normalizeSchemas($options['schemas'] ?? []),
         );
     }
 
@@ -287,6 +290,53 @@ final class GenerationOptions
     public function hasSpecificTables(): bool
     {
         return ! empty($this->tables);
+    }
+
+    /**
+     * The schema selection for this run as a clean list.
+     * Empty means "use the connection's default schema".
+     *
+     * @return list<string>
+     */
+    public function getSchemaSelection(): array
+    {
+        return $this->schemas;
+    }
+
+    /** True when the user explicitly asked for one or more schemas (or 'all'). */
+    public function hasSchemaSelection(): bool
+    {
+        return ! empty($this->schemas);
+    }
+
+    /** True when generation should span more than one schema (or all of them). */
+    public function isMultiSchema(): bool
+    {
+        return in_array('all', $this->schemas, true)
+            || in_array('*', $this->schemas, true)
+            || count($this->schemas) > 1;
+    }
+
+    /**
+     * Normalize a --schema value (csv string, array, or null) into a list.
+     *
+     * @param  string|array<int, string>|null  $value
+     * @return list<string>
+     */
+    protected static function normalizeSchemas(string|array|null $value): array
+    {
+        if ($value === null || $value === '' || $value === []) {
+            return [];
+        }
+
+        if (is_string($value)) {
+            $value = explode(',', $value);
+        }
+
+        return array_values(array_filter(
+            array_map(fn ($s) => trim((string) $s), $value),
+            fn ($s) => $s !== '',
+        ));
     }
 
     public function hasIgnoredTables(): bool
@@ -378,6 +428,7 @@ final class GenerationOptions
             'connection' => $this->connection,
             'tables' => $this->tables,
             'ignore' => $this->ignore,
+            'schemas' => $this->schemas,
         ];
     }
 

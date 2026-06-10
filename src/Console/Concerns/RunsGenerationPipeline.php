@@ -43,8 +43,10 @@ trait RunsGenerationPipeline
         $this->setupComponents($options);
         $this->displayGenerationPlan($options);
 
-        $allTables = $this->inspector->getAllTables();
-        $tablesToProcess = $this->filterTables($allTables, $options);
+        // Enumerate tables across the selected schema(s). The selection comes from
+        // --schema (csv or "all"); empty means the connection's default schema.
+        $pairs = $this->inspector->getAllSchemaTables($options->getSchemaSelection());
+        $tablesToProcess = $this->filterTables($pairs, $options);
 
         if (empty($tablesToProcess)) {
             $this->warn('⚠️  No tables found to process.');
@@ -56,18 +58,18 @@ trait RunsGenerationPipeline
 
         if ($options->withInverse) {
             $this->info('🔗 Building relationship map...');
-            $this->relationshipDetector->buildForeignKeyMap($allTables);
+            $this->relationshipDetector->buildForeignKeyMap(array_column($tablesToProcess, 'table'));
             if ($options->validateFk) {
                 $this->validateForeignKeys();
             }
         }
 
         if ($options->analyzeConstraints) {
-            $this->analyzeConstraints($tablesToProcess);
+            $this->analyzeConstraints(array_column($tablesToProcess, 'table'));
         }
 
         if ($options->validateFk) {
-            $this->validateConstraintIntegrity($tablesToProcess);
+            $this->validateConstraintIntegrity(array_column($tablesToProcess, 'table'));
         }
 
         // Confirmation guard for large schemas
@@ -89,7 +91,7 @@ trait RunsGenerationPipeline
         $this->displaySummary($results, $finalResults, $options);
 
         if ($options->showRecommendations) {
-            $this->displayRecommendations($tablesToProcess);
+            $this->displayRecommendations(array_column($tablesToProcess, 'table'));
         }
 
         // Swagger UI URL hint
@@ -144,16 +146,23 @@ trait RunsGenerationPipeline
     // Filtering
     // -----------------------------------------------------------------------
 
-    protected function filterTables(array $allTables, GenerationOptions $options): array
+    /**
+     * Filter the {schema, table} pairs by --tables / ignore rules.
+     *
+     * @param  list<array{schema: ?string, table: string}>  $pairs
+     * @return list<array{schema: ?string, table: string}>
+     */
+    protected function filterTables(array $pairs, GenerationOptions $options): array
     {
-        if ($options->hasSpecificTables()) {
-            $allTables = array_intersect($allTables, $options->tables);
-        }
+        return array_values(array_filter($pairs, function (array $pair) use ($options): bool {
+            $table = $pair['table'];
 
-        return array_values(array_filter(
-            $allTables,
-            fn ($t) => ! Helpers::shouldIgnoreTable($t, $options->getAllIgnoredTables()),
-        ));
+            if ($options->hasSpecificTables() && ! in_array($table, $options->tables, true)) {
+                return false;
+            }
+
+            return ! Helpers::shouldIgnoreTable($table, $options->getAllIgnoredTables());
+        }));
     }
 
     // -----------------------------------------------------------------------
@@ -163,18 +172,22 @@ trait RunsGenerationPipeline
     protected function generateArtifacts(array $tables, GenerationOptions $options): array
     {
         $allResults = [];
+        $defaultSchema = $this->inspector->defaultSchema();
         $bar = $this->output->createProgressBar(count($tables));
         $bar->setFormat(' %current%/%max% [%bar%] %percent:3s%% — %message%');
         $bar->setMessage('Starting...');
         $bar->start();
 
-        foreach ($tables as $table) {
-            $bar->setMessage("Processing {$table}");
+        foreach ($tables as $pair) {
+            $table  = $pair['table'];
+            $schema = $pair['schema'];
+            $label  = ($schema !== null && $schema !== $defaultSchema) ? "{$schema}.{$table}" : $table;
+            $bar->setMessage("Processing {$label}");
 
             try {
-                $modelResult = $this->generateModel($table, $options);
+                $modelResult = $this->generateModel($table, $options, $schema);
 
-                $meta = ModelMetadata::fromTable($table, $this->inspector);
+                $meta = ModelMetadata::fromTable($table, $this->inspector, $schema);
 
                 if ($options->withInverse) {
                     $meta->inverseRelationships = $this->relationshipDetector->getInverseRelationships($table);
@@ -200,12 +213,12 @@ trait RunsGenerationPipeline
                 }
 
                 $allResults[] = [
-                    'table' => $table,
+                    'table' => $label,
                     'model' => $modelResult,
                     'artifacts' => $artifactResults,
                 ];
             } catch (\Exception $e) {
-                $this->error("\n❌ Failed processing '{$table}': {$e->getMessage()}");
+                $this->error("\n❌ Failed processing '{$label}': {$e->getMessage()}");
             }
 
             $bar->advance();
@@ -221,11 +234,20 @@ trait RunsGenerationPipeline
     // Model generation
     // -----------------------------------------------------------------------
 
-    protected function generateModel(string $table, GenerationOptions $options): array
+    protected function generateModel(string $table, GenerationOptions $options, ?string $schema = null): array
     {
         $modelName = Helpers::tableToModelName($table);
-        $namespace = $options->getNamespace();
-        $basePath = $options->getPath();
+        $defaultSchema = $this->inspector->defaultSchema();
+        $isQualified = $schema !== null && $schema !== '' && $schema !== $defaultSchema;
+
+        // Schema segment (e.g. "Core") so cross-schema tables of the same name
+        // don't collide: App\Models\Core\Employer at app/Models/Core/Employer.php.
+        $segment   = $isQualified ? \Illuminate\Support\Str::studly(str_replace(['.', '-', ' '], '_', $schema)) : null;
+        $namespace = $segment !== null ? $options->getNamespace().'\\'.$segment : $options->getNamespace();
+        $basePath  = $options->getPath();
+
+        // The table the model binds to — schema-qualified when not the default schema.
+        $modelTable = $isQualified ? $schema.'.'.$table : $table;
 
         if (! Helpers::isValidClassName($modelName)) {
             throw new \Exception("Invalid model name: {$modelName}");
@@ -244,7 +266,7 @@ trait RunsGenerationPipeline
             }
         }
 
-        $metadata = $this->inspector->getTableMetadata($table);
+        $metadata = $this->inspector->getTableMetadata($table, $schema);
         $columns = $metadata['columns'];
         $foreignKeys = $metadata['foreign_keys'];
         $primaryKey = $metadata['primary_key'];
@@ -260,7 +282,7 @@ trait RunsGenerationPipeline
             ? $this->constraintAnalyzer->analyzeTable($table)
             : null;
 
-        $builder = new ModelBuilder($table, $namespace);
+        $builder = new ModelBuilder($modelTable, $namespace);
         $builder->setColumns($columns)
             ->setForeignKeys($foreignKeys)
             ->setIndexes($indexes)
@@ -420,7 +442,7 @@ trait RunsGenerationPipeline
             $routeFile = config('anvil.web.route_file', 'routes/web.php');
             $this->newLine();
             $this->info('🌐 Web scaffold complete.');
-            $this->line('   Controllers : App\\Http\\Controllers\\Web\\');
+            $this->line("   Controllers : App\\Http\\Controllers\\Web\\");
             $this->line("   Routes      : {$routeFile} (Route::resource within the configured middleware group)");
             $this->line('   Views       : resources/views/{resource}/ (index, create, edit, show, _form)');
         }
@@ -513,7 +535,7 @@ trait RunsGenerationPipeline
             $this->line("  - {$e}");
         }
         $this->newLine();
-        $this->error('Fix issues in config/laravel-anvil.php and retry.');
+        $this->error('Fix issues in config/anvil.php and retry.');
     }
 
     protected function displayValidationWarnings($validator): void
