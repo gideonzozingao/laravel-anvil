@@ -34,9 +34,44 @@ class ModelBuilder
 
     protected ?array $constraintAnalysis = null;
 
+    /** The actual DB table for `protected $table` — may be schema-qualified (e.g. "members_db.addresses"). */
+    protected string $table;
+
+    /**
+     * Root models namespace (no schema segment). Used to resolve related models
+     * when a foreign key points at a table in another schema.
+     */
+    protected ?string $rootNamespace = null;
+
     public function __construct(protected string $tableName, string $namespace)
     {
         $this->namespace = Helpers::normalizeNamespace($namespace);
+        // By default the DB table equals the (bare) table name used for naming.
+        $this->table = $tableName;
+    }
+
+    /**
+     * Override the DB table written to `protected $table`, independent of the
+     * table used to derive the class name. Used for schema-qualified tables
+     * (e.g. class "Address" but table "members_db.addresses").
+     */
+    public function setTable(string $table): self
+    {
+        $this->table = $table;
+
+        return $this;
+    }
+
+    /**
+     * Set the root models namespace (e.g. "App\Models") so cross-schema foreign
+     * keys can resolve to "App\Models\{Schema}\{Model}". When null, related
+     * models resolve within this model's own namespace (legacy behaviour).
+     */
+    public function setRootNamespace(?string $rootNamespace): self
+    {
+        $this->rootNamespace = $rootNamespace !== null ? Helpers::normalizeNamespace($rootNamespace) : null;
+
+        return $this;
     }
 
     /**
@@ -195,7 +230,7 @@ class ModelBuilder
             'uses' => $uses,
             'docblock' => $docBlock,
             'class_name' => $modelName,
-            'table' => $this->tableName,
+            'table' => $this->table,
             'primary_key' => $primaryKeyProperty,
             'timestamps' => $timestampsProperty,
             'fillable' => $fillable,
@@ -207,6 +242,25 @@ class ModelBuilder
         ]);
 
         return $generator->generate();
+    }
+
+    /**
+     * Fully-qualified class name of a related model, honouring the foreign key's
+     * schema when present (so a cross-schema FK resolves to App\Models\{Schema}\{Model}).
+     */
+    protected function relatedModelFqn(array $fk): string
+    {
+        $relatedModel = Helpers::tableToModelName($fk['referenced_table']);
+        $schema = $fk['referenced_schema'] ?? null;
+
+        // No schema info, or no root namespace configured → resolve in this model's namespace.
+        if ($schema === null || $schema === '' || $this->rootNamespace === null) {
+            return $this->namespace.'\\'.$relatedModel;
+        }
+
+        $segment = \Illuminate\Support\Str::studly(str_replace(['.', '-', ' '], '_', $schema));
+
+        return $this->rootNamespace.'\\'.$segment.'\\'.$relatedModel;
     }
 
     /**
@@ -236,7 +290,7 @@ class ModelBuilder
             $properties[] = [
                 'type' => '',
                 'name' => '',
-                'comment' => 'Table: '.$this->tableName,
+                'comment' => 'Table: '.$this->table,
             ];
         }
 
@@ -268,7 +322,7 @@ class ModelBuilder
             $relatedModel = Helpers::tableToModelName($fk['referenced_table']);
 
             $methods[] = [
-                'return' => sprintf('\%s\%s', $this->namespace, $relatedModel),
+                'return' => '\\'.$this->relatedModelFqn($fk),
                 'name' => $methodName,
                 'comment' => 'Get the related '.$relatedModel,
             ];
@@ -339,34 +393,22 @@ class ModelBuilder
             $innerIndent = '        ';
 
             $stub = "\n{$indent}/**\n";
-            $stub .= $indent.' * The primary key for the model.
-';
-            $stub .= $indent.' *
-';
-            $stub .= $indent.' * @var array<int, string>
-';
-            $stub .= $indent.' */
-';
-            $stub .= $indent.'protected $primaryKey = [
-';
+            $stub .= $indent." * The primary key for the model.\n";
+            $stub .= $indent." *\n";
+            $stub .= $indent." * @var array<int, string>\n";
+            $stub .= $indent." */\n";
+            $stub .= $indent."protected \$primaryKey = [\n";
 
             foreach ($this->compositePrimaryKey as $column) {
                 $stub .= "{$innerIndent}'{$column}',\n";
             }
 
-            $stub .= $indent.'];
-
-';
-            $stub .= $indent.'/**
-';
-            $stub .= $indent.' * Indicates if the IDs are auto-incrementing.
-';
-            $stub .= $indent.' *
-';
-            $stub .= $indent.' * @var bool
-';
-            $stub .= $indent.' */
-';
+            $stub .= $indent."];\n\n";
+            $stub .= $indent."/**\n";
+            $stub .= $indent." * Indicates if the IDs are auto-incrementing.\n";
+            $stub .= $indent." *\n";
+            $stub .= $indent." * @var bool\n";
+            $stub .= $indent." */\n";
 
             return $stub.($indent.'public $incrementing = false;');
         }
@@ -507,15 +549,13 @@ class ModelBuilder
         }
 
         $stub = "\n{$indent}/*\n";
-        $stub .= $indent.' * Database Constraints
-';
+        $stub .= $indent." * Database Constraints\n";
         $stub .= $indent.' * '.str_repeat('-', 50)."\n";
         foreach ($comments as $comment) {
             $stub .= sprintf('%s * %s%s', $indent, $comment, PHP_EOL);
         }
 
-        return $stub.($indent.' */
-');
+        return $stub.($indent." */\n");
     }
 
     /**
@@ -528,8 +568,7 @@ class ModelBuilder
         // Build belongsTo relationships from foreign keys
         foreach ($this->foreignKeys as $fk) {
             $methodName = Helpers::foreignKeyToRelationName($fk['column']);
-            $relatedModel = Helpers::tableToModelName($fk['referenced_table']);
-            $fullRelatedModel = $this->namespace.'\\'.$relatedModel;
+            $fullRelatedModel = $this->relatedModelFqn($fk);
 
             $relationships[] = StubGenerator::relationshipStub(
                 'belongsTo',

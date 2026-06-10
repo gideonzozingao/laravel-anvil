@@ -1,613 +1,551 @@
 <?php
 
-namespace Zuqongtech\LaravelAnvil\Support;
+namespace Zuqongtech\LaravelAnvil\Console\Concerns;
 
-use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Console\Command;
+use Zuqongtech\LaravelAnvil\Support\ConstraintAnalyzer;
+use Zuqongtech\LaravelAnvil\Support\DatabaseInspector;
+use Zuqongtech\LaravelAnvil\Support\FileWriter;
+use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
+use Zuqongtech\LaravelAnvil\Support\GenerationOrchestrator;
+use Zuqongtech\LaravelAnvil\Support\Helpers;
+use Zuqongtech\LaravelAnvil\Support\ModelBuilder;
+use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
+use Zuqongtech\LaravelAnvil\Support\RelationshipDetector;
 
-class ModelBuilder
+/**
+ * Shared generation pipeline used by anvil:generate and anvil:generate-web.
+ *
+ * A consuming command is responsible only for (a) validating config and
+ * (b) building a GenerationOptions instance, then calling runPipeline().
+ * Everything from component setup through the per-table loop, finalization
+ * and summary lives here so the two commands stay thin and never diverge.
+ *
+ * @mixin Command
+ */
+trait RunsGenerationPipeline
 {
-    protected string $namespace;
+    protected DatabaseInspector $inspector;
 
-    protected array $columns = [];
+    protected RelationshipDetector $relationshipDetector;
 
-    protected array $foreignKeys = [];
+    protected ConstraintAnalyzer $constraintAnalyzer;
 
-    protected array $indexes = [];
+    protected FileWriter $fileWriter;
 
-    protected array $uniqueConstraints = [];
-
-    protected ?string $primaryKey = 'id';
-
-    protected array $compositePrimaryKey = [];
-
-    protected bool $timestamps = true;
-
-    protected bool $softDeletes = false;
-
-    protected bool $withPhpDoc = true;
-
-    protected bool $withInverse = true;
-
-    protected bool $withConstraintComments = false;
-
-    protected array $inverseRelationships = [];
-
-    protected ?array $constraintAnalysis = null;
-
-    /** The actual DB table for `protected $table` — may be schema-qualified (e.g. "members_db.addresses"). */
-    protected string $table;
+    protected GenerationOrchestrator $orchestrator;
 
     /**
-     * Root models namespace (no schema segment). Used to resolve related models
-     * when a foreign key points at a table in another schema.
+     * Run the full generation pipeline for the given options.
      */
-    protected ?string $rootNamespace = null;
-
-    public function __construct(protected string $tableName, string $namespace)
+    protected function runPipeline(GenerationOptions $options): int
     {
-        $this->namespace = Helpers::normalizeNamespace($namespace);
-        // By default the DB table equals the (bare) table name used for naming.
-        $this->table = $tableName;
+        $this->setupComponents($options);
+        $this->displayGenerationPlan($options);
+
+        // Enumerate tables across the selected schema(s). The selection comes from
+        // --schema (csv or "all"); empty means the connection's default schema.
+        $pairs = $this->inspector->getAllSchemaTables($options->getSchemaSelection());
+        $tablesToProcess = $this->filterTables($pairs, $options);
+
+        if (empty($tablesToProcess)) {
+            $this->warn('⚠️  No tables found to process.');
+
+            return Command::SUCCESS;
+        }
+
+        $this->info('📊 Found '.count($tablesToProcess)." table(s) to process.\n");
+
+        if ($options->withInverse) {
+            $this->info('🔗 Building relationship map...');
+            $this->relationshipDetector->buildForeignKeyMap(array_column($tablesToProcess, 'table'));
+            if ($options->validateFk) {
+                $this->validateForeignKeys();
+            }
+        }
+
+        if ($options->analyzeConstraints) {
+            $this->analyzeConstraints(array_column($tablesToProcess, 'table'));
+        }
+
+        if ($options->validateFk) {
+            $this->validateConstraintIntegrity(array_column($tablesToProcess, 'table'));
+        }
+
+        // Confirmation guard for large schemas
+        $threshold = config('laravel-anvil.validation.confirm_threshold', 50);
+        if (count($tablesToProcess) >= $threshold && ! $options->force) {
+            if (! $this->confirm('⚠️  About to process '.count($tablesToProcess).' tables. Continue?')) {
+                $this->info('Aborted.');
+
+                return Command::SUCCESS;
+            }
+        }
+
+        // ── Pass 1: per-model generation ─────────────────────────────────────
+        $results = $this->generateArtifacts($tablesToProcess, $options);
+
+        // ── Pass 2: finalization (OpenAPI root spec, Swagger UI, etc.) ────────
+        $finalResults = $this->orchestrator->finalize($options);
+
+        $this->displaySummary($results, $finalResults, $options);
+
+        if ($options->showRecommendations) {
+            $this->displayRecommendations(array_column($tablesToProcess, 'table'));
+        }
+
+        // Swagger UI URL hint
+        if ($options->openApiUi && ! $options->dryRun) {
+            $url = config('app.url').'/docs';
+            $this->info("🌐 Swagger UI available at: {$url}");
+        }
+
+        return Command::SUCCESS;
     }
 
-    /**
-     * Override the DB table written to `protected $table`, independent of the
-     * table used to derive the class name. Used for schema-qualified tables
-     * (e.g. class "Address" but table "members_db.addresses").
-     */
-    public function setTable(string $table): self
-    {
-        $this->table = $table;
+    // -----------------------------------------------------------------------
+    // Setup
+    // -----------------------------------------------------------------------
 
-        return $this;
+    protected function setupComponents(GenerationOptions $options): void
+    {
+        $conn = $options->getConnection();
+        $this->inspector = new DatabaseInspector($conn);
+        $this->relationshipDetector = new RelationshipDetector($this->inspector);
+        $this->constraintAnalyzer = new ConstraintAnalyzer($this->inspector);
+        $this->fileWriter = new FileWriter(base_path(), $options->dryRun);
+        $this->orchestrator = app(GenerationOrchestrator::class);
+
+        $driver = $this->inspector->getDriver();
+        $database = $this->inspector->getDatabaseName();
+        $this->info("🔍 Connection [{$conn}] — driver: {$driver} — database: {$database}");
+
+        if ($options->dryRun) {
+            $this->warn('🔸 DRY RUN — no files will be written');
+        }
+
+        if ($options->api) {
+            $versionLabel = $options->getApiVersionString();
+            $this->info("🚀 Versioned API scaffold — {$versionLabel} (JSON-enforced)");
+        }
+
+        if ($options->web) {
+            $this->info('🌐 Web scaffold — controllers, Blade views and web routes');
+        }
+
+        if ($options->openApi) {
+            $fmt = strtoupper($options->openApiFormat);
+            $mode = $options->openApiSingleFile ? 'single-file' : 'split-files';
+            $this->info("📄 OpenAPI 3.1 — format: {$fmt} — mode: {$mode}");
+        }
+
+        $this->newLine();
     }
 
-    /**
-     * Set the root models namespace (e.g. "App\Models") so cross-schema foreign
-     * keys can resolve to "App\Models\{Schema}\{Model}". When null, related
-     * models resolve within this model's own namespace (legacy behaviour).
-     */
-    public function setRootNamespace(?string $rootNamespace): self
-    {
-        $this->rootNamespace = $rootNamespace !== null ? Helpers::normalizeNamespace($rootNamespace) : null;
+    // -----------------------------------------------------------------------
+    // Filtering
+    // -----------------------------------------------------------------------
 
-        return $this;
+    /**
+     * Filter the {schema, table} pairs by --tables / ignore rules.
+     *
+     * @param  list<array{schema: ?string, table: string}>  $pairs
+     * @return list<array{schema: ?string, table: string}>
+     */
+    protected function filterTables(array $pairs, GenerationOptions $options): array
+    {
+        return array_values(array_filter($pairs, function (array $pair) use ($options): bool {
+            $table = $pair['table'];
+
+            if ($options->hasSpecificTables() && ! in_array($table, $options->tables, true)) {
+                return false;
+            }
+
+            return ! Helpers::shouldIgnoreTable($table, $options->getAllIgnoredTables());
+        }));
     }
 
-    /**
-     * Set columns
-     */
-    public function setColumns(array $columns): self
-    {
-        $this->columns = $columns;
+    // -----------------------------------------------------------------------
+    // Generation loop
+    // -----------------------------------------------------------------------
 
-        return $this;
+    protected function generateArtifacts(array $tables, GenerationOptions $options): array
+    {
+        $allResults = [];
+        $defaultSchema = $this->inspector->defaultSchema();
+        $bar = $this->output->createProgressBar(count($tables));
+        $bar->setFormat(' %current%/%max% [%bar%] %percent:3s%% — %message%');
+        $bar->setMessage('Starting...');
+        $bar->start();
+
+        foreach ($tables as $pair) {
+            $table  = $pair['table'];
+            $schema = $pair['schema'];
+            $label  = ($schema !== null && $schema !== $defaultSchema) ? "{$schema}.{$table}" : $table;
+            $bar->setMessage("Processing {$label}");
+
+            try {
+                $modelResult = $this->generateModel($table, $options, $schema);
+
+                $meta = ModelMetadata::fromTable($table, $this->inspector, $schema);
+
+                if ($options->withInverse) {
+                    $meta->inverseRelationships = $this->relationshipDetector->getInverseRelationships($table);
+                }
+                if ($options->withConstraints) {
+                    $meta->constraintAnalysis = $this->constraintAnalyzer->analyzeTable($table);
+                }
+
+                $artifactResults = [];
+                $needsOrchestrator = $options->controllers || $options->resources
+                    || $options->observers || $options->policies
+                    || $options->formRequests || $options->services
+                    || $options->repositories || $options->gates
+                    || $options->apiRoutes || $options->factories
+                    || $options->seeders || $options->migrations
+                    || $options->events || $options->tests
+                    || $options->api || $options->openApi
+                    || $options->web;
+
+                if ($needsOrchestrator) {
+                    $orchestratorResults = $this->orchestrator->generate([$meta], $options);
+                    $artifactResults = $orchestratorResults[0]['artifacts'] ?? [];
+                }
+
+                $allResults[] = [
+                    'table' => $label,
+                    'model' => $modelResult,
+                    'artifacts' => $artifactResults,
+                ];
+            } catch (\Exception $e) {
+                $this->error("\n❌ Failed processing '{$label}': {$e->getMessage()}");
+            }
+
+            $bar->advance();
+        }
+
+        $bar->finish();
+        $this->newLine(2);
+
+        return $allResults;
     }
 
-    /**
-     * Set foreign keys
-     */
-    public function setForeignKeys(array $foreignKeys): self
+    // -----------------------------------------------------------------------
+    // Model generation
+    // -----------------------------------------------------------------------
+
+    protected function generateModel(string $table, GenerationOptions $options, ?string $schema = null): array
     {
-        $this->foreignKeys = $foreignKeys;
+        $modelName = Helpers::tableToModelName($table);
+        $defaultSchema = $this->inspector->defaultSchema();
+        $isQualified = $schema !== null && $schema !== '' && $schema !== $defaultSchema;
 
-        return $this;
-    }
+        // Schema segment (e.g. "Core") so cross-schema tables of the same name
+        // don't collide: App\Models\Core\Employer at app/Models/Core/Employer.php.
+        $segment   = $isQualified ? \Illuminate\Support\Str::studly(str_replace(['.', '-', ' '], '_', $schema)) : null;
+        $namespace = $segment !== null ? $options->getNamespace().'\\'.$segment : $options->getNamespace();
+        $basePath  = $options->getPath();
 
-    /**
-     * Set indexes
-     */
-    public function setIndexes(array $indexes): self
-    {
-        $this->indexes = $indexes;
+        // The table the model binds to — schema-qualified when not the default schema.
+        $modelTable = $isQualified ? $schema.'.'.$table : $table;
 
-        return $this;
-    }
+        if (! Helpers::isValidClassName($modelName)) {
+            throw new \Exception("Invalid model name: {$modelName}");
+        }
 
-    /**
-     * Set unique constraints
-     */
-    public function setUniqueConstraints(array $uniqueConstraints): self
-    {
-        $this->uniqueConstraints = $uniqueConstraints;
+        $modelExists = $this->fileWriter->modelExists($namespace, $modelName, $basePath);
 
-        return $this;
-    }
+        if ($modelExists && ! $options->force && ! $options->dryRun) {
+            return ['table' => $table, 'model' => $modelName, 'status' => 'skipped', 'reason' => 'already exists'];
+        }
 
-    /**
-     * Set primary key
-     */
-    public function setPrimaryKey(?string $primaryKey): self
-    {
-        $this->primaryKey = $primaryKey;
+        if ($modelExists && $options->backup && ! $options->dryRun) {
+            $backupPath = $this->fileWriter->backupModel($namespace, $modelName, $basePath);
+            if ($backupPath) {
+                $this->line("  💾 Backed up: {$backupPath}");
+            }
+        }
 
-        return $this;
-    }
+        $metadata = $this->inspector->getTableMetadata($table, $schema);
+        $columns = $metadata['columns'];
+        $foreignKeys = $metadata['foreign_keys'];
+        $primaryKey = $metadata['primary_key'];
+        $compositePrimaryKey = $metadata['composite_primary_key'];
+        $indexes = $metadata['indexes'];
+        $uniqueConstraints = $metadata['unique_constraints'];
 
-    /**
-     * Set composite primary key
-     */
-    public function setCompositePrimaryKey(array $compositePrimaryKey): self
-    {
-        $this->compositePrimaryKey = $compositePrimaryKey;
+        $columnNames = array_column($columns, 'name');
+        $hasTimestamps = in_array('created_at', $columnNames) && in_array('updated_at', $columnNames);
+        $hasSoftDeletes = in_array('deleted_at', $columnNames);
 
-        return $this;
-    }
+        $constraintAnalysis = $options->withConstraints
+            ? $this->constraintAnalyzer->analyzeTable($table)
+            : null;
 
-    /**
-     * Set timestamps
-     */
-    public function setTimestamps(bool $timestamps): self
-    {
-        $this->timestamps = $timestamps;
+        $builder = new ModelBuilder($table, $namespace);
+        $builder->setTable($modelTable)
+            ->setRootNamespace($options->getNamespace())
+            ->setColumns($columns)
+            ->setForeignKeys($foreignKeys)
+            ->setIndexes($indexes)
+            ->setUniqueConstraints($uniqueConstraints)
+            ->setPrimaryKey($primaryKey)
+            ->setCompositePrimaryKey($compositePrimaryKey)
+            ->setTimestamps($hasTimestamps)
+            ->setSoftDeletes($hasSoftDeletes)
+            ->setWithPhpDoc($options->withPhpDoc)
+            ->setWithInverse($options->withInverse)
+            ->setWithConstraintComments($options->withConstraints)
+            ->setConstraintAnalysis($constraintAnalysis);
 
-        return $this;
-    }
+        $inverseRelations = [];
+        if ($options->withInverse) {
+            $inverseRelations = $this->relationshipDetector->getInverseRelationships($table);
+            foreach ($inverseRelations as $relation) {
+                $builder->addInverseRelationship($relation['method'], $relation['model'], $relation['foreign_key']);
+            }
+        }
 
-    /**
-     * Set soft deletes
-     */
-    public function setSoftDeletes(bool $softDeletes): self
-    {
-        $this->softDeletes = $softDeletes;
+        $writeResult = $this->fileWriter->writeModel($builder->build(), $namespace, $modelName, $basePath);
 
-        return $this;
-    }
-
-    /**
-     * Set with PHP doc
-     */
-    public function setWithPhpDoc(bool $withPhpDoc): self
-    {
-        $this->withPhpDoc = $withPhpDoc;
-
-        return $this;
-    }
-
-    /**
-     * Set with inverse relationships
-     */
-    public function setWithInverse(bool $withInverse): self
-    {
-        $this->withInverse = $withInverse;
-
-        return $this;
-    }
-
-    /**
-     * Set with constraint comments
-     */
-    public function setWithConstraintComments(bool $withConstraintComments): self
-    {
-        $this->withConstraintComments = $withConstraintComments;
-
-        return $this;
-    }
-
-    /**
-     * Set constraint analysis
-     */
-    public function setConstraintAnalysis(?array $constraintAnalysis): self
-    {
-        $this->constraintAnalysis = $constraintAnalysis;
-
-        return $this;
-    }
-
-    /**
-     * Add inverse relationship
-     */
-    public function addInverseRelationship(string $methodName, string $relatedModel, string $foreignKey): self
-    {
-        $this->inverseRelationships[] = [
-            'method' => $methodName,
-            'model' => $relatedModel,
-            'foreign_key' => $foreignKey,
+        return [
+            'table' => $table,
+            'model' => $modelName,
+            'status' => $writeResult['written'] ? 'success' : 'failed',
+            'path' => $writeResult['relative_path'],
+            'existed' => $writeResult['existed'],
+            'message' => $writeResult['message'],
+            'columns' => count($columns),
+            'relationships' => count($foreignKeys),
+            'inverse_relationships' => count($inverseRelations),
+            'indexes' => count($indexes),
+            'unique_constraints' => count($uniqueConstraints),
         ];
-
-        return $this;
     }
 
-    /**
-     * Build the model content
-     */
-    public function build(): string
+    // -----------------------------------------------------------------------
+    // Output helpers
+    // -----------------------------------------------------------------------
+
+    protected function displayGenerationPlan(GenerationOptions $options): void
     {
-        $modelName = Helpers::tableToModelName($this->tableName);
-        $uses = $this->buildUses();
-        $docBlock = $this->withPhpDoc ? $this->buildClassDocBlock() : '';
-        $primaryKeyProperty = $this->buildPrimaryKeyProperty();
-        $timestampsProperty = StubGenerator::timestampsStub($this->timestamps);
-        $fillable = $this->buildFillable();
-        $hidden = $this->buildHidden();
-        $casts = $this->buildCasts();
-        $dates = $this->buildDates();
-        $relationships = $this->buildRelationships();
-        $constraintComments = $this->withConstraintComments ? $this->buildConstraintComments() : '';
+        $generators = $options->getEnabledGenerators();
 
-        $generator = new StubGenerator([
-            'namespace' => $this->namespace,
-            'uses' => $uses,
-            'docblock' => $docBlock,
-            'class_name' => $modelName,
-            'table' => $this->table,
-            'primary_key' => $primaryKeyProperty,
-            'timestamps' => $timestampsProperty,
-            'fillable' => $fillable,
-            'hidden' => $hidden,
-            'casts' => $casts,
-            'dates' => $dates,
-            'constraint_comments' => $constraintComments,
-            'relationships' => $relationships,
-        ]);
+        if (! empty($generators)) {
+            $this->info('📋 Generation plan: '.implode(', ', $generators));
 
-        return $generator->generate();
-    }
-
-    /**
-     * Fully-qualified class name of a related model, honouring the foreign key's
-     * schema when present (so a cross-schema FK resolves to App\Models\{Schema}\{Model}).
-     */
-    protected function relatedModelFqn(array $fk): string
-    {
-        $relatedModel = Helpers::tableToModelName($fk['referenced_table']);
-        $schema = $fk['referenced_schema'] ?? null;
-
-        // No schema info, or no root namespace configured → resolve in this model's namespace.
-        if ($schema === null || $schema === '' || $this->rootNamespace === null) {
-            return $this->namespace.'\\'.$relatedModel;
-        }
-
-        $segment = \Illuminate\Support\Str::studly(str_replace(['.', '-', ' '], '_', $schema));
-
-        return $this->rootNamespace.'\\'.$segment.'\\'.$relatedModel;
-    }
-
-    /**
-     * Build uses statements
-     */
-    protected function buildUses(): string
-    {
-        $uses = [];
-
-        if ($this->softDeletes) {
-            $uses[] = SoftDeletes::class;
-        }
-
-        return StubGenerator::usesStub($uses);
-    }
-
-    /**
-     * Build class-level DocBlock
-     */
-    protected function buildClassDocBlock(): string
-    {
-        $properties = [];
-        $methods = [];
-
-        // Add table information
-        if ($this->withConstraintComments && $this->constraintAnalysis) {
-            $properties[] = [
-                'type' => '',
-                'name' => '',
-                'comment' => 'Table: '.$this->table,
-            ];
-        }
-
-        // Add property documentation
-        foreach ($this->columns as $column) {
-            $phpType = Helpers::mapDatabaseTypeToPhp($column['type']);
-            $phpType = Helpers::isNullableType($phpType, $column['nullable']);
-
-            $comment = $column['comment'] ?: null;
-
-            // Add constraint information to comment
-            if ($this->withConstraintComments) {
-                $constraintInfo = $this->getColumnConstraintInfo($column['name']);
-                if ($constraintInfo) {
-                    $comment = $comment ? sprintf('%s (%s)', $comment, $constraintInfo) : $constraintInfo;
-                }
+            if ($options->api) {
+                $versionString = $options->getApiVersionString();
+                $versionSlug = $options->getApiVersionSlug();
+                $this->line("   API version  : {$versionString}");
+                $this->line("   Controllers  : App\\Http\\Controllers\\Api\\{$versionString}\\");
+                $this->line("   Route file   : routes/api/{$versionSlug}.php");
+                $this->line('   JSON enforcer: App\\Http\\Middleware\\ForceJsonResponse');
+                $this->line('   Provider     : App\\Providers\\ForceJsonApiServiceProvider');
             }
 
-            $properties[] = [
-                'type' => $phpType,
-                'name' => $column['name'],
-                'comment' => $comment,
-            ];
+            if ($options->web) {
+                $routeFile = config('anvil.web.route_file', 'routes/web.php');
+                $layout = config('anvil.web.layout', 'layouts.anvil');
+                $this->line('   Controllers  : App\\Http\\Controllers\\Web\\');
+                $this->line("   Route file   : {$routeFile}");
+                $this->line('   Views        : resources/views/{resource}/');
+                $this->line("   Layout       : {$layout}");
+            }
+
+            if ($options->openApi) {
+                $path = config('laravel-anvil.openapi.output_path', 'openapi');
+                $this->line("   OpenAPI output → {$path}/");
+            }
+
+            $this->newLine();
         }
-
-        // Add relationship method documentation
-        foreach ($this->foreignKeys as $fk) {
-            $methodName = Helpers::foreignKeyToRelationName($fk['column']);
-            $relatedModel = Helpers::tableToModelName($fk['referenced_table']);
-
-            $methods[] = [
-                'return' => '\\'.$this->relatedModelFqn($fk),
-                'name' => $methodName,
-                'comment' => 'Get the related '.$relatedModel,
-            ];
-        }
-
-        // Add inverse relationship documentation
-        foreach ($this->inverseRelationships as $inverse) {
-            $methods[] = [
-                'return' => sprintf('\Illuminate\Database\Eloquent\Collection<int, \%s\%s>', $this->namespace, $inverse['model']),
-                'name' => $inverse['method'],
-                'comment' => sprintf('Get the related %s records', $inverse['model']),
-            ];
-        }
-
-        return StubGenerator::classDocBlock($properties, $methods);
     }
 
-    /**
-     * Get constraint information for a column
-     */
-    protected function getColumnConstraintInfo(string $columnName): ?string
+    protected function displaySummary(array $results, array $finalResults, GenerationOptions $options): void
     {
-        $info = [];
+        $this->info('📊 Summary');
 
-        // Check if primary key
-        if (in_array($columnName, $this->compositePrimaryKey)) {
-            $info[] = 'PK';
-        }
+        $modelStats = ['success' => 0, 'skipped' => 0, 'failed' => 0];
+        $artifactStats = [];
 
-        // Check if foreign key
-        foreach ($this->foreignKeys as $fk) {
-            if ($fk['column'] === $columnName) {
-                $info[] = sprintf('FK -> %s.%s', $fk['referenced_table'], $fk['referenced_column']);
+        foreach ($results as $result) {
+            $status = $result['model']['status'] ?? 'unknown';
+            if (isset($modelStats[$status])) {
+                $modelStats[$status]++;
             }
-        }
 
-        // Check if unique
-        foreach ($this->uniqueConstraints as $constraint) {
-            $constraintColumns = array_map(fn (array $col) => $col['name'], $constraint['columns']);
-            if (in_array($columnName, $constraintColumns)) {
-                $info[] = 'UNIQUE';
-                break;
-            }
-        }
-
-        // Check if indexed
-        foreach ($this->indexes as $index) {
-            if (! $index['primary'] && ! $index['unique']) {
-                $indexColumns = array_map(fn (array $col) => $col['name'], $index['columns']);
-                if (in_array($columnName, $indexColumns)) {
-                    $info[] = 'INDEXED';
-                    break;
+            foreach ($result['artifacts'] ?? [] as $artifact) {
+                $artifacts = isset($artifact['type']) ? [$artifact] : (array) $artifact;
+                foreach ($artifacts as $a) {
+                    $type = $a['type'] ?? 'unknown';
+                    $s = $a['status'] ?? 'unknown';
+                    $artifactStats[$type] ??= ['success' => 0, 'skipped' => 0, 'failed' => 0, 'merged' => 0, 'updated' => 0, 'dry-run' => 0];
+                    if (isset($artifactStats[$type][$s])) {
+                        $artifactStats[$type][$s]++;
+                    }
                 }
             }
         }
 
-        return $info === [] ? null : implode(', ', $info);
+        $this->line("\n   Models:");
+        $this->line("      ✅ {$modelStats['success']} created/updated   ⏭️  {$modelStats['skipped']} skipped");
+
+        foreach ($artifactStats as $type => $stats) {
+            $parts = [];
+            if (($stats['success'] ?? 0) > 0) {
+                $parts[] = "✅ {$stats['success']}";
+            }
+            if (($stats['merged'] ?? 0) > 0) {
+                $parts[] = "🔀 {$stats['merged']} merged";
+            }
+            if (($stats['updated'] ?? 0) > 0) {
+                $parts[] = "🔄 {$stats['updated']} updated";
+            }
+            if (($stats['skipped'] ?? 0) > 0) {
+                $parts[] = "⏭️  {$stats['skipped']} skipped";
+            }
+            if (($stats['failed'] ?? 0) > 0) {
+                $parts[] = "❌ {$stats['failed']} failed";
+            }
+            $this->line("   {$type}: ".implode('  ', $parts));
+        }
+
+        // Finalization results (OpenAPI root spec, Swagger UI)
+        if (! empty($finalResults)) {
+            $this->newLine();
+            $this->info('   Post-generation:');
+            foreach ($finalResults as $r) {
+                $icon = match ($r['status'] ?? '') {
+                    'success' => '✅',
+                    'dry-run' => '🔸',
+                    'failed' => '❌',
+                    default => '•',
+                };
+                $name = $r['name'] ?? $r['type'] ?? '?';
+                $path = isset($r['path']) ? " → {$r['path']}" : '';
+                $url = isset($r['url']) ? " 🌐 {$r['url']}" : '';
+                $this->line("      {$icon} {$name}{$path}{$url}");
+            }
+        }
+
+        // API scaffold summary
+        if ($options->api) {
+            $versionSlug = $options->getApiVersionSlug();
+            $versionString = $options->getApiVersionString();
+            $this->newLine();
+            $this->info("🚀 Versioned API ({$versionString}) scaffold complete.");
+            $this->line("   Route file : routes/api/{$versionSlug}.php");
+            $this->line('   All requests and exceptions locked to JSON via ForceJsonApiServiceProvider.');
+        }
+
+        // Web scaffold summary
+        if ($options->web) {
+            $routeFile = config('anvil.web.route_file', 'routes/web.php');
+            $this->newLine();
+            $this->info('🌐 Web scaffold complete.');
+            $this->line("   Controllers : App\\Http\\Controllers\\Web\\");
+            $this->line("   Routes      : {$routeFile} (Route::resource within the configured middleware group)");
+            $this->line('   Views       : resources/views/{resource}/ (index, create, edit, show, _form)');
+        }
+
+        // Pivot tables
+        if ($options->withInverse) {
+            $pivots = $this->relationshipDetector->getPivotTables();
+            if (! empty($pivots)) {
+                $this->newLine();
+                $this->info('🔄 Pivot tables:');
+                foreach ($pivots as $p) {
+                    $this->line("   {$p['pivot_table']}: {$p['model1']} ↔ {$p['model2']}");
+                }
+            }
+        }
+
+        $this->newLine();
+        $this->info('✅ Done!');
+
+        if ($options->dryRun) {
+            $this->warn('🔸 Dry run — no files written.');
+        }
     }
 
-    /**
-     * Build primary key property
-     */
-    protected function buildPrimaryKeyProperty(): string
+    protected function validateForeignKeys(): void
     {
-        // Handle composite primary keys
-        if (count($this->compositePrimaryKey) > 1) {
-            $indent = '    ';
-            $innerIndent = '        ';
-
-            $stub = "\n{$indent}/**\n";
-            $stub .= $indent." * The primary key for the model.\n";
-            $stub .= $indent." *\n";
-            $stub .= $indent." * @var array<int, string>\n";
-            $stub .= $indent." */\n";
-            $stub .= $indent."protected \$primaryKey = [\n";
-
-            foreach ($this->compositePrimaryKey as $column) {
-                $stub .= "{$innerIndent}'{$column}',\n";
+        $issues = $this->relationshipDetector->validateForeignKeys();
+        if (! empty($issues)) {
+            $this->warn('⚠️  FK issues: '.count($issues));
+            foreach ($issues as $i) {
+                $this->line("   - {$i['table']}.{$i['column']}: {$i['issue']}");
             }
-
-            $stub .= $indent."];\n\n";
-            $stub .= $indent."/**\n";
-            $stub .= $indent." * Indicates if the IDs are auto-incrementing.\n";
-            $stub .= $indent." *\n";
-            $stub .= $indent." * @var bool\n";
-            $stub .= $indent." */\n";
-
-            return $stub.($indent.'public $incrementing = false;');
+        } else {
+            $this->info('✅ All FK references valid.');
         }
-
-        return StubGenerator::primaryKeyStub($this->primaryKey);
     }
 
-    /**
-     * Build fillable property
-     */
-    protected function buildFillable(): string
+    protected function validateConstraintIntegrity(array $tables): void
     {
-        $fillable = [];
-
-        foreach ($this->columns as $column) {
-            $columnName = $column['name'];
-            // Skip primary key, timestamps, and auto-increment columns
-            if (in_array($columnName, $this->compositePrimaryKey)) {
-                continue;
+        $issues = $this->constraintAnalyzer->validateConstraintIntegrity($tables);
+        if (! empty($issues)) {
+            $this->warn('⚠️  Constraint issues: '.count($issues));
+            foreach ($issues as $i) {
+                $this->line("   - [{$i['type']}] {$i['message']}");
             }
-            if ($columnName === $this->primaryKey) {
-                continue;
-            }
-            if (Helpers::isTimestampColumn($columnName)) {
-                continue;
-            }
-            if (str_contains((string) $column['extra'], 'auto_increment')) {
-                continue;
-            }
-
-            $fillable[] = $columnName;
+        } else {
+            $this->info('✅ Constraint integrity OK.');
         }
-
-        return StubGenerator::fillableStub($fillable);
     }
 
-    /**
-     * Build hidden property
-     */
-    protected function buildHidden(): string
+    protected function analyzeConstraints(array $tables): void
     {
-        $hidden = [];
-
-        foreach ($this->columns as $column) {
-            $columnName = $column['name'];
-
-            // Hide password and remember_token columns
-            if (in_array($columnName, ['password', 'remember_token'])) {
-                $hidden[] = $columnName;
-            }
-        }
-
-        return StubGenerator::hiddenStub($hidden);
+        $s = $this->constraintAnalyzer->getConstraintSummary($tables);
+        $this->info("🔍 Constraints:\n  Tables: {$s['total_tables']}  PKs: {$s['tables_with_pk']}  FKs: {$s['total_foreign_keys']}  Indexes: {$s['total_indexes']}\n");
     }
 
-    /**
-     * Build casts property
-     */
-    protected function buildCasts(): string
+    protected function displayRecommendations(array $tables): void
     {
-        $casts = [];
+        $this->info("💡 Recommendations:\n");
+        $any = false;
 
-        foreach ($this->columns as $column) {
-            $columnName = $column['name'];
-            $castType = Helpers::getCastType($column['type']);
-
-            if ($castType && ! Helpers::isTimestampColumn($columnName)) {
-                $casts[$columnName] = $castType;
+        foreach ($tables as $table) {
+            $analysis = $this->constraintAnalyzer->analyzeTable($table);
+            if (! empty($analysis['recommendations'])) {
+                $any = true;
+                $this->line("Table: <comment>{$table}</comment>");
+                foreach ($analysis['recommendations'] as $rec) {
+                    $icon = match ($rec['type']) {
+                        'warning' => '⚠️ ',
+                        'performance' => '⚡',
+                        'optimization' => '🔧',
+                        default => 'ℹ️ ',
+                    };
+                    $this->line("  {$icon} {$rec['message']}");
+                    $this->line("     → {$rec['suggestion']}");
+                }
+                $this->newLine();
             }
         }
 
-        // Add email_verified_at if exists
-        $columnNames = array_column($this->columns, 'name');
-        if (in_array('email_verified_at', $columnNames)) {
-            $casts['email_verified_at'] = 'datetime';
+        if (! $any) {
+            $this->info('✅ No recommendations — schema looks great!');
         }
-
-        return StubGenerator::castsStub($casts);
     }
 
-    /**
-     * Build dates property (for older Laravel versions)
-     */
-    protected function buildDates(): string
+    protected function displayValidationErrors($validator): void
     {
-        return '';
+        $this->error("\n❌ Config validation failed:\n");
+        foreach ($validator->getFormattedErrors() as $e) {
+            $this->line("  - {$e}");
+        }
+        $this->newLine();
+        $this->error('Fix issues in config/laravel-anvil.php and retry.');
     }
 
-    /**
-     * Build constraint comments section
-     */
-    protected function buildConstraintComments(): string
+    protected function displayValidationWarnings($validator): void
     {
-        if (! $this->constraintAnalysis) {
-            return '';
+        $this->warn('⚠️  Warnings:');
+        foreach ($validator->getFormattedWarnings() as $w) {
+            $this->line("  - {$w}");
         }
-
-        $comments = [];
-        $indent = '    ';
-
-        // Primary Key info
-        if (! empty($this->constraintAnalysis['primary_key']['columns'])) {
-            $pkType = $this->constraintAnalysis['primary_key']['type'];
-            $pkCols = implode(', ', $this->constraintAnalysis['primary_key']['columns']);
-            $comments[] = sprintf('Primary Key: %s (%s)', $pkCols, $pkType);
-        }
-
-        // Foreign Keys
-        if (! empty($this->constraintAnalysis['foreign_keys'])) {
-            $comments[] = 'Foreign Keys:';
-            foreach ($this->constraintAnalysis['foreign_keys'] as $fk) {
-                $ref = $fk['references'];
-                $comments[] = sprintf('  - %s -> %s.%s', $fk['column'], $ref['table'], $ref['column']);
-            }
-        }
-
-        // Unique Constraints
-        if (! empty($this->constraintAnalysis['unique_constraints'])) {
-            $comments[] = 'Unique Constraints:';
-            foreach ($this->constraintAnalysis['unique_constraints'] as $constraint) {
-                $cols = implode(', ', $constraint['columns']);
-                $comments[] = sprintf('  - %s: (%s)', $constraint['name'], $cols);
-            }
-        }
-
-        // Indexes
-        $nonUniqueIndexes = array_filter($this->constraintAnalysis['indexes'], fn (array $idx): bool => ! $idx['is_unique'] && ! $idx['is_primary']);
-        if ($nonUniqueIndexes !== []) {
-            $comments[] = 'Indexes:';
-            foreach ($nonUniqueIndexes as $index) {
-                $cols = implode(', ', $index['columns']);
-                $comments[] = sprintf('  - %s: (%s)', $index['name'], $cols);
-            }
-        }
-
-        if ($comments === []) {
-            return '';
-        }
-
-        $stub = "\n{$indent}/*\n";
-        $stub .= $indent." * Database Constraints\n";
-        $stub .= $indent.' * '.str_repeat('-', 50)."\n";
-        foreach ($comments as $comment) {
-            $stub .= sprintf('%s * %s%s', $indent, $comment, PHP_EOL);
-        }
-
-        return $stub.($indent." */\n");
-    }
-
-    /**
-     * Build relationship methods
-     */
-    protected function buildRelationships(): string
-    {
-        $relationships = [];
-
-        // Build belongsTo relationships from foreign keys
-        foreach ($this->foreignKeys as $fk) {
-            $methodName = Helpers::foreignKeyToRelationName($fk['column']);
-            $fullRelatedModel = $this->relatedModelFqn($fk);
-
-            $relationships[] = StubGenerator::relationshipStub(
-                'belongsTo',
-                $methodName,
-                $fullRelatedModel,
-                $fk['column'],
-                $fk['referenced_column'],
-                $this->withPhpDoc
-            );
-        }
-
-        // Build hasMany/hasOne inverse relationships
-        if ($this->withInverse) {
-            foreach ($this->inverseRelationships as $inverse) {
-                $fullRelatedModel = $this->namespace.'\\'.$inverse['model'];
-
-                $relationships[] = StubGenerator::relationshipStub(
-                    'hasMany',
-                    $inverse['method'],
-                    $fullRelatedModel,
-                    $inverse['foreign_key'],
-                    null,
-                    $this->withPhpDoc
-                );
-            }
-        }
-
-        if ($relationships === []) {
-            return '';
-        }
-
-        return "\n".implode("\n\n", $relationships)."\n";
-    }
-
-    /**
-     * Get model name
-     */
-    public function getModelName(): string
-    {
-        return Helpers::tableToModelName($this->tableName);
+        $this->newLine();
     }
 }
