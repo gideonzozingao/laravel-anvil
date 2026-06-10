@@ -420,7 +420,7 @@ trait RunsGenerationPipeline
             $routeFile = config('anvil.web.route_file', 'routes/web.php');
             $this->newLine();
             $this->info('🌐 Web scaffold complete.');
-            $this->line("   Controllers : App\\Http\\Controllers\\Web\\");
+            $this->line('   Controllers : App\\Http\\Controllers\\Web\\');
             $this->line("   Routes      : {$routeFile} (Route::resource within the configured middleware group)");
             $this->line('   Views       : resources/views/{resource}/ (index, create, edit, show, _form)');
         }

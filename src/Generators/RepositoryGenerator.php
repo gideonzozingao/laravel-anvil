@@ -304,10 +304,10 @@ PHP;
         }
 
         return [
-            'type'         => $this->getName().'Provider',
-            'name'         => 'RepositoryServiceProvider',
-            'path'         => $path,
-            'status'       => $created ? 'success' : 'updated',
+            'type' => $this->getName().'Provider',
+            'name' => 'RepositoryServiceProvider',
+            'path' => $path,
+            'status' => $created ? 'success' : 'updated',
             'registration' => $registration,
         ];
     }

@@ -23,25 +23,25 @@ class DocsCommand extends Command
     public function handle(): int
     {
         $enabled = (bool) config('anvil.openapi.docs.enabled', false);
-        $route   = trim((string) config('anvil.openapi.docs.route', 'docs'), '/');
-        $format  = config('anvil.openapi.format', 'yaml') === 'json' ? 'json' : 'yaml';
+        $route = trim((string) config('anvil.openapi.docs.route', 'docs'), '/');
+        $format = config('anvil.openapi.format', 'yaml') === 'json' ? 'json' : 'yaml';
 
-        $appUrl  = rtrim((string) config('app.url', 'http://localhost'), '/');
+        $appUrl = rtrim((string) config('app.url', 'http://localhost'), '/');
         $docsUrl = "{$appUrl}/{$route}";
         $specUrl = "{$docsUrl}/openapi.{$format}";
 
-        $specPath   = base_path((string) config('anvil.openapi.output_path', 'openapi'));
-        $rootFile   = "{$specPath}/openapi.{$format}";
+        $specPath = base_path((string) config('anvil.openapi.output_path', 'openapi'));
+        $rootFile = "{$specPath}/openapi.{$format}";
         $specExists = is_file($rootFile);
 
         if ($this->option('json')) {
             $this->line((string) json_encode([
-                'enabled'     => $enabled,
-                'docs_url'    => $docsUrl,
-                'spec_url'    => $specUrl,
-                'spec_path'   => $rootFile,
+                'enabled' => $enabled,
+                'docs_url' => $docsUrl,
+                'spec_url' => $specUrl,
+                'spec_path' => $rootFile,
                 'spec_exists' => $specExists,
-                'format'      => $format,
+                'format' => $format,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
             return self::SUCCESS;

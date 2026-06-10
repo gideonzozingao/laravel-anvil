@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Zuqongtech\LaravelAnvil\Console\DocsCommand;
 use Zuqongtech\LaravelAnvil\Console\GenerateModelsFromDatabase;
+use Zuqongtech\LaravelAnvil\Console\GenerateWebCommand;
 use Zuqongtech\LaravelAnvil\Generators\ApiControllerGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ApiRouteGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ControllerGenerator;
@@ -14,6 +15,7 @@ use Zuqongtech\LaravelAnvil\Generators\FactoryGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ForceJsonServiceProviderGenerator;
 use Zuqongtech\LaravelAnvil\Generators\FormRequestGenerator;
 use Zuqongtech\LaravelAnvil\Generators\GateGenerator;
+use Zuqongtech\LaravelAnvil\Generators\LivewireComponentGenerator;
 use Zuqongtech\LaravelAnvil\Generators\MigrationGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ObserverGenerator;
 use Zuqongtech\LaravelAnvil\Generators\OpenApi\OpenApiPathGenerator;
@@ -30,8 +32,7 @@ use Zuqongtech\LaravelAnvil\Generators\WebControllerGenerator;
 use Zuqongtech\LaravelAnvil\Generators\WebRouteGenerator;
 use Zuqongtech\LaravelAnvil\Http\DocsController;
 use Zuqongtech\LaravelAnvil\Support\GenerationOrchestrator;
-use Zuqongtech\LaravelAnvil\Console\GenerateWebCommand;
-use Zuqongtech\LaravelAnvil\Generators\LivewireComponentGenerator;
+
 class LaravelAnvilServiceProvider extends ServiceProvider
 {
     #[\Override]
@@ -82,7 +83,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
             WebControllerGenerator::class,
             WebRouteGenerator::class,
             ViewGenerator::class,
-            LivewireComponentGenerator::class, 
+            LivewireComponentGenerator::class,
         ];
 
         // Bind generators. The OpenAPI Root generator depends on the Schema and

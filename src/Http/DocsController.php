@@ -39,7 +39,7 @@ class DocsController
      */
     public function ui(Request $request): Response
     {
-        $ext     = $this->extension();
+        $ext = $this->extension();
         $specUrl = url($this->prefix().'/openapi.'.$ext);
 
         return new Response(
@@ -57,7 +57,7 @@ class DocsController
     public function spec(Request $request, ?string $file = null): Response
     {
         $base = $this->specBasePath();
-        $ext  = $this->extension();
+        $ext = $this->extension();
 
         if (! is_dir($base)) {
             return $this->missingSpecResponse();
@@ -67,13 +67,13 @@ class DocsController
         $file = $file ?: $rootName;
 
         $candidate = realpath($base.DIRECTORY_SEPARATOR.$file);
-        $baseReal  = realpath($base);
+        $baseReal = realpath($base);
 
         if ($candidate === false || $baseReal === false || ! str_starts_with($candidate, $baseReal)) {
             return new Response("Spec file not found: {$file}", 404, ['Content-Type' => 'text/plain']);
         }
 
-        $isJson      = str_ends_with($candidate, '.json');
+        $isJson = str_ends_with($candidate, '.json');
         $contentType = $isJson ? 'application/json' : 'application/yaml';
 
         $body = ($file === $rootName)
@@ -85,9 +85,9 @@ class DocsController
         }
 
         return new Response($body, 200, [
-            'Content-Type'                => $contentType,
+            'Content-Type' => $contentType,
             'Access-Control-Allow-Origin' => '*',
-            'Cache-Control'               => 'no-cache',
+            'Cache-Control' => 'no-cache',
         ]);
     }
 

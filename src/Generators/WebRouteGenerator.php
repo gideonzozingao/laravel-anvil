@@ -35,7 +35,7 @@ final class WebRouteGenerator implements Generator
 
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
-        $slug          = Helpers::modelToRouteName($meta->model);
+        $slug = Helpers::modelToRouteName($meta->model);
         $controllerFqn = "\\App\\Http\\Controllers\\Web\\{$meta->model}Controller";
 
         if ($options->dryRun) {

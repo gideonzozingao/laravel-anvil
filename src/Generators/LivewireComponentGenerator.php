@@ -29,7 +29,7 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  * rules are derived from column metadata.
  *
  * Blade is produced from nowdoc templates with %TOKEN% placeholders so PHP never
- * interpolates Livewire's wire: directives or Blade's {{ }} / $variables.
+ * interpolates Livewire's wire: directives or Blade's {{}} / $variables.
  */
 final class LivewireComponentGenerator implements Generator
 {
@@ -47,30 +47,35 @@ final class LivewireComponentGenerator implements Generator
 
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
-        $model       = $meta->model;
-        $studlyPl    = Str::pluralStudly($model);                 // VehicleCategories
-        $slug        = Helpers::modelToRouteName($model);         // vehicle-categories
-        $var         = lcfirst($model);                           // vehicleCategory
-        $pluralVar   = lcfirst($studlyPl);                        // vehicleCategories
-        $title       = Str::headline($model);
-        $titlePl     = Str::headline($studlyPl);
-        $service     = $model.'Service';
+        $model = $meta->model;
+        $studlyPl = Str::pluralStudly($model);                 // VehicleCategories
+        $slug = Helpers::modelToRouteName($model);         // vehicle-categories
+        $var = lcfirst($model);                           // vehicleCategory
+        $pluralVar = lcfirst($studlyPl);                        // vehicleCategories
+        $title = Str::headline($model);
+        $titlePl = Str::headline($studlyPl);
+        $service = $model.'Service';
         $lwNamespace = trim($options->getLivewireNamespace(), '\\').'\\'.$studlyPl;
-        $serviceFqn  = 'App\\Services\\'.$service;
+        $serviceFqn = 'App\\Services\\'.$service;
 
-        $pk        = $this->resolvePk($meta);
-        $formCols  = $this->formColumns($meta);
+        $pk = $this->resolvePk($meta);
+        $formCols = $this->formColumns($meta);
         $tableCols = $this->tableColumns($meta, $pk);
-        $showCols  = $this->showColumns($meta);
+        $showCols = $this->showColumns($meta);
 
-        $ctx = compact('model', 'slug', 'var', 'pluralVar', 'title', 'titlePl', 'service', 'lwNamespace', 'serviceFqn', 'pk');
+        $modelFqn = trim($options->getNamespace(), '\\').'\\'.$model;
+        $searchable = $this->searchableColumns($meta);
+        $sortable = $tableCols;                              // every visible column is sortable
+        $defaultSort = $this->defaultSortColumn($meta, $pk, $tableCols);
+
+        $ctx = compact('model', 'slug', 'var', 'pluralVar', 'title', 'titlePl', 'service', 'lwNamespace', 'serviceFqn', 'pk', 'modelFqn', 'defaultSort');
 
         $classDir = app_path('Livewire/'.$studlyPl);
-        $viewDir  = resource_path('views/livewire/'.$slug);
+        $viewDir = resource_path('views/livewire/'.$slug);
 
         $files = [
-            [$classDir.'/Index.php',                 $this->indexComponent($ctx)],
-            [$viewDir.'/index.blade.php',            $this->indexView($ctx, $tableCols)],
+            [$classDir.'/Index.php',                 $this->indexComponent($ctx, $searchable, $sortable)],
+            [$viewDir.'/index.blade.php',            $this->indexView($ctx, $tableCols, $searchable)],
             [$classDir.'/Form.php',                  $this->formComponent($ctx, $meta, $formCols)],
             [$viewDir.'/form.blade.php',             $this->formView($ctx, $formCols)],
             [$classDir.'/Show.php',                  $this->showComponent($ctx)],
@@ -83,6 +88,7 @@ final class LivewireComponentGenerator implements Generator
 
             if (file_exists($path) && ! $options->force) {
                 $results[] = $this->result($name, $path, 'skipped', 'already exists');
+
                 continue;
             }
 
@@ -104,15 +110,21 @@ final class LivewireComponentGenerator implements Generator
     // Index component
     // -----------------------------------------------------------------------
 
-    protected function indexComponent(array $c): string
+    protected function indexComponent(array $c, array $searchable, array $sortable): string
     {
+        $searchArr = $this->phpStringList($searchable);
+        $sortArr = $this->phpStringList($sortable);
+
         return <<<PHP
 <?php
 
 namespace {$c['lwNamespace']};
 
+use {$c['modelFqn']};
 use {$c['serviceFqn']};
 use Illuminate\\Contracts\\View\\View;
+use Illuminate\\Database\\Eloquent\\Builder;
+use Livewire\\Attributes\\Url;
 use Livewire\\Component;
 use Livewire\\WithPagination;
 
@@ -120,11 +132,59 @@ class Index extends Component
 {
     use WithPagination;
 
+    #[Url(history: true, keep: true)]
+    public string \$search = '';
+
+    #[Url]
+    public string \$sortField = '{$c['defaultSort']}';
+
+    #[Url]
+    public string \$sortDirection = 'desc';
+
+    #[Url]
     public int \$perPage = 15;
+
+    /** Columns scanned by the global search box (text columns). */
+    protected array \$searchable = {$searchArr};
+
+    /** Columns the user is allowed to sort by (whitelist — prevents SQL injection via the URL). */
+    protected array \$sortable = {$sortArr};
 
     protected function service(): {$c['service']}
     {
         return app({$c['service']}::class);
+    }
+
+    public function updatingSearch(): void
+    {
+        \$this->resetPage();
+    }
+
+    public function updatingPerPage(): void
+    {
+        \$this->resetPage();
+    }
+
+    public function clearSearch(): void
+    {
+        \$this->search = '';
+        \$this->resetPage();
+    }
+
+    public function sortBy(string \$field): void
+    {
+        if (! in_array(\$field, \$this->sortable, true)) {
+            return;
+        }
+
+        if (\$this->sortField === \$field) {
+            \$this->sortDirection = \$this->sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            \$this->sortField = \$field;
+            \$this->sortDirection = 'asc';
+        }
+
+        \$this->resetPage();
     }
 
     public function delete(int|string \$id): void
@@ -136,10 +196,36 @@ class Index extends Component
         \$this->resetPage();
     }
 
+    /**
+     * Build the listing query: global search across text columns + whitelisted sort.
+     * Reads go straight to the model; writes (delete) still flow through the service.
+     */
+    protected function rows(): Builder
+    {
+        \$driver = {$c['model']}::query()->getConnection()->getDriverName();
+        \$like   = \$driver === 'pgsql' ? 'ilike' : 'like';
+
+        return {$c['model']}::query()
+            ->when(\$this->search !== '' && \$this->searchable !== [], function (Builder \$query) use (\$like) {
+                \$term = '%'.addcslashes(trim(\$this->search), '%_\\\\').'%';
+
+                \$query->where(function (Builder \$sub) use (\$like, \$term) {
+                    foreach (\$this->searchable as \$column) {
+                        \$sub->orWhere(\$column, \$like, \$term);
+                    }
+                });
+            })
+            ->when(
+                in_array(\$this->sortField, \$this->sortable, true),
+                fn (Builder \$query) => \$query->orderBy(\$this->sortField, \$this->sortDirection === 'asc' ? 'asc' : 'desc'),
+            );
+    }
+
     public function render(): View
     {
         return view('livewire.{$c['slug']}.index', [
-            '{$c['pluralVar']}' => \$this->service()->paginate(\$this->perPage),
+            '{$c['pluralVar']}' => \$this->rows()->paginate(\$this->perPage),
+            'searchable'        => \$this->searchable,
         ]);
     }
 }
@@ -147,61 +233,161 @@ class Index extends Component
 PHP;
     }
 
-    protected function indexView(array $c, array $tableCols): string
+    protected function indexView(array $c, array $tableCols, array $searchable): string
     {
+        // Sortable column headers — first two columns always visible, the rest
+        // collapse on small screens to keep the table readable on mobile.
         $head = '';
-        $row  = '';
-        foreach ($tableCols as $col) {
+        $row = '';
+        foreach (array_values($tableCols) as $i => $col) {
             $label = $this->label($col);
-            $head .= "                    <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">{$label}</th>\n";
-            $row  .= "                        <td class=\"px-4 py-3 text-sm text-gray-700\">{{ \$%VAR%->{$col} }}</td>\n";
+            $hide = $i >= 2 ? ' hidden lg:table-cell' : '';
+            $arrow = "@if (\$sortField === '{$col}')<span class=\"ml-1 text-brand-600\">{!! \$sortDirection === 'asc' ? '&uarr;' : '&darr;' !!}</span>@endif";
+
+            $head .= <<<HEAD
+                        <th class="table-th{$hide}">
+                            <button type="button" wire:click="sortBy('{$col}')" class="group inline-flex items-center gap-1 hover:text-gray-700">
+                                {$label}
+                                {$arrow}
+                            </button>
+                        </th>
+
+HEAD;
+            $row .= "                            <td class=\"table-td{$hide}\">{{ \\Illuminate\\Support\\Str::limit((string) \$%VAR%->{$col}, 60) }}</td>\n";
         }
+
+        $colspan = count($tableCols) + 1;
+        $hasSearch = $searchable !== [];
+
+        $searchBox = $hasSearch ? <<<'SEARCH'
+            <div class="relative w-full sm:w-72">
+                <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
+                </span>
+                <input type="search" wire:model.live.debounce.300ms="search"
+                       placeholder="Search %TITLE_PLURAL%…"
+                       class="form-input pl-9 pr-9">
+@if($search !== '')
+                    <button type="button" wire:click="clearSearch"
+                            class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600" aria-label="Clear search">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+@endif
+            </div>
+SEARCH : '';
 
         $tpl = <<<'BLADE'
 <div>
-    <div class="flex items-center justify-between mb-6">
-        <h2 class="text-2xl font-bold">%TITLE_PLURAL%</h2>
-        <a href="{{ route('%SLUG%.create') }}" class="btn-primary">+ New %TITLE%</a>
-    </div>
+@section('title', '%TITLE_PLURAL%')
 
-    @if (session('success'))
-        <div class="mb-4 rounded-md bg-green-50 border border-green-200 px-4 py-3 text-green-800">
-            {{ session('success') }}
+    {{-- Header --}}
+    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-900">%TITLE_PLURAL%</h2>
+            <p class="mt-0.5 text-sm text-gray-500">{{ $%PLURAL_VAR%->total() }} {{ \Illuminate\Support\Str::plural('record', $%PLURAL_VAR%->total()) }}</p>
         </div>
-    @endif
-
-    <div class="overflow-x-auto bg-white rounded-lg shadow">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-                <tr>
-%TABLE_HEAD%                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-                @forelse ($%PLURAL_VAR% as $%VAR%)
-                    <tr wire:key="%SLUG%-{{ $%VAR%->getKey() }}" class="hover:bg-gray-50">
-%TABLE_ROW%                        <td class="px-4 py-3 text-right whitespace-nowrap">
-                            <a href="{{ route('%SLUG%.show', $%VAR%) }}" class="link">View</a>
-                            <a href="{{ route('%SLUG%.edit', $%VAR%) }}" class="link">Edit</a>
-                            <button type="button" class="link-danger"
-                                    wire:click="delete('{{ $%VAR%->getKey() }}')"
-                                    wire:confirm="Delete this %TITLE%?">Delete</button>
-                        </td>
-                    </tr>
-                @empty
-                    <tr><td colspan="99" class="px-4 py-6 text-center text-gray-400">No %TITLE_PLURAL% found.</td></tr>
-                @endforelse
-            </tbody>
-        </table>
+        <a href="{{ route('%SLUG%.create') }}" class="btn-primary self-start sm:self-auto">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            New %TITLE%
+        </a>
     </div>
 
-    <div class="mt-4">
-        {{ $%PLURAL_VAR%->links() }}
+    {{-- Toolbar --}}
+    <div class="card mb-4">
+        <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+%SEARCH_BOX%
+            <div class="flex items-center gap-2 text-sm text-gray-500">
+                <span>Per page</span>
+                <select wire:model.live="perPage" class="form-select w-auto py-1.5">
+                    <option value="10">10</option>
+                    <option value="15">15</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+        </div>
+
+        {{-- Table --}}
+        <div class="relative overflow-x-auto border-t border-gray-200">
+            {{-- Loading veil --}}
+            <div wire:loading.delay.flex wire:target="search,sortBy,perPage,nextPage,previousPage,gotoPage"
+                 class="absolute inset-0 z-10 hidden items-center justify-center bg-white/60 backdrop-blur-sm">
+                <svg class="h-6 w-6 animate-spin text-brand-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+            </div>
+
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+%TABLE_HEAD%                        <th class="table-th text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+@forelse($%PLURAL_VAR% as $%VAR%)
+                        <tr wire:key="%SLUG%-{{ $%VAR%->getKey() }}" class="odd:bg-white even:bg-gray-50/50 hover:bg-brand-50/40">
+%TABLE_ROW%                            <td class="table-td text-right whitespace-nowrap">
+                                <div class="flex items-center justify-end gap-1">
+                                    <a href="{{ route('%SLUG%.show', $%VAR%) }}" class="icon-btn" title="View">
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                    </a>
+                                    <a href="{{ route('%SLUG%.edit', $%VAR%) }}" class="icon-btn" title="Edit">
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                    </a>
+                                    <button type="button" class="icon-btn icon-btn-danger" title="Delete"
+                                            wire:click="delete('{{ $%VAR%->getKey() }}')"
+                                            wire:confirm="Delete this %TITLE%? This cannot be undone.">
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+@empty
+                        <tr>
+                            <td colspan="%COLSPAN%" class="px-4 py-16 text-center">
+                                <div class="mx-auto flex max-w-sm flex-col items-center">
+                                    <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
+                                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+                                    </div>
+                                    <p class="font-medium text-gray-700">No %TITLE_PLURAL% found</p>
+                                    <p class="mt-1 text-sm text-gray-500">
+@if($search !== '')
+                                            No results for &ldquo;{{ $search }}&rdquo;. <button type="button" wire:click="clearSearch" class="link">Clear search</button>
+@else
+                                            Get started by creating a new %TITLE%.
+@endif
+                                    </p>
+                                </div>
+                            </td>
+                        </tr>
+@endforelse
+                </tbody>
+            </table>
+        </div>
+
+        {{-- Footer: summary + pagination --}}
+@if($%PLURAL_VAR%->hasPages() || $%PLURAL_VAR%->total() > 0)
+            <div class="flex flex-col gap-3 border-t border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm text-gray-500">
+                    Showing <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->firstItem() ?? 0 }}</span>
+                    to <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->lastItem() ?? 0 }}</span>
+                    of <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->total() }}</span>
+                </p>
+                <div>{{ $%PLURAL_VAR%->onEachSide(1)->links() }}</div>
+            </div>
+@endif
     </div>
 </div>
 BLADE;
 
-        return $this->apply($tpl, ['%TABLE_HEAD%' => $head, '%TABLE_ROW%' => $row] + $this->tokens($c));
+        return $this->apply(
+            $tpl,
+            [
+                '%TABLE_HEAD%' => $head,
+                '%TABLE_ROW%' => $row,
+                '%SEARCH_BOX%' => $searchBox,
+                '%COLSPAN%' => (string) $colspan,
+            ] + $this->tokens($c),
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -304,14 +490,29 @@ PHP;
 
         $tpl = <<<'BLADE'
 <div>
-    <form wire:submit="save" class="bg-white rounded-lg shadow p-6">
+@section('title', ($editing ? 'Edit ' : 'New ') . '%TITLE%')
+
+    <div class="mb-6">
+        <a href="{{ route('%SLUG%.index') }}" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700" wire:navigate>
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+            Back to %TITLE_PLURAL%
+        </a>
+        <h2 class="mt-2 text-2xl font-bold text-gray-900">{{ $editing ? 'Edit %TITLE%' : 'New %TITLE%' }}</h2>
+    </div>
+
+    <form wire:submit="save" class="card mx-auto max-w-2xl p-6">
+        <div class="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
 %FORM_FIELDS%
-        <div class="flex items-center gap-3 mt-6">
-            <button type="submit" class="btn-primary">
-                <span wire:loading.remove wire:target="save">{{ $editing ? 'Save changes' : 'Create' }}</span>
-                <span wire:loading wire:target="save">Saving…</span>
-            </button>
+        </div>
+        <div class="mt-6 flex items-center justify-end gap-3 border-t border-gray-200 pt-5">
             <a href="{{ route('%SLUG%.index') }}" class="btn-secondary" wire:navigate>Cancel</a>
+            <button type="submit" class="btn-primary" wire:loading.attr="disabled" wire:target="save">
+                <span wire:loading.remove wire:target="save">{{ $editing ? 'Save changes' : 'Create %TITLE%' }}</span>
+                <span wire:loading.flex wire:target="save" class="items-center gap-2">
+                    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+                    Saving…
+                </span>
+            </button>
         </div>
     </form>
 </div>
@@ -365,24 +566,34 @@ PHP;
         $rows = '';
         foreach ($showCols as $col) {
             $label = $this->label($col);
-            $rows .= "        <div class=\"py-3 border-b border-gray-100\">\n"
-                ."            <dt class=\"text-sm font-medium text-gray-500\">{$label}</dt>\n"
-                ."            <dd class=\"text-gray-900\">{{ \$%VAR%->{$col} }}</dd>\n"
-                ."        </div>\n";
+            $rows .= "            <div class=\"px-6 py-4\">\n"
+                ."                <dt class=\"text-xs font-medium uppercase tracking-wider text-gray-500\">{$label}</dt>\n"
+                ."                <dd class=\"mt-1 text-sm text-gray-900 break-words\">{{ \$%VAR%->{$col} ?? '—' }}</dd>\n"
+                ."            </div>\n";
         }
 
         $tpl = <<<'BLADE'
 <div>
-    <div class="flex items-center justify-between mb-6">
-        <h2 class="text-2xl font-bold">%TITLE%</h2>
+@section('title', '%TITLE%')
+
+    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-            <a href="{{ route('%SLUG%.edit', $%VAR%) }}" class="btn-primary" wire:navigate>Edit</a>
-            <a href="{{ route('%SLUG%.index') }}" class="btn-secondary" wire:navigate>Back</a>
+            <a href="{{ route('%SLUG%.index') }}" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700" wire:navigate>
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                Back to %TITLE_PLURAL%
+            </a>
+            <h2 class="mt-2 text-2xl font-bold text-gray-900">%TITLE% details</h2>
         </div>
+        <a href="{{ route('%SLUG%.edit', $%VAR%) }}" class="btn-primary self-start sm:self-auto" wire:navigate>
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+            Edit
+        </a>
     </div>
 
-    <dl class="bg-white rounded-lg shadow p-6">
-%SHOW_ROWS%    </dl>
+    <div class="card overflow-hidden">
+        <dl class="grid grid-cols-1 divide-y divide-gray-100 sm:grid-cols-2 sm:divide-y-0 sm:[&>div]:border-b sm:[&>div]:border-gray-100">
+%SHOW_ROWS%        </dl>
+    </div>
 </div>
 BLADE;
 
@@ -395,31 +606,37 @@ BLADE;
 
     protected function formField(array $col): string
     {
-        $name  = $col['name'];
+        $name = $col['name'];
         $label = $this->label($name);
-        $type  = $this->inputType($col);
+        $type = $this->inputType($col);
+        $full = '';
 
         if ($type === 'textarea') {
-            $control = "<textarea wire:model=\"{$name}\" rows=\"4\" class=\"form-input\"></textarea>";
+            $control = "<textarea wire:model=\"{$name}\" rows=\"4\" class=\"form-textarea\"></textarea>";
+            $full = ' sm:col-span-2';
         } elseif ($type === 'checkbox') {
-            $control = "<input type=\"checkbox\" wire:model=\"{$name}\" class=\"rounded border-gray-300\">";
+            return "            <div class=\"mb-4 flex items-center gap-2 sm:col-span-2\">\n"
+                ."                <input type=\"checkbox\" wire:model=\"{$name}\" id=\"{$name}\" class=\"h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500\">\n"
+                ."                <label for=\"{$name}\" class=\"text-sm font-medium text-gray-700\">{$label}</label>\n"
+                ."                @error('{$name}') <p class=\"text-sm text-red-600\">{{ \$message }}</p> @enderror\n"
+                ."            </div>\n";
         } elseif ($type === 'select') {
             $options = '';
             foreach ($this->enumValues($col) as $opt) {
-                $options .= "\n                <option value=\"{$opt}\">{$opt}</option>";
+                $options .= "\n                    <option value=\"{$opt}\">{$opt}</option>";
             }
-            $control = "<select wire:model=\"{$name}\" class=\"form-input\">\n"
-                ."                <option value=\"\">&mdash; Select &mdash;</option>{$options}\n            </select>";
+            $control = "<select wire:model=\"{$name}\" class=\"form-select\">\n"
+                ."                    <option value=\"\">&mdash; Select &mdash;</option>{$options}\n                </select>";
         } else {
             $step = $type === 'number' && $this->isDecimal($col) ? ' step="any"' : '';
             $control = "<input type=\"{$type}\" wire:model=\"{$name}\"{$step} class=\"form-input\">";
         }
 
-        return "        <div class=\"mb-4\">\n"
-            ."            <label class=\"block text-sm font-medium text-gray-700 mb-1\">{$label}</label>\n"
-            ."            {$control}\n"
-            ."            @error('{$name}') <p class=\"text-sm text-red-600 mt-1\">{{ \$message }}</p> @enderror\n"
-            ."        </div>\n";
+        return "            <div class=\"mb-4{$full}\">\n"
+            ."                <label class=\"form-label\">{$label}</label>\n"
+            ."                {$control}\n"
+            ."                @error('{$name}') <p class=\"mt-1 text-sm text-red-600\">{{ \$message }}</p> @enderror\n"
+            ."            </div>\n";
     }
 
     // -----------------------------------------------------------------------
@@ -432,7 +649,7 @@ BLADE;
         $rules[] = ($col['nullable'] ?? false) ? "'nullable'" : "'required'";
 
         $type = $this->inputType($col);
-        $raw  = strtolower(preg_replace('/\(.*\)/', '', $col['type'] ?? 'varchar'));
+        $raw = strtolower(preg_replace('/\(.*\)/', '', $col['type'] ?? 'varchar'));
 
         if ($type === 'checkbox') {
             $rules = ["'boolean'"];
@@ -465,8 +682,8 @@ BLADE;
 
         return match ($type) {
             'checkbox' => 'bool',
-            'number'   => $this->isDecimal($col) ? "{$nullable}float" : "{$nullable}int",
-            default    => "{$nullable}string",
+            'number' => $this->isDecimal($col) ? "{$nullable}float" : "{$nullable}int",
+            default => "{$nullable}string",
         };
     }
 
@@ -483,7 +700,7 @@ BLADE;
 
         return match ($type) {
             'number' => 'null',
-            default  => "''",
+            default => "''",
         };
     }
 
@@ -534,6 +751,69 @@ BLADE;
         return $names;
     }
 
+    /**
+     * Text-ish columns the global search box scans. Excludes sensitive fields,
+     * timestamps, and the primary key (searching a PK as text is rarely useful).
+     *
+     * @return list<string>
+     */
+    protected function searchableColumns(ModelMetadata $meta): array
+    {
+        $skip = ['created_at', 'updated_at', 'deleted_at', $meta->primaryKey];
+        $names = [];
+
+        foreach ($meta->columns as $c) {
+            $name = $c['name'];
+            if (in_array($name, $skip, true) || in_array($name, self::SENSITIVE, true)) {
+                continue;
+            }
+
+            $raw = strtolower(preg_replace('/\(.*\)/', '', $c['type'] ?? ''));
+            $isText = in_array($raw, [
+                'char', 'character', 'varchar', 'character varying', 'string',
+                'text', 'tinytext', 'mediumtext', 'longtext', 'citext', 'clob',
+                'nchar', 'nvarchar',
+            ], true);
+
+            if ($isText) {
+                $names[] = $name;
+            }
+        }
+
+        return $names;
+    }
+
+    /**
+     * Default sort column: created_at if present, otherwise the primary key,
+     * otherwise the first visible table column.
+     */
+    protected function defaultSortColumn(ModelMetadata $meta, ?string $pk, array $tableCols): string
+    {
+        $columns = array_column($meta->columns, 'name');
+
+        if (in_array('created_at', $columns, true)) {
+            return 'created_at';
+        }
+
+        if ($pk !== null) {
+            return $pk;
+        }
+
+        return $tableCols[0] ?? ($columns[0] ?? 'id');
+    }
+
+    /**
+     * Render a list of strings as a PHP array literal: ['a', 'b', 'c'].
+     */
+    protected function phpStringList(array $items): string
+    {
+        if ($items === []) {
+            return '[]';
+        }
+
+        return '['.implode(', ', array_map(fn ($i) => "'".addslashes($i)."'", $items)).']';
+    }
+
     protected function showColumns(ModelMetadata $meta): array
     {
         return array_values(array_filter(
@@ -559,7 +839,7 @@ BLADE;
     protected function inputType(array $col): string
     {
         $name = strtolower($col['name']);
-        $raw  = strtolower($col['type'] ?? 'varchar');
+        $raw = strtolower($col['type'] ?? 'varchar');
         $type = preg_replace('/\(.*\)/', '', $raw);
 
         if (str_starts_with($raw, 'enum')) {
@@ -623,11 +903,11 @@ BLADE;
     protected function tokens(array $c): array
     {
         return [
-            '%TITLE%'        => $c['title'],
+            '%TITLE%' => $c['title'],
             '%TITLE_PLURAL%' => $c['titlePl'],
-            '%SLUG%'         => $c['slug'],
-            '%VAR%'          => $c['var'],
-            '%PLURAL_VAR%'   => $c['pluralVar'],
+            '%SLUG%' => $c['slug'],
+            '%VAR%' => $c['var'],
+            '%PLURAL_VAR%' => $c['pluralVar'],
         ];
     }
 

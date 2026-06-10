@@ -38,7 +38,7 @@ final class WebControllerGenerator implements Generator
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
         $controllerName = $meta->model.'Controller';
-        $dir  = app_path('Http/Controllers/Web');
+        $dir = app_path('Http/Controllers/Web');
         $path = "{$dir}/{$controllerName}.php";
 
         if (file_exists($path) && ! $options->force) {
@@ -74,14 +74,14 @@ final class WebControllerGenerator implements Generator
             return $this->buildLivewire($meta, $options);
         }
 
-        $model     = $meta->model;
-        $service   = $model.'Service';
-        $storeReq  = 'Store'.$model.'Request';
+        $model = $meta->model;
+        $service = $model.'Service';
+        $storeReq = 'Store'.$model.'Request';
         $updateReq = 'Update'.$model.'Request';
-        $var       = lcfirst($model);
+        $var = lcfirst($model);
         $pluralVar = lcfirst(Str::pluralStudly($model));
-        $slug      = Helpers::modelToRouteName($model);
-        $title     = Str::headline($model);
+        $slug = Helpers::modelToRouteName($model);
+        $title = Str::headline($model);
         $namespace = trim($options->getNamespace(), '\\');
         $fullModel = $namespace.'\\'.$model;
 
@@ -224,7 +224,7 @@ PHP;
     protected function buildLivewire(ModelMetadata $meta, GenerationOptions $options): string
     {
         $model = $meta->model;
-        $slug  = Helpers::modelToRouteName($model);
+        $slug = Helpers::modelToRouteName($model);
 
         return <<<PHP
 <?php
