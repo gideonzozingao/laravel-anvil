@@ -1,0 +1,14 @@
+## Security
+
+- Anvil is a **development tool**: install with `--dev` and don't ship it.
+- Generated code is plain Laravel that you own — review it as your own code.
+- `openapi.docs.enabled` defaults to true **only in local**. Anywhere else, add
+  `auth` (or signed/IP middleware) to `docs.middleware` before enabling it: the
+  docs describe every endpoint you have.
+- The spec route resolves file paths against a containment check and rejects
+  `..`, absolute paths and non-spec extensions.
+- Generated form requests validate `sort` against real column names, so the sort
+  parameter never reaches a query builder unchecked.
+- Recommended companions for auditing output: `composer audit`,
+  `roave/security-advisories`, Larastan/PHPStan, and a SAST pass (Psalm taint
+  analysis, Semgrep, or progpilot).
