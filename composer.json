@@ -3,7 +3,6 @@
     "name": "zuqongtech/laravel-anvil",
     "description": "Full Laravel project scaffolding via live database introspection — models, controllers, form requests, services, repositories, gates, API routes, factories, seeders, migrations, events, observers, policies, and feature tests generated from your connected database.",
     "type": "library",
-    "version":"1.0.8",
     "keywords": [
         "laravel",
         "laravel-anvil",
