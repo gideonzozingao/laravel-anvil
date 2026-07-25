@@ -77,7 +77,7 @@ class ConstraintAnalyzer
     {
         $foreignKeys = $metadata['foreign_keys'];
 
-        return array_map(fn (array $fk) => [
+        return array_map(fn (array $fk): array => [
             'column' => $fk['column'],
             'references' => [
                 'table' => $fk['referenced_table'],

@@ -249,7 +249,7 @@ PHP;
     {
         if (preg_match("/enum\('(.+?)'\)/i", $raw, $m)) {
             $values = array_map(
-                fn ($v) => "'".trim($v)."'",
+                fn ($v): string => "'".trim((string) $v)."'",
                 explode("','", $m[1])
             );
 
@@ -281,7 +281,7 @@ PHP;
                 continue;
             }
 
-            $cols = array_map(fn ($c) => "'{$c['name']}'", $index['columns']);
+            $cols = array_map(fn ($c): string => "'{$c['name']}'", $index['columns']);
             $colStr = count($cols) === 1 ? $cols[0] : '['.implode(', ', $cols).']';
 
             if ($index['unique']) {

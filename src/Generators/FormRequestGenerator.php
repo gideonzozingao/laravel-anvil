@@ -224,12 +224,12 @@ PHP;
             }
 
             // email heuristic
-            if (str_contains(strtolower($name), 'email')) {
+            if (str_contains(strtolower((string) $name), 'email')) {
                 $colRules[] = 'email:rfc,dns';
             }
 
             // url heuristic
-            if (str_contains(strtolower($name), 'url') || str_contains(strtolower($name), 'website')) {
+            if (str_contains(strtolower((string) $name), 'url') || str_contains(strtolower((string) $name), 'website')) {
                 $colRules[] = 'url';
             }
 
@@ -241,7 +241,7 @@ PHP;
 
     protected function inferTypeRule(string $dbType): ?string
     {
-        $type = strtolower(preg_replace('/\(.*\)/', '', $dbType));
+        $type = strtolower((string) preg_replace('/\(.*\)/', '', $dbType));
 
         return match (true) {
             in_array($type, ['int', 'integer', 'tinyint', 'smallint', 'mediumint', 'bigint', 'serial']) => 'integer',
@@ -260,7 +260,7 @@ PHP;
     {
         // Extract values from e.g. "enum('active','inactive','pending')"
         if (preg_match("/enum\('(.+?)'\)/i", $dbType, $m)) {
-            $values = array_map('trim', explode("','", $m[1]));
+            $values = array_map(trim(...), explode("','", $m[1]));
 
             return 'in:'.implode(',', $values);
         }

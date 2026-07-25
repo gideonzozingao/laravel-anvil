@@ -1,8 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Zuqongtech\LaravelAnvil\Support;
 
 use Illuminate\Console\Command;
+use RuntimeException;
 
 /**
  * Immutable DTO carrying all generation options through the pipeline.
@@ -19,9 +22,20 @@ use Illuminate\Console\Command;
  *   $openApi           — master switch, enables all OpenAPI generators
  *   $openApiFormat     — 'yaml' (default) | 'json'
  *   $openApiSingleFile — merge everything into one openapi.yaml
- *   $openApiUi         — publish Swagger UI to public/docs/
+ *   $openApiUi         — publish a static Swagger UI
+ *
+ * A NOTE ON CONFIG READS
+ *
+ * Every config lookup here goes through cfg(), not config(). Laravel's
+ * config($key, $default) only returns $default when the key is ABSENT — a key
+ * present with a null value returns null, and the default is never consulted.
+ * config/anvil.php is full of such keys:
+ *
+ *     'connection' => env('DB_INTROSPECTION_CONNECTION', null),
+ *
+ * which made getConnection(): string return null and throw a TypeError.
  */
-final class GenerationOptions
+final class GenerationOptions implements \Stringable
 {
     public function __construct(
         // ── Original artifact flags ──────────────────────────────────────────
@@ -75,6 +89,13 @@ final class GenerationOptions
         public array $tables = [],
         public array $ignore = [],
         public array $schemas = [],
+
+        // ── Appended fields ──────────────────────────────────────────────────
+        // Added at the end so any positional construction keeps working.
+        public bool $listeners = false,
+        public string $listenerStyle = 'per-event',
+        public bool $queuedListeners = false,
+        public bool $skipModels = false,
     ) {}
 
     // -----------------------------------------------------------------------
@@ -83,76 +104,80 @@ final class GenerationOptions
 
     public static function fromCommand(Command $command): self
     {
-        $all = (bool) ($command->option('all') ?? false);
+        $all = (bool) self::opt($command, 'all');
 
         // Resolve api-version — accept "v1", "V1", or bare "1"
-        $rawVersion = $command->option('api-version') ?? '1';
-        $apiVersion = (int) ltrim(strtolower((string) $rawVersion), 'v');
-        if ($apiVersion < 1) {
-            $apiVersion = 1;
-        }
+        $rawVersion = self::opt($command, 'api-version', '1');
+        $apiVersion = max(1, (int) ltrim(strtolower((string) $rawVersion), 'v'));
 
-        $api = (bool) ($command->option('api') ?? false);
-        $web = $command->hasOption('web') ? (bool) $command->option('web') : false;
+        // hasOption() guards throughout: these flags are being removed from
+        // anvil:generate, and an undeclared option makes option() throw.
+        $api = (bool) self::opt($command, 'api');
+        $web = (bool) self::opt($command, 'web');
 
-        // --openapi-format default: yaml
-        $format = $command->option('openapi-format') ?? 'yaml';
+        $format = (string) self::opt($command, 'openapi-format', 'yaml');
+
         if (! in_array($format, ['yaml', 'json'], true)) {
             $format = 'yaml';
         }
 
+        $listeners = (bool) self::opt($command, 'listeners') || $all;
+        $skipModels = (bool) self::opt($command, 'skip-models');
+
         return new self(
-            // Original
-            models: true,
-            controllers: ! $api && ($all || (bool) ($command->option('controllers') ?? false)),
-            resources: $all || (bool) ($command->option('resources') ?? false),
-            observers: $all || (bool) ($command->option('observers') ?? false),
-            policies: $all || (bool) ($command->option('policies') ?? false),
+            models: ! $skipModels,
+            controllers: ! $api && ($all || (bool) self::opt($command, 'controllers')),
+            resources: $all || (bool) self::opt($command, 'resources'),
+            observers: $all || (bool) self::opt($command, 'observers'),
+            policies: $all || (bool) self::opt($command, 'policies'),
 
-            // Scaffolding — the web scaffold reuses the same FormRequests and
-            // Services as the API scaffold, so --web implies both.
-            formRequests: $all || $api || $web || (bool) ($command->option('form-requests') ?? false),
-            services: $all || $api || $web || (bool) ($command->option('services') ?? false),
-            repositories: $all || (bool) ($command->option('repositories') ?? false),
-            gates: $all || (bool) ($command->option('gates') ?? false),
-            apiRoutes: $all || $api || (bool) ($command->option('api-routes') ?? false),
-            factories: $all || (bool) ($command->option('factories') ?? false),
-            seeders: $all || (bool) ($command->option('seeders') ?? false),
-            migrations: $all || (bool) ($command->option('migrations') ?? false),
-            events: $all || (bool) ($command->option('events') ?? false),
-            tests: $all || $api || (bool) ($command->option('tests') ?? false),
+            // The web scaffold reuses the same FormRequests and Services as the
+            // API scaffold, so --web implies both.
+            formRequests: $all || $api || $web || (bool) self::opt($command, 'form-requests'),
+            services: $all || $api || $web || (bool) self::opt($command, 'services'),
+            repositories: $all || (bool) self::opt($command, 'repositories'),
+            gates: $all || (bool) self::opt($command, 'gates'),
+            apiRoutes: $all || $api || (bool) self::opt($command, 'api-routes'),
+            factories: $all || (bool) self::opt($command, 'factories'),
+            seeders: $all || (bool) self::opt($command, 'seeders'),
+            migrations: $all || (bool) self::opt($command, 'migrations'),
+            // A listener without its event class breaks Laravel's listener
+            // discovery, so --listeners implies --events.
+            events: $all || $listeners || (bool) self::opt($command, 'events'),
+            tests: $all || $api || (bool) self::opt($command, 'tests'),
 
-            // Versioned API
             api: $api,
             apiVersion: $apiVersion,
 
-            // Web
             web: $web,
+            stack: (string) (self::opt($command, 'stack') ?: 'blade'),
 
-            // OpenAPI
-            openApi: $all || (bool) ($command->option('openapi') ?? false),
+            openApi: $all || (bool) self::opt($command, 'openapi'),
             openApiFormat: $format,
-            openApiSingleFile: (bool) ($command->option('openapi-single-file') ?? false),
-            openApiUi: (bool) ($command->option('openapi-ui') ?? false),
+            openApiSingleFile: (bool) self::opt($command, 'openapi-single-file'),
+            openApiUi: (bool) self::opt($command, 'openapi-ui'),
 
-            // Behaviour
-            force: (bool) ($command->option('force') ?? false),
-            dryRun: (bool) ($command->option('dry-run') ?? false),
-            backup: (bool) ($command->option('backup') ?? false),
-            withPhpDoc: (bool) ($command->option('with-phpdoc') ?? true),
-            withInverse: (bool) ($command->option('with-inverse') ?? true),
-            withConstraints: (bool) ($command->option('with-constraints') ?? false),
-            validateFk: (bool) ($command->option('validate-fk') ?? false),
-            analyzeConstraints: (bool) ($command->option('analyze-constraints') ?? false),
-            showRecommendations: (bool) ($command->option('show-recommendations') ?? false),
+            force: (bool) self::opt($command, 'force'),
+            dryRun: (bool) self::opt($command, 'dry-run'),
+            backup: (bool) self::opt($command, 'backup'),
+            withPhpDoc: (bool) self::opt($command, 'with-phpdoc', true),
+            withInverse: (bool) self::opt($command, 'with-inverse', true),
+            withConstraints: (bool) self::opt($command, 'with-constraints'),
+            validateFk: (bool) self::opt($command, 'validate-fk'),
+            analyzeConstraints: (bool) self::opt($command, 'analyze-constraints'),
+            showRecommendations: (bool) self::opt($command, 'show-recommendations'),
 
-            // Routing
-            namespace: $command->option('namespace'),
-            path: $command->option('path'),
-            connection: $command->option('connection'),
-            tables: $command->option('tables') ?? [],
-            ignore: $command->option('ignore') ?? [],
-            schemas: self::normalizeSchemas($command->hasOption('schema') ? $command->option('schema') : []),
+            namespace: self::stringOrNull(self::opt($command, 'namespace')),
+            path: self::stringOrNull(self::opt($command, 'path')),
+            connection: self::stringOrNull(self::opt($command, 'connection')),
+            tables: (array) (self::opt($command, 'tables') ?? []),
+            ignore: (array) (self::opt($command, 'ignore') ?? []),
+            schemas: self::normalizeSchemas(self::opt($command, 'schema')),
+
+            listeners: $listeners,
+            listenerStyle: (string) (self::opt($command, 'listener-style') ?: 'per-event'),
+            queuedListeners: (bool) self::opt($command, 'queued-listeners'),
+            skipModels: $skipModels,
         );
     }
 
@@ -160,16 +185,16 @@ final class GenerationOptions
     {
         return new self(
             models: true,
-            force: config('laravel-anvil.force_overwrite', false),
-            dryRun: config('laravel-anvil.dry_run', false),
-            backup: config('laravel-anvil.backup_existing', false),
-            withPhpDoc: config('laravel-anvil.with_phpdoc', true),
-            withInverse: config('laravel-anvil.with_inverse', true),
-            validateFk: config('laravel-anvil.relationships.validate_foreign_keys', false),
-            namespace: config('laravel-anvil.namespace', 'App\\Models'),
-            path: config('laravel-anvil.target_path', 'app'),
-            connection: config('laravel-anvil.connection'),
-            ignore: config('laravel-anvil.ignore_tables', []),
+            force: (bool) self::cfg('force_overwrite', false),
+            dryRun: (bool) self::cfg('dry_run', false),
+            backup: (bool) self::cfg('backup_existing', false),
+            withPhpDoc: (bool) self::cfg('with_phpdoc', true),
+            withInverse: (bool) self::cfg('with_inverse', true),
+            validateFk: (bool) self::cfg('relationships.validate_foreign_keys', false),
+            namespace: (string) self::cfg('namespace', 'App\\Models'),
+            path: (string) self::cfg('target_path', 'app'),
+            connection: self::stringOrNull(self::cfg('connection')),
+            ignore: (array) self::cfg('ignore_tables', []),
         );
     }
 
@@ -192,7 +217,7 @@ final class GenerationOptions
             events: $options['events'] ?? false,
             tests: $options['tests'] ?? false,
             api: $options['api'] ?? false,
-            apiVersion: (int) ($options['api_version'] ?? 1),
+            apiVersion: max(1, (int) ($options['api_version'] ?? 1)),
             web: $options['web'] ?? false,
             stack: $options['stack'] ?? 'blade',
             openApi: $options['open_api'] ?? false,
@@ -208,12 +233,16 @@ final class GenerationOptions
             validateFk: $options['validate_fk'] ?? false,
             analyzeConstraints: $options['analyze_constraints'] ?? false,
             showRecommendations: $options['show_recommendations'] ?? false,
-            namespace: $options['namespace'] ?? null,
-            path: $options['path'] ?? null,
-            connection: $options['connection'] ?? null,
+            namespace: self::stringOrNull($options['namespace'] ?? null),
+            path: self::stringOrNull($options['path'] ?? null),
+            connection: self::stringOrNull($options['connection'] ?? null),
             tables: $options['tables'] ?? [],
             ignore: $options['ignore'] ?? [],
             schemas: self::normalizeSchemas($options['schemas'] ?? []),
+            listeners: $options['listeners'] ?? false,
+            listenerStyle: $options['listener_style'] ?? 'per-event',
+            queuedListeners: $options['queued_listeners'] ?? false,
+            skipModels: $options['skip_models'] ?? false,
         );
     }
 
@@ -223,19 +252,37 @@ final class GenerationOptions
 
     public function getNamespace(): string
     {
-        return $this->namespace ?? config('laravel-anvil.namespace', 'App\\Models');
+        return $this->namespace ?: (string) self::cfg('namespace', 'App\\Models');
     }
 
     public function getPath(): string
     {
-        return $this->path ?? config('laravel-anvil.target_path', 'app');
+        return $this->path ?: (string) self::cfg('target_path', 'app');
     }
 
+    /**
+     * The connection to introspect.
+     *
+     * Resolution order: explicit flag, anvil config, Laravel's default. Each step
+     * treats null and '' as "not set", which config($key, $default) does not:
+     * 'connection' => env(..., null) is a key that EXISTS with a null value, so
+     * the default was never applied and this method returned null against a
+     * `: string` signature.
+     */
     public function getConnection(): string
     {
-        return $this->connection
-            ?? config('laravel-anvil.connection')
-            ?? config('database.default');
+        $connection = $this->connection
+            ?: self::cfg('connection')
+            ?: config('database.default');
+
+        if (! is_string($connection) || $connection === '') {
+            throw new RuntimeException(
+                'No database connection could be resolved. Set database.default in config/database.php, '
+                    .'anvil.connection in config/anvil.php, or pass --connection=name.'
+            );
+        }
+
+        return $connection;
     }
 
     /**
@@ -260,7 +307,9 @@ final class GenerationOptions
      */
     public function getApiControllerNamespace(): string
     {
-        return 'App\\Http\\Controllers\\Api\\'.$this->getApiVersionString();
+        $base = trim((string) self::cfg('api.defaults.namespaces.controllers', 'App\\Http\\Controllers\\Api'), '\\');
+
+        return $base.'\\'.$this->getApiVersionString();
     }
 
     /**
@@ -268,7 +317,7 @@ final class GenerationOptions
      */
     public function getWebControllerNamespace(): string
     {
-        return config('anvil.web.controller_namespace', 'App\\Http\\Controllers\\Web');
+        return (string) self::cfg('web.controller_namespace', 'App\\Http\\Controllers\\Web');
     }
 
     /**
@@ -284,12 +333,12 @@ final class GenerationOptions
      */
     public function getLivewireNamespace(): string
     {
-        return config('anvil.web.livewire.namespace', 'App\\Livewire');
+        return (string) self::cfg('web.livewire.namespace', 'App\\Livewire');
     }
 
     public function hasSpecificTables(): bool
     {
-        return ! empty($this->tables);
+        return $this->tables !== [];
     }
 
     /**
@@ -306,7 +355,7 @@ final class GenerationOptions
     /** True when the user explicitly asked for one or more schemas (or 'all'). */
     public function hasSchemaSelection(): bool
     {
-        return ! empty($this->schemas);
+        return $this->schemas !== [];
     }
 
     /** True when generation should span more than one schema (or all of them). */
@@ -334,22 +383,27 @@ final class GenerationOptions
         }
 
         return array_values(array_filter(
-            array_map(fn ($s) => trim((string) $s), $value),
-            fn ($s) => $s !== '',
+            array_map(static fn ($s): string => trim((string) $s), $value),
+            static fn (string $s): bool => $s !== '',
         ));
     }
 
     public function hasIgnoredTables(): bool
     {
-        return ! empty($this->ignore);
+        return $this->ignore !== [];
     }
 
+    /**
+     * @return list<string>
+     */
     public function getAllIgnoredTables(): array
     {
-        return array_merge(
-            config('laravel-anvil.ignore_tables', []),
+        // (array) cast: ignore_tables set to null in a published config would
+        // otherwise make array_merge() throw.
+        return array_values(array_unique(array_merge(
+            (array) self::cfg('ignore_tables', []),
             $this->ignore,
-        );
+        )));
     }
 
     public function hasAnyArtifacts(): bool
@@ -358,14 +412,17 @@ final class GenerationOptions
             || $this->observers || $this->policies || $this->formRequests
             || $this->services || $this->repositories || $this->gates
             || $this->apiRoutes || $this->factories || $this->seeders
-            || $this->migrations || $this->events || $this->tests
-            || $this->api || $this->web || $this->openApi;
+            || $this->migrations || $this->events || $this->listeners
+            || $this->tests || $this->api || $this->web || $this->openApi;
     }
 
+    /**
+     * @return list<string>
+     */
     public function getEnabledGenerators(): array
     {
         $map = [
-            'Models' => $this->models,
+            'Models' => $this->models && ! $this->skipModels,
             'Controllers' => $this->controllers && ! $this->api,
             'ApiScaffold' => $this->api,
             'WebScaffold' => $this->web,
@@ -381,6 +438,7 @@ final class GenerationOptions
             'Seeders' => $this->seeders,
             'Migrations' => $this->migrations,
             'Events' => $this->events,
+            'Listeners' => $this->listeners,
             'Tests' => $this->tests,
             'OpenAPI' => $this->openApi,
         ];
@@ -388,6 +446,9 @@ final class GenerationOptions
         return array_keys(array_filter($map));
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function toArray(): array
     {
         return [
@@ -429,6 +490,10 @@ final class GenerationOptions
             'tables' => $this->tables,
             'ignore' => $this->ignore,
             'schemas' => $this->schemas,
+            'listeners' => $this->listeners,
+            'listener_style' => $this->listenerStyle,
+            'queued_listeners' => $this->queuedListeners,
+            'skip_models' => $this->skipModels,
         ];
     }
 
@@ -437,7 +502,7 @@ final class GenerationOptions
         $parts = [];
         $gens = $this->getEnabledGenerators();
 
-        if (! empty($gens)) {
+        if ($gens !== []) {
             $parts[] = 'Generators: '.implode(', ', $gens);
         }
         if ($this->api) {
@@ -450,6 +515,9 @@ final class GenerationOptions
             $parts[] = 'OpenAPI format: '.strtoupper($this->openApiFormat);
             $parts[] = $this->openApiSingleFile ? 'Single-file spec' : 'Split-file spec';
         }
+        if ($this->listeners) {
+            $parts[] = 'Listeners: '.$this->listenerStyle.($this->queuedListeners ? ' (queued)' : '');
+        }
         if ($this->force) {
             $parts[] = 'Force overwrite';
         }
@@ -459,7 +527,7 @@ final class GenerationOptions
         if ($this->backup) {
             $parts[] = 'Backup enabled';
         }
-        if (! empty($this->tables)) {
+        if ($this->tables !== []) {
             $parts[] = 'Tables: '.implode(', ', $this->tables);
         }
 
@@ -468,6 +536,57 @@ final class GenerationOptions
 
     public function __toString(): string
     {
-        return json_encode($this->toArray(), JSON_PRETTY_PRINT);
+        return (string) json_encode($this->toArray(), JSON_PRETTY_PRINT);
+    }
+
+    // -----------------------------------------------------------------------
+    // Internals
+    // -----------------------------------------------------------------------
+
+    /**
+     * Read an option that may not be declared on the calling command.
+     *
+     * Commands are being split apart, so a given flag exists on some of them and
+     * not others; option() on an undeclared name throws InvalidArgumentException.
+     */
+    private static function opt(Command $command, string $name, mixed $default = null): mixed
+    {
+        if (! $command->hasOption($name)) {
+            return $default;
+        }
+
+        $value = $command->option($name);
+
+        return $value === null ? $default : $value;
+    }
+
+    /**
+     * Config read that treats null and '' as "not set", unlike config(), whose
+     * default only applies when the key is entirely absent.
+     *
+     * Both historical roots are consulted: the provider merges the same file
+     * under anvil.* and laravel-anvil.*, and different parts of the package have
+     * historically read one or the other.
+     */
+    private static function cfg(string $key, mixed $default = null): mixed
+    {
+        foreach (["anvil.{$key}", "laravel-anvil.{$key}"] as $candidate) {
+            $value = config($candidate);
+
+            if ($value !== null && $value !== '') {
+                return $value;
+            }
+        }
+
+        return $default;
+    }
+
+    private static function stringOrNull(mixed $value): ?string
+    {
+        if ($value === null || $value === '' || $value === []) {
+            return null;
+        }
+
+        return is_scalar($value) ? (string) $value : null;
     }
 }

@@ -90,7 +90,7 @@ final class TestGenerator implements Generator
 
         // Required columns for create payload
         $fillable = collect($meta->columns)
-            ->reject(fn ($c) => in_array($c['name'], [
+            ->reject(fn ($c): bool => in_array($c['name'], [
                 $meta->primaryKey, 'created_at', 'updated_at', 'deleted_at', 'remember_token',
             ]))
             ->reject(fn ($c) => $c['nullable'])
@@ -99,7 +99,7 @@ final class TestGenerator implements Generator
             ->toArray();
 
         $payloadLines = array_map(
-            fn ($col) => "            '{$col}' => fake()->sentence(),",
+            fn ($col): string => "            '{$col}' => fake()->sentence(),",
             $fillable
         );
         $payloadStr = implode("\n", $payloadLines);

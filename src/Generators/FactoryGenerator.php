@@ -232,12 +232,12 @@ PHP;
 
     protected function typeDefinition(string $dbType): string
     {
-        $type = strtolower(preg_replace('/\(.*\)/', '', $dbType));
+        $type = strtolower((string) preg_replace('/\(.*\)/', '', $dbType));
 
         if (str_starts_with($type, 'enum')) {
             if (preg_match("/enum\('(.+?)'\)/i", $dbType, $m)) {
                 $values = array_map(
-                    fn ($v) => "'".trim($v)."'",
+                    fn ($v): string => "'".trim((string) $v)."'",
                     explode("','", $m[1])
                 );
 

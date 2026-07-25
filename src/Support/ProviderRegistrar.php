@@ -17,9 +17,9 @@ namespace Zuqongtech\LaravelAnvil\Support;
  * Every operation is idempotent: a provider already present is never added
  * twice, and a second run reports "skipped" rather than corrupting the file.
  */
-final class ProviderRegistrar
+final readonly class ProviderRegistrar
 {
-    public function __construct(private readonly bool $dryRun = false) {}
+    public function __construct(private bool $dryRun = false) {}
 
     /**
      * Register a fully-qualified provider class into the application bootstrap.

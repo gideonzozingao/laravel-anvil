@@ -717,7 +717,7 @@ BLADE;
 
         return array_values(array_filter(
             $meta->columns,
-            fn ($c) => ! in_array($c['name'], $skip, true) && ! in_array($c['name'], self::SENSITIVE, true),
+            fn ($c): bool => ! in_array($c['name'], $skip, true) && ! in_array($c['name'], self::SENSITIVE, true),
         ));
     }
 
@@ -811,14 +811,14 @@ BLADE;
             return '[]';
         }
 
-        return '['.implode(', ', array_map(fn ($i) => "'".addslashes($i)."'", $items)).']';
+        return '['.implode(', ', array_map(fn ($i): string => "'".addslashes((string) $i)."'", $items)).']';
     }
 
     protected function showColumns(ModelMetadata $meta): array
     {
         return array_values(array_filter(
             array_column($meta->columns, 'name'),
-            fn ($n) => ! in_array($n, self::SENSITIVE, true),
+            fn ($n): bool => ! in_array($n, self::SENSITIVE, true),
         ));
     }
 
@@ -838,7 +838,7 @@ BLADE;
 
     protected function inputType(array $col): string
     {
-        $name = strtolower($col['name']);
+        $name = strtolower((string) $col['name']);
         $raw = strtolower($col['type'] ?? 'varchar');
         $type = preg_replace('/\(.*\)/', '', $raw);
 
@@ -884,7 +884,7 @@ BLADE;
     protected function enumValues(array $col): array
     {
         if (preg_match("/enum\\('(.+?)'\\)/i", $col['type'] ?? '', $m)) {
-            return array_map('trim', explode("','", $m[1]));
+            return array_map(trim(...), explode("','", $m[1]));
         }
 
         return [];

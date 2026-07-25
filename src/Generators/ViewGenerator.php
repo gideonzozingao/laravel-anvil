@@ -294,7 +294,7 @@ BLADE;
 
     protected function navTemplate(): string
     {
-        $namespace = addslashes(config('anvil.web.controller_namespace', 'App\\Http\\Controllers\\Web'));
+        $namespace = addslashes((string) config('anvil.web.controller_namespace', 'App\\Http\\Controllers\\Web'));
 
         $tpl = <<<'BLADE'
 @php
@@ -683,7 +683,7 @@ BLADE;
 
         return array_values(array_filter(
             array_map(fn ($c) => $c, $meta->columns),
-            fn ($c) => ! in_array($c['name'], $skip, true),
+            fn ($c): bool => ! in_array($c['name'], $skip, true),
         ));
     }
 
@@ -756,7 +756,7 @@ BLADE;
 
         return array_values(array_filter(
             array_column($meta->columns, 'name'),
-            fn ($n) => ! in_array($n, $sensitive, true),
+            fn ($n): bool => ! in_array($n, $sensitive, true),
         ));
     }
 
@@ -766,7 +766,7 @@ BLADE;
 
     protected function inputType(array $col): string
     {
-        $name = strtolower($col['name']);
+        $name = strtolower((string) $col['name']);
         $raw = strtolower($col['type'] ?? 'varchar');
         $type = preg_replace('/\(.*\)/', '', $raw);
 
@@ -815,7 +815,7 @@ BLADE;
     protected function enumValues(array $col): array
     {
         if (preg_match("/enum\('(.+?)'\)/i", $col['type'] ?? '', $m)) {
-            return array_map('trim', explode("','", $m[1]));
+            return array_map(trim(...), explode("','", $m[1]));
         }
 
         return [];

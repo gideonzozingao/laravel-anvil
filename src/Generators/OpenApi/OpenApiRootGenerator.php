@@ -1,12 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Zuqongtech\LaravelAnvil\Generators\OpenApi;
 
 use Illuminate\Support\Str;
 use Symfony\Component\Yaml\Yaml;
 use Zuqongtech\LaravelAnvil\Contracts\Generator;
+use Zuqongtech\LaravelAnvil\Generators\OpenApi\Concerns\ResolvesSpecOptions;
 use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
+use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
 use Zuqongtech\LaravelAnvil\Support\OpenApiTypeMapper;
 use Zuqongtech\LaravelAnvil\Support\OpenApiYamlSerializer;
 
@@ -19,9 +23,14 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiYamlSerializer;
  *
  * Split-file mode references external files via JSON-Pointer fragments that
  * target the real inner key of each file; single-file mode inlines everything.
+ *
+ * Everything is written under the version directory resolved by OpenApiLocator,
+ * so v1 and v2 specs coexist and are served independently.
  */
 final class OpenApiRootGenerator implements Generator
 {
+    use ResolvesSpecOptions;
+
     /** @var array<string, array<string, mixed>> Accumulated schemas (single-file mode) */
     private array $mergedSchemas = [];
 
@@ -44,7 +53,7 @@ final class OpenApiRootGenerator implements Generator
     #[\Override]
     public function supports(GenerationOptions $options): bool
     {
-        return $options->openApi ?? false;
+        return $this->specEnabled($options);
     }
 
     #[\Override]
@@ -56,13 +65,13 @@ final class OpenApiRootGenerator implements Generator
     #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
-        $splitFiles = config('anvil.openapi.split_files', true);
+        $splitFiles = $this->splitFiles();
         $results = [];
 
         $this->collectedTags[] = Str::headline(Str::plural($meta->model));
 
         $schemaResults = $this->schemaGenerator->generate($meta, $options);
-        foreach ((array) $schemaResults as $result) {
+        foreach ($schemaResults as $result) {
             if (! $splitFiles && isset($result['schema_key'])) {
                 $this->mergedSchemas[$result['schema_key']] = $result['schema_def'];
             }
@@ -70,7 +79,7 @@ final class OpenApiRootGenerator implements Generator
         }
 
         $pathResults = $this->pathGenerator->generate($meta, $options);
-        foreach ((array) $pathResults as $result) {
+        foreach ($pathResults as $result) {
             if (! $splitFiles && isset($result['path_key'])) {
                 $this->mergedPaths[$result['path_key']] = $result['path_def'];
             }
@@ -86,40 +95,40 @@ final class OpenApiRootGenerator implements Generator
 
     public function finalize(GenerationOptions $options): array
     {
-        if (! ($options->openApi ?? false)) {
+        if (! $this->specEnabled($options)) {
             return [];
         }
 
-        $format = config('anvil.openapi.format', 'yaml');
-        $ext = $format === 'json' ? 'json' : 'yaml';
-        $splitFiles = config('anvil.openapi.split_files', true);
-        $outputPath = base_path(config('anvil.openapi.output_path', 'openapi'));
-        $rootFile = "{$outputPath}/openapi.{$ext}";
+        $format = OpenApiLocator::format();
+        $splitFiles = $this->splitFiles();
+        $version = OpenApiLocator::configuredVersion();
+        $outputPath = OpenApiLocator::specDir($version);
+        $rootFile = OpenApiLocator::specFile($version, $format);
 
-        if ($options->dryRun) {
+        if ($this->isDryRun($options)) {
             return [[
                 'type' => $this->getName(),
-                'name' => "openapi.{$ext}",
+                'name' => "{$version}/openapi.{$format}",
                 'path' => $rootFile,
                 'status' => 'dry-run',
             ]];
         }
 
         $spec = $splitFiles
-            ? $this->buildSplitRootSpec($outputPath, $ext)
-            : $this->buildMergedSpec();
+            ? $this->buildSplitRootSpec($outputPath, $format, $version)
+            : $this->buildMergedSpec($version);
 
         $this->serializer->writeFile($spec, $rootFile, $format);
 
         $results = [[
             'type' => $this->getName(),
-            'name' => "openapi.{$ext}",
+            'name' => "{$version}/openapi.{$format}",
             'path' => $rootFile,
             'status' => 'success',
         ]];
 
-        if ($options->openApiUi ?? false) {
-            $results[] = $this->publishSwaggerUi($rootFile, $outputPath);
+        if ($this->publishesUi($options)) {
+            $results[] = $this->publishSwaggerUi($version);
         }
 
         return $results;
@@ -132,11 +141,14 @@ final class OpenApiRootGenerator implements Generator
     /**
      * Build a root spec that references split files via JSON-Pointer fragments.
      *
+     * The refs stay relative ("./schemas/…"), which remains correct inside the
+     * version directory.
+     *
      * @return array<string, mixed>
      */
-    protected function buildSplitRootSpec(string $outputPath, string $ext): array
+    protected function buildSplitRootSpec(string $outputPath, string $ext, string $version): array
     {
-        $spec = $this->baseSpec();
+        $spec = $this->baseSpec($version);
 
         foreach (glob("{$outputPath}/schemas/*.{$ext}") ?: [] as $file) {
             $name = pathinfo($file, PATHINFO_FILENAME);
@@ -169,9 +181,9 @@ final class OpenApiRootGenerator implements Generator
     /**
      * @return array<string, mixed>
      */
-    protected function buildMergedSpec(): array
+    protected function buildMergedSpec(string $version): array
     {
-        $spec = $this->baseSpec();
+        $spec = $this->baseSpec($version);
 
         $spec['components']['schemas'] = array_merge(
             $this->mergedSchemas,
@@ -186,43 +198,22 @@ final class OpenApiRootGenerator implements Generator
     /**
      * @return array<string, mixed>
      */
-    protected function baseSpec(): array
+    protected function baseSpec(string $version): array
     {
-        $title = config('anvil.openapi.title', config('app.name', 'Laravel API'));
-        $version = config('anvil.openapi.api_version', 'v1');
-        $appUrl = config('anvil.openapi.api_url', config('app.url', 'http://localhost'));
-        $security = config('anvil.openapi.security', 'sanctum');
-
-        $securitySchemes = [];
-        if ($security === 'sanctum') {
-            $securitySchemes['sanctum'] = [
-                'type' => 'http',
-                'scheme' => 'bearer',
-                'bearerFormat' => 'Token',
-                'description' => 'Laravel Sanctum bearer token. Obtain via POST /api/v1/login.',
-            ];
-        } elseif ($security === 'passport') {
-            $securitySchemes['passport'] = [
-                'type' => 'oauth2',
-                'description' => 'Laravel Passport OAuth2',
-                'flows' => [
-                    'password' => [
-                        'tokenUrl' => "{$appUrl}/oauth/token",
-                        'scopes' => [],
-                    ],
-                ],
-            ];
-        }
+        $title = config('anvil.openapi.title') ?: config('app.name', 'Laravel API');
+        $description = config('anvil.openapi.description')
+            ?: "Auto-generated OpenAPI 3.1 specification for the {$title} API ({$version})."
+            ."\n\nGenerated by [zuqongtech/laravel-anvil](https://github.com/zuqongtech/laravel-anvil).";
 
         $tags = array_values(array_unique($this->collectedTags));
-        $tagObjects = array_map(fn ($t) => ['name' => $t], $tags);
+        $tagObjects = array_map(static fn (string $t): array => ['name' => $t], $tags);
 
         return [
             'openapi' => '3.1.0',
             'info' => [
                 'title' => $title,
                 'version' => $version,
-                'description' => "Auto-generated OpenAPI 3.1 specification for the {$title} API.\n\nGenerated by [zuqongtech/laravel-anvil](https://github.com/zuqongtech/laravel-anvil).",
+                'description' => $description,
                 'contact' => [
                     'name' => config('anvil.openapi.contact_name', ''),
                     'email' => config('anvil.openapi.contact_email', ''),
@@ -231,20 +222,89 @@ final class OpenApiRootGenerator implements Generator
                     'name' => 'MIT',
                 ],
             ],
-            'servers' => [
-                [
-                    'url' => "{$appUrl}/api/{$version}",
-                    'description' => 'Primary API server',
-                ],
-            ],
+            'servers' => $this->buildServers($version),
             'tags' => $tagObjects,
             'paths' => [],
             'components' => [
-                'securitySchemes' => $securitySchemes,
+                'securitySchemes' => $this->buildSecuritySchemes(),
                 'schemas' => [],
                 'responses' => $this->sharedResponses(),
             ],
         ];
+    }
+
+    /**
+     * Honour --server when supplied, otherwise derive the versioned base URL.
+     *
+     * @return list<array<string, string>>
+     */
+    protected function buildServers(string $version): array
+    {
+        $configured = array_filter((array) config('anvil.openapi.servers', []));
+
+        if ($configured !== []) {
+            return array_values(array_map(
+                static fn ($url): array => ['url' => rtrim((string) $url, '/')],
+                $configured,
+            ));
+        }
+
+        return [[
+            'url' => OpenApiLocator::appUrl().OpenApiLocator::apiBasePath($version),
+            'description' => "Primary API server ({$version})",
+        ]];
+    }
+
+    /**
+     * Mirrors the --auth / --security mapping in GenerateOpenApiCommand.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    protected function buildSecuritySchemes(): array
+    {
+        $security = (string) config('anvil.openapi.security', 'sanctum');
+        $appUrl = OpenApiLocator::appUrl();
+        $base = OpenApiLocator::apiBasePath();
+
+        return match ($security) {
+            'sanctum' => [
+                'sanctum' => [
+                    'type' => 'http',
+                    'scheme' => 'bearer',
+                    'bearerFormat' => 'Token',
+                    'description' => "Laravel Sanctum bearer token. Obtain via POST {$base}/login.",
+                ],
+            ],
+            'passport' => [
+                'passport' => [
+                    'type' => 'oauth2',
+                    'description' => 'Laravel Passport OAuth2',
+                    'flows' => [
+                        'password' => [
+                            'tokenUrl' => "{$appUrl}/oauth/token",
+                            'scopes' => [],
+                        ],
+                    ],
+                ],
+            ],
+            'bearer' => [
+                'bearer' => [
+                    'type' => 'http',
+                    'scheme' => 'bearer',
+                    'bearerFormat' => 'JWT',
+                    'description' => 'JWT bearer token.',
+                ],
+            ],
+            'apikey' => [
+                'apikey' => [
+                    'type' => 'apiKey',
+                    'in' => 'header',
+                    'name' => 'X-API-Key',
+                    'description' => 'Static API key sent in the X-API-Key header.',
+                ],
+            ],
+            default => [],
+        };
     }
 
     // -----------------------------------------------------------------------
@@ -267,7 +327,7 @@ final class OpenApiRootGenerator implements Generator
             ? (json_decode($raw, true) ?: [])
             : (Yaml::parse($raw) ?: []);
 
-        return is_array($data) ? array_map('strval', array_keys($data)) : [];
+        return is_array($data) ? array_map(strval(...), array_keys($data)) : [];
     }
 
     /**
@@ -330,78 +390,113 @@ final class OpenApiRootGenerator implements Generator
     // Swagger UI publisher (static file mode — see DocsController for serving)
     // -----------------------------------------------------------------------
 
-    protected function publishSwaggerUi(string $specPath, string $outputPath): array
+    /**
+     * @return array<string, string>
+     */
+    protected function publishSwaggerUi(string $version): array
     {
-        $publicDir = public_path('docs');
+        $publicDir = OpenApiLocator::publicDocsDir($version);
         $htmlPath = "{$publicDir}/index.html";
-        $relSpecPath = '../'.ltrim(str_replace(base_path(), '', $specPath), '/');
+
+        // Every version on disk, plus the one just written, so the UI's version
+        // dropdown stays accurate without regenerating the older bundles.
+        $versions = array_values(array_unique([...OpenApiLocator::availableVersions(), $version]));
+        usort($versions, static fn (string $a, string $b): int => (int) ltrim($a, 'v') <=> (int) ltrim($b, 'v'));
+
+        $urls = array_map(static fn (string $v): array => [
+            'name' => $v,
+            // Root-relative, NOT absolute. A static HTML file cannot know the
+            // request host, so an absolute URL built from config('app.url')
+            // bakes in whatever that happens to be — "http://localhost" while
+            // the app is served on 127.0.0.1:3053, which fails to fetch and
+            // trips CORS. The page resolves these against
+            // window.location.origin at load time instead.
+            'path' => '/'.OpenApiLocator::docsRoute($v).'/openapi.'.OpenApiLocator::format(),
+        ], $versions);
 
         if (! is_dir($publicDir)) {
             mkdir($publicDir, 0755, true);
         }
 
-        file_put_contents($htmlPath, $this->buildSwaggerUiHtml($relSpecPath));
+        file_put_contents($htmlPath, $this->buildSwaggerUiHtml($urls, $version));
 
         return [
             'type' => 'SwaggerUI',
-            'name' => 'public/docs/index.html',
+            'name' => ltrim(str_replace(public_path(), '', $htmlPath), '/'),
             'path' => $htmlPath,
             'status' => 'success',
-            'url' => config('app.url').'/docs',
+            'url' => OpenApiLocator::docsUrl($version),
         ];
     }
 
-    protected function buildSwaggerUiHtml(string $specUrl): string
+    /**
+     * The spec is loaded from the route DocsController serves, resolved against
+     * the browser's own origin at load time — so the published bundle works on
+     * localhost, 127.0.0.1:3053 and production without regeneration.
+     *
+     * Requires anvil.openapi.docs.enabled, since the spec itself comes from the
+     * dynamic route (only that route bundles the split $ref files).
+     *
+     * @param  list<array{name: string, path: string}>  $urls
+     */
+    protected function buildSwaggerUiHtml(array $urls, string $primary): string
     {
-        $title = config('anvil.openapi.title', config('app.name', 'API Docs'));
-        $version = '5.17.14';
+        $title = config('anvil.openapi.title') ?: config('app.name', 'API Docs');
+        $uiVersion = (string) config('anvil.openapi.docs.ui_version', '5.17.14');
+        $urlsJson = json_encode($urls, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 
         return <<<HTML
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{$title} — API Documentation</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@{$version}/swagger-ui.css" />
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-    #swagger-ui .topbar { display: none; }
-    .custom-header {
-      background: #1a1a2e; color: #fff; padding: 16px 24px;
-      display: flex; align-items: center; gap: 12px;
-      font-size: 18px; font-weight: 600; letter-spacing: 0.5px;
-    }
-    .custom-header span { opacity: 0.6; font-size: 13px; font-weight: 400; }
-  </style>
-</head>
-<body>
-  <div class="custom-header">
-    ⚒ {$title} <span>API Documentation — generated by zuqongtech/laravel-anvil</span>
-  </div>
-  <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@{$version}/swagger-ui-bundle.js"></script>
-  <script src="https://unpkg.com/swagger-ui-dist@{$version}/swagger-ui-standalone-preset.js"></script>
-  <script>
-    window.onload = () => {
-      SwaggerUIBundle({
-        url: '{$specUrl}',
-        dom_id: '#swagger-ui',
-        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
-        layout: 'StandaloneLayout',
-        deepLinking: true,
-        displayRequestDuration: true,
-        defaultModelsExpandDepth: 2,
-        defaultModelExpandDepth: 2,
-        tryItOutEnabled: true,
-        filter: true,
-        syntaxHighlight: { activate: true, theme: 'agate' },
-      });
-    };
-  </script>
-</body>
-</html>
-HTML;
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>{$title} — API Documentation ({$primary})</title>
+          <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@{$uiVersion}/swagger-ui.css" />
+          <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+            #swagger-ui .topbar { background: #16213e; }
+            .custom-header {
+              background: #1a1a2e; color: #fff; padding: 16px 24px;
+              display: flex; align-items: center; gap: 12px;
+              font-size: 18px; font-weight: 600; letter-spacing: 0.5px;
+            }
+            .custom-header span { opacity: 0.6; font-size: 13px; font-weight: 400; }
+          </style>
+        </head>
+        <body>
+          <div class="custom-header">
+            ⚒ {$title} <span>API Documentation — {$primary} — generated by zuqongtech/laravel-anvil</span>
+          </div>
+          <div id="swagger-ui"></div>
+          <script src="https://unpkg.com/swagger-ui-dist@{$uiVersion}/swagger-ui-bundle.js"></script>
+          <script src="https://unpkg.com/swagger-ui-dist@{$uiVersion}/swagger-ui-standalone-preset.js"></script>
+          <script>
+            window.onload = () => {
+              // Resolved here, not at generation time: the same published file
+              // then works on any host or port.
+              const origin = window.location.origin;
+              const urls = {$urlsJson}.map(d => ({ name: d.name, url: origin + d.path }));
+
+              SwaggerUIBundle({
+                urls: urls,
+                "urls.primaryName": '{$primary}',
+                dom_id: '#swagger-ui',
+                presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+                layout: 'StandaloneLayout',
+                deepLinking: true,
+                displayRequestDuration: true,
+                defaultModelsExpandDepth: 2,
+                defaultModelExpandDepth: 2,
+                tryItOutEnabled: true,
+                filter: true,
+                syntaxHighlight: { activate: true, theme: 'agate' },
+              });
+            };
+          </script>
+        </body>
+        </html>
+        HTML;
     }
 }

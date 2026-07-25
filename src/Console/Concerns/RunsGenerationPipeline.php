@@ -3,6 +3,7 @@
 namespace Zuqongtech\LaravelAnvil\Console\Concerns;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Str;
 use Zuqongtech\LaravelAnvil\Support\ConstraintAnalyzer;
 use Zuqongtech\LaravelAnvil\Support\DatabaseInspector;
 use Zuqongtech\LaravelAnvil\Support\FileWriter;
@@ -114,7 +115,7 @@ trait RunsGenerationPipeline
         $this->relationshipDetector = new RelationshipDetector($this->inspector);
         $this->constraintAnalyzer = new ConstraintAnalyzer($this->inspector);
         $this->fileWriter = new FileWriter(base_path(), $options->dryRun);
-        $this->orchestrator = app(GenerationOrchestrator::class);
+        $this->orchestrator = resolve(GenerationOrchestrator::class);
 
         $driver = $this->inspector->getDriver();
         $database = $this->inspector->getDatabaseName();
@@ -179,9 +180,9 @@ trait RunsGenerationPipeline
         $bar->start();
 
         foreach ($tables as $pair) {
-            $table  = $pair['table'];
+            $table = $pair['table'];
             $schema = $pair['schema'];
-            $label  = ($schema !== null && $schema !== $defaultSchema) ? "{$schema}.{$table}" : $table;
+            $label = ($schema !== null && $schema !== $defaultSchema) ? "{$schema}.{$table}" : $table;
             $bar->setMessage("Processing {$label}");
 
             try {
@@ -238,20 +239,18 @@ trait RunsGenerationPipeline
     {
         $modelName = Helpers::tableToModelName($table);
         $defaultSchema = $this->inspector->defaultSchema();
-        $isQualified = $schema !== null && $schema !== '' && $schema !== $defaultSchema;
+        $isQualified = ! in_array($schema, [null, '', $defaultSchema], true);
 
         // Schema segment (e.g. "Core") so cross-schema tables of the same name
         // don't collide: App\Models\Core\Employer at app/Models/Core/Employer.php.
-        $segment   = $isQualified ? \Illuminate\Support\Str::studly(str_replace(['.', '-', ' '], '_', $schema)) : null;
+        $segment = $isQualified ? Str::studly(str_replace(['.', '-', ' '], '_', $schema)) : null;
         $namespace = $segment !== null ? $options->getNamespace().'\\'.$segment : $options->getNamespace();
-        $basePath  = $options->getPath();
+        $basePath = $options->getPath();
 
         // The table the model binds to — schema-qualified when not the default schema.
         $modelTable = $isQualified ? $schema.'.'.$table : $table;
 
-        if (! Helpers::isValidClassName($modelName)) {
-            throw new \Exception("Invalid model name: {$modelName}");
-        }
+        throw_unless(Helpers::isValidClassName($modelName), \Exception::class, "Invalid model name: {$modelName}");
 
         $modelExists = $this->fileWriter->modelExists($namespace, $modelName, $basePath);
 
@@ -444,7 +443,7 @@ trait RunsGenerationPipeline
             $routeFile = config('anvil.web.route_file', 'routes/web.php');
             $this->newLine();
             $this->info('🌐 Web scaffold complete.');
-            $this->line("   Controllers : App\\Http\\Controllers\\Web\\");
+            $this->line('   Controllers : App\\Http\\Controllers\\Web\\');
             $this->line("   Routes      : {$routeFile} (Route::resource within the configured middleware group)");
             $this->line('   Views       : resources/views/{resource}/ (index, create, edit, show, _form)');
         }

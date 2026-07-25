@@ -1,33 +1,42 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Zuqongtech\LaravelAnvil\Generators\OpenApi;
 
 use Illuminate\Support\Str;
 use Zuqongtech\LaravelAnvil\Contracts\Generator;
+use Zuqongtech\LaravelAnvil\Generators\OpenApi\Concerns\ResolvesSpecOptions;
 use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
+use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
 use Zuqongtech\LaravelAnvil\Support\OpenApiYamlSerializer;
 
 /**
  * Generates OpenAPI 3.1 path definitions for a model's REST endpoints.
  *
- * Split-file mode writes one file per path under openapi/paths/; single-file
- * mode returns raw path arrays to be merged by OpenApiRootGenerator.
+ * Split-file mode writes one file per path under openapi/{version}/paths/;
+ * single-file mode returns raw path arrays to be merged by OpenApiRootGenerator.
+ *
+ * The URL prefix and version both come from config, so --prefix and
+ * --api-version on anvil:generate-api are reflected in the documented paths.
  */
-final class OpenApiPathGenerator implements Generator
+final readonly class OpenApiPathGenerator implements Generator
 {
+    use ResolvesSpecOptions;
+
     /**
      * Default-constructible so the generator works whether resolved through the
      * container (autowired) or built with a bare `new`.
      */
     public function __construct(
-        private readonly OpenApiYamlSerializer $serializer = new OpenApiYamlSerializer,
+        private OpenApiYamlSerializer $serializer = new OpenApiYamlSerializer,
     ) {}
 
     #[\Override]
     public function supports(GenerationOptions $options): bool
     {
-        return $options->openApi ?? false;
+        return $this->specEnabled($options);
     }
 
     #[\Override]
@@ -39,11 +48,11 @@ final class OpenApiPathGenerator implements Generator
     #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
-        $format = config('anvil.openapi.format', 'yaml');
-        $splitFiles = config('anvil.openapi.split_files', true);
-        $outputPath = base_path(config('anvil.openapi.output_path', 'openapi'));
-        $version = config('anvil.openapi.api_version', config('laravel-anvil.api_version', 'v1'));
-        $security = config('anvil.openapi.security', 'sanctum');
+        $format = OpenApiLocator::format();
+        $splitFiles = $this->splitFiles();
+        $version = OpenApiLocator::configuredVersion();
+        $pathsDir = OpenApiLocator::pathsDir($version);
+        $security = (string) config('anvil.openapi.security', 'sanctum');
 
         $slug = Str::plural(Str::kebab($meta->model));
         $pkParam = $this->pkParamName($meta);
@@ -53,35 +62,7 @@ final class OpenApiPathGenerator implements Generator
         $results = [];
 
         foreach ($paths as $pathKey => $pathDef) {
-            $safeKey = str_replace(['/', '{', '}'], ['_', '', ''], ltrim($pathKey, '/'));
-
-            if ($splitFiles) {
-                $ext = $format === 'json' ? 'json' : 'yaml';
-                $path = "{$outputPath}/paths/{$safeKey}.{$ext}";
-
-                if (file_exists($path) && ! $options->force) {
-                    $results[] = [
-                        'type' => $this->getName(),
-                        'name' => $pathKey,
-                        'path' => $path,
-                        'status' => 'skipped',
-                        'reason' => 'already exists',
-                    ];
-
-                    continue;
-                }
-
-                if (! $options->dryRun) {
-                    $this->serializer->writeFile([$pathKey => $pathDef], $path, $format);
-                }
-
-                $results[] = [
-                    'type' => $this->getName(),
-                    'name' => $pathKey,
-                    'path' => $path,
-                    'status' => 'success',
-                ];
-            } else {
+            if (! $splitFiles) {
                 $results[] = [
                     'type' => $this->getName(),
                     'name' => $pathKey,
@@ -89,7 +70,35 @@ final class OpenApiPathGenerator implements Generator
                     'path_key' => $pathKey,
                     'path_def' => $pathDef,
                 ];
+
+                continue;
             }
+
+            $safeKey = str_replace(['/', '{', '}'], ['_', '', ''], ltrim($pathKey, '/'));
+            $path = "{$pathsDir}/{$safeKey}.{$format}";
+
+            if (file_exists($path) && ! $this->overwrites($options)) {
+                $results[] = [
+                    'type' => $this->getName(),
+                    'name' => $pathKey,
+                    'path' => $path,
+                    'status' => 'skipped',
+                    'reason' => 'already exists',
+                ];
+
+                continue;
+            }
+
+            if (! $this->isDryRun($options)) {
+                $this->serializer->writeFile([$pathKey => $pathDef], $path, $format);
+            }
+
+            $results[] = [
+                'type' => $this->getName(),
+                'name' => $pathKey,
+                'path' => $path,
+                'status' => $this->isDryRun($options) ? 'dry-run' : 'success',
+            ];
         }
 
         return $results;
@@ -112,8 +121,14 @@ final class OpenApiPathGenerator implements Generator
     ): array {
         $paths = [];
 
-        $collectionPath = "/api/{$version}/{$slug}";
-        $itemPath = "/api/{$version}/{$slug}/{{ $pkParam }}";
+        // Built by concatenation, not interpolation. "{{ $pkParam }}" does NOT
+        // produce "{id}" — "{{ " is not the complex-interpolation opener ("{$"
+        // is), so the braces stayed literal and the key became "{{ id }}",
+        // which never matched the declared parameter name.
+        $base = OpenApiLocator::apiBasePath($version);
+
+        $collectionPath = $base.'/'.$slug;
+        $itemPath = $base.'/'.$slug.'/{'.$pkParam.'}';
 
         $securityBlock = $security !== 'none'
             ? [[$security => []]]
@@ -132,14 +147,11 @@ final class OpenApiPathGenerator implements Generator
         ];
 
         if ($meta->softDeletes) {
-            $restorePath = "/api/{$version}/{$slug}/{{ $pkParam }}/restore";
-            $forceDeletePath = "/api/{$version}/{$slug}/{{ $pkParam }}/force";
-
-            $paths[$restorePath] = [
+            $paths[$itemPath.'/restore'] = [
                 'patch' => $this->buildRestoreOperation($meta, $slug, $tag, $pkParam, $securityBlock),
             ];
 
-            $paths[$forceDeletePath] = [
+            $paths[$itemPath.'/force'] = [
                 'delete' => $this->buildForceDeleteOperation($meta, $slug, $tag, $pkParam, $securityBlock),
             ];
         }
@@ -406,6 +418,8 @@ final class OpenApiPathGenerator implements Generator
     /** @return array<int, array<string, mixed>> */
     protected function paginationParameters(): array
     {
+        $default = (int) config('anvil.api.pagination', 15);
+
         return [
             [
                 'name' => 'page',
@@ -419,7 +433,12 @@ final class OpenApiPathGenerator implements Generator
                 'in' => 'query',
                 'required' => false,
                 'description' => 'Records per page',
-                'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100, 'default' => 15],
+                'schema' => [
+                    'type' => 'integer',
+                    'minimum' => 1,
+                    'maximum' => 100,
+                    'default' => max(1, $default),
+                ],
             ],
         ];
     }

@@ -1,8 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Zuqongtech\LaravelAnvil\Support;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class ModelBuilder
 {
@@ -30,6 +33,14 @@ class ModelBuilder
 
     protected bool $withConstraintComments = false;
 
+    /**
+     * Raw inverse-relationship entries. The 'method' value is a PREFERENCE, not
+     * a decision: final names are resolved in resolvedRelationNames(), which is
+     * the only point at which the number of keys pointing at each related model
+     * is known.
+     *
+     * @var list<array{method: string, model: string, foreign_key: string, table: ?string, unique: bool, schema: ?string}>
+     */
     protected array $inverseRelationships = [];
 
     protected ?array $constraintAnalysis = null;
@@ -42,6 +53,14 @@ class ModelBuilder
      * when a foreign key points at a table in another schema.
      */
     protected ?string $rootNamespace = null;
+
+    /**
+     * Memoised output of resolvedRelationNames(). Invalidated by any setter that
+     * feeds into naming.
+     *
+     * @var array{belongsTo: array<string, string>, inverse: array<int, string>, collisions: list<array<string, string>>}|null
+     */
+    private ?array $resolvedNames = null;
 
     public function __construct(protected string $tableName, string $namespace)
     {
@@ -80,6 +99,7 @@ class ModelBuilder
     public function setColumns(array $columns): self
     {
         $this->columns = $columns;
+        $this->resolvedNames = null;
 
         return $this;
     }
@@ -90,6 +110,7 @@ class ModelBuilder
     public function setForeignKeys(array $foreignKeys): self
     {
         $this->foreignKeys = $foreignKeys;
+        $this->resolvedNames = null;
 
         return $this;
     }
@@ -195,15 +216,38 @@ class ModelBuilder
     }
 
     /**
-     * Add inverse relationship
+     * Add inverse relationship.
+     *
+     * $methodName is treated as a preference. When two entries name the same
+     * related model — vehicle_bookings.customer_id and
+     * vehicle_bookings.assigned_agent_id both pointing at users — both get
+     * qualified from their foreign key at build time, producing
+     * customerVehicleBookings() and assignedAgentVehicleBookings() instead of
+     * two identical vehicleBookings() methods and a fatal redeclaration.
+     *
+     * The extra parameters are optional so existing callers keep working:
+     *   $relatedTable  gives better pluralisation and grouping than the model name
+     *   $unique        emits hasOne instead of hasMany
+     *   $relatedSchema resolves the related model across schemas
      */
-    public function addInverseRelationship(string $methodName, string $relatedModel, string $foreignKey): self
-    {
+    public function addInverseRelationship(
+        string $methodName,
+        string $relatedModel,
+        string $foreignKey,
+        ?string $relatedTable = null,
+        bool $unique = false,
+        ?string $relatedSchema = null,
+    ): self {
         $this->inverseRelationships[] = [
             'method' => $methodName,
             'model' => $relatedModel,
             'foreign_key' => $foreignKey,
+            'table' => $relatedTable,
+            'unique' => $unique,
+            'schema' => $relatedSchema,
         ];
+
+        $this->resolvedNames = null;
 
         return $this;
     }
@@ -244,6 +288,103 @@ class ModelBuilder
         return $generator->generate();
     }
 
+    // -----------------------------------------------------------------------
+    // Relation naming — resolved once, used by the docblock AND the methods
+    // -----------------------------------------------------------------------
+
+    /**
+     * Decide every relation method name for this model.
+     *
+     * Both buildClassDocBlock() and buildRelationships() read from here. That is
+     * the invariant that matters: the moment those two derive names
+     * independently, a model gets an @method line that does not match any method.
+     *
+     * @return array{belongsTo: array<string, string>, inverse: array<int, string>, collisions: list<array<string, string>>}
+     */
+    protected function resolvedRelationNames(): array
+    {
+        if ($this->resolvedNames !== null) {
+            return $this->resolvedNames;
+        }
+
+        $namer = RelationNamer::forTable(
+            $this->tableName,
+            array_values(array_filter(array_column($this->columns, 'name'))),
+        );
+
+        // belongsTo first: these derive straight from a column and are the names
+        // a developer expects, so they win any contest with an inverse relation.
+        $belongsTo = [];
+
+        foreach ($this->foreignKeys as $fk) {
+            $column = $fk['column'] ?? null;
+
+            if ($column === null || $column === '') {
+                continue;
+            }
+
+            $belongsTo[$column] = $namer->belongsTo($column, (string) ($fk['referenced_table'] ?? ''));
+        }
+
+        // How many entries point at each related model? That count is the sole
+        // trigger for qualifying a name.
+        $counts = [];
+
+        foreach ($this->inverseRelationships as $row) {
+            $key = $this->inverseGroupKey($row);
+            $counts[$key] = ($counts[$key] ?? 0) + 1;
+        }
+
+        $inverse = [];
+
+        foreach ($this->inverseRelationships as $index => $row) {
+            $count = $counts[$this->inverseGroupKey($row)] ?? 1;
+
+            if ($count < 2 && $row['method'] !== '') {
+                // Unambiguous: honour the caller's name, but still claim it so a
+                // clash with a belongsTo relation or a column cannot slip through.
+                $inverse[$index] = $namer->preferred($row['method'], $row['foreign_key'], (string) $row['model']);
+
+                continue;
+            }
+
+            $inverse[$index] = $namer->inverseForModel(
+                (string) $row['model'],
+                (string) $row['foreign_key'],
+                $count,
+                (bool) $row['unique'],
+                (string) ($row['table'] ?? ''),
+            );
+        }
+
+        return $this->resolvedNames = [
+            'belongsTo' => $belongsTo,
+            'inverse' => $inverse,
+            'collisions' => $namer->collisions(),
+        ];
+    }
+
+    /**
+     * Names that had to be altered because the preferred one was taken. Report
+     * these in the run summary — they are the tables worth a human glance.
+     *
+     * @return list<array<string, string>>
+     */
+    public function relationCollisions(): array
+    {
+        return $this->resolvedRelationNames()['collisions'];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    protected function inverseGroupKey(array $row): string
+    {
+        $table = (string) ($row['table'] ?? '');
+
+        return $table !== '' ? $table : (string) $row['model'];
+    }
+
     /**
      * Fully-qualified class name of a related model, honouring the foreign key's
      * schema when present (so a cross-schema FK resolves to App\Models\{Schema}\{Model}).
@@ -251,16 +392,83 @@ class ModelBuilder
     protected function relatedModelFqn(array $fk): string
     {
         $relatedModel = Helpers::tableToModelName($fk['referenced_table']);
-        $schema = $fk['referenced_schema'] ?? null;
 
-        // No schema info, or no root namespace configured → resolve in this model's namespace.
+        return $this->qualifyModel($relatedModel, $fk['referenced_schema'] ?? null);
+    }
+
+    /**
+     * As relatedModelFqn(), for an inverse-relationship row.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    protected function inverseModelFqn(array $row): string
+    {
+        return $this->qualifyModel((string) $row['model'], $row['schema'] ?? null);
+    }
+
+    /**
+     * Resolve a model name to an FQCN, adding a schema segment when the related
+     * table lives elsewhere.
+     */
+    protected function qualifyModel(string $model, ?string $schema): string
+    {
         if ($schema === null || $schema === '' || $this->rootNamespace === null) {
-            return $this->namespace.'\\'.$relatedModel;
+            return $this->namespace.'\\'.$model;
         }
 
-        $segment = \Illuminate\Support\Str::studly(str_replace(['.', '-', ' '], '_', $schema));
+        $segment = Str::studly(str_replace(['.', '-', ' '], '_', $schema));
 
-        return $this->rootNamespace.'\\'.$segment.'\\'.$relatedModel;
+        // "public" is not a legal namespace segment — App\Models\Public\Tenant
+        // fails to parse on some versions and confuses static analysis on the
+        // rest.
+        if (self::isReservedNamespaceSegment($segment)) {
+            $segment .= 'Schema';
+        }
+
+        return $this->rootNamespace.'\\'.$segment.'\\'.$model;
+    }
+
+    protected static function isReservedNamespaceSegment(string $segment): bool
+    {
+        static $reserved = [
+            'public',
+            'private',
+            'protected',
+            'static',
+            'class',
+            'interface',
+            'trait',
+            'enum',
+            'function',
+            'const',
+            'namespace',
+            'use',
+            'new',
+            'return',
+            'list',
+            'array',
+            'default',
+            'match',
+            'fn',
+            'readonly',
+            'never',
+            'void',
+            'null',
+            'true',
+            'false',
+            'int',
+            'float',
+            'string',
+            'bool',
+            'object',
+            'iterable',
+            'callable',
+            'mixed',
+            'parent',
+            'self',
+        ];
+
+        return in_array(strtolower($segment), $reserved, true);
     }
 
     /**
@@ -282,6 +490,8 @@ class ModelBuilder
      */
     protected function buildClassDocBlock(): string
     {
+        $names = $this->resolvedRelationNames();
+
         $properties = [];
         $methods = [];
 
@@ -318,7 +528,12 @@ class ModelBuilder
 
         // Add relationship method documentation
         foreach ($this->foreignKeys as $fk) {
-            $methodName = Helpers::foreignKeyToRelationName($fk['column']);
+            $methodName = $names['belongsTo'][$fk['column'] ?? ''] ?? null;
+
+            if ($methodName === null) {
+                continue;
+            }
+
             $relatedModel = Helpers::tableToModelName($fk['referenced_table']);
 
             $methods[] = [
@@ -329,12 +544,31 @@ class ModelBuilder
         }
 
         // Add inverse relationship documentation
-        foreach ($this->inverseRelationships as $inverse) {
-            $methods[] = [
-                'return' => sprintf('\Illuminate\Database\Eloquent\Collection<int, \%s\%s>', $this->namespace, $inverse['model']),
-                'name' => $inverse['method'],
-                'comment' => sprintf('Get the related %s records', $inverse['model']),
-            ];
+        if ($this->withInverse) {
+            foreach ($this->inverseRelationships as $index => $inverse) {
+                $methodName = $names['inverse'][$index] ?? null;
+
+                if ($methodName === null) {
+                    continue;
+                }
+
+                $fqn = '\\'.$this->inverseModelFqn($inverse);
+
+                // The foreign key is named because with two relations to the same
+                // model it is the only thing distinguishing them.
+                $methods[] = [
+                    'return' => $inverse['unique']
+                        ? $fqn
+                        : sprintf('\Illuminate\Database\Eloquent\Collection<int, %s>', $fqn),
+                    'name' => $methodName,
+                    'comment' => sprintf(
+                        'Get the related %s %s via %s',
+                        $inverse['model'],
+                        $inverse['unique'] ? 'record' : 'records',
+                        $inverse['foreign_key'],
+                    ),
+                ];
+            }
         }
 
         return StubGenerator::classDocBlock($properties, $methods);
@@ -563,17 +797,22 @@ class ModelBuilder
      */
     protected function buildRelationships(): string
     {
+        $names = $this->resolvedRelationNames();
+
         $relationships = [];
 
         // Build belongsTo relationships from foreign keys
         foreach ($this->foreignKeys as $fk) {
-            $methodName = Helpers::foreignKeyToRelationName($fk['column']);
-            $fullRelatedModel = $this->relatedModelFqn($fk);
+            $methodName = $names['belongsTo'][$fk['column'] ?? ''] ?? null;
+
+            if ($methodName === null) {
+                continue;
+            }
 
             $relationships[] = StubGenerator::relationshipStub(
                 'belongsTo',
                 $methodName,
-                $fullRelatedModel,
+                $this->relatedModelFqn($fk),
                 $fk['column'],
                 $fk['referenced_column'],
                 $this->withPhpDoc
@@ -582,13 +821,17 @@ class ModelBuilder
 
         // Build hasMany/hasOne inverse relationships
         if ($this->withInverse) {
-            foreach ($this->inverseRelationships as $inverse) {
-                $fullRelatedModel = $this->namespace.'\\'.$inverse['model'];
+            foreach ($this->inverseRelationships as $index => $inverse) {
+                $methodName = $names['inverse'][$index] ?? null;
+
+                if ($methodName === null) {
+                    continue;
+                }
 
                 $relationships[] = StubGenerator::relationshipStub(
-                    'hasMany',
-                    $inverse['method'],
-                    $fullRelatedModel,
+                    $inverse['unique'] ? 'hasOne' : 'hasMany',
+                    $methodName,
+                    $this->inverseModelFqn($inverse),
                     $inverse['foreign_key'],
                     null,
                     $this->withPhpDoc

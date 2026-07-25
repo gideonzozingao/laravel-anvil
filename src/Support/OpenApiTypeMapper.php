@@ -32,7 +32,7 @@ final class OpenApiTypeMapper
 
         // max_length
         if (! empty($column['max_length']) && $column['max_length'] > 0) {
-            $property['maxLength'] = (int) $column['max_length'];
+            $property['maxLength'] = $column['max_length'];
         }
 
         // decimal precision
@@ -66,7 +66,7 @@ final class OpenApiTypeMapper
      */
     public function resolveType(string $rawType, string $columnName = ''): array
     {
-        $type = strtolower(preg_replace('/\(.*\)/', '', $rawType));
+        $type = strtolower((string) preg_replace('/\(.*\)/', '', $rawType));
 
         // Enum — extract values
         if (str_starts_with(strtolower($rawType), 'enum')) {
@@ -145,7 +145,7 @@ final class OpenApiTypeMapper
     protected function enumProperty(string $rawType): array
     {
         if (preg_match("/enum\('(.+?)'\)/i", $rawType, $m)) {
-            $values = array_map('trim', explode("','", $m[1]));
+            $values = array_map(trim(...), explode("','", $m[1]));
 
             return [
                 'type' => 'string',

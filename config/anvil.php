@@ -1,5 +1,7 @@
 <?php
 
+use Illuminate\Database\Eloquent\Model;
+
 return [
 
     /*
@@ -60,11 +62,39 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | API Configuration
+    | Versioned API Scaffold  (anvil:generate-api)
     |--------------------------------------------------------------------------
     |
-    | Controls the prefix and middleware applied to routes written by the
-    | ApiRouteGenerator. Override per-environment with .env values.
+    | Project-level defaults for the versioned JSON API. Every value here is
+    | overridden at runtime by the matching flag on anvil:generate-api, so this
+    | block is what you get when the flag is omitted.
+    |
+    | 'auth' is the seam that ties the runtime API to its documentation: it maps
+    | to route middleware here AND to the spec's securityScheme below, so the
+    | two cannot drift. Valid values: sanctum | passport | jwt | token | none.
+    |
+    */
+    'api' => [
+        'version' => env('ANVIL_API_VERSION', 'v1'),
+        'prefix' => env('ANVIL_API_PREFIX', 'api'),
+        'auth' => env('ANVIL_API_AUTH', 'sanctum'),
+        'guard' => env('ANVIL_API_GUARD', null),   // null = the guard implied by 'auth'
+        'throttle' => env('ANVIL_API_THROTTLE', '60,1'),   // "60,1", "120", or 'none'
+        'pagination' => env('ANVIL_API_PAGINATION', 15),
+        'force_json' => true,   // generate ForceJsonResponse middleware + provider
+
+        // Computed by anvil:generate-api from auth/guard/throttle, and read by
+        // the route + controller generators. Editing it here sets the baseline.
+        'middleware' => ['api', 'auth:sanctum', 'throttle:60,1'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Legacy API keys  (ApiRouteGenerator — unversioned --api-routes)
+    |--------------------------------------------------------------------------
+    |
+    | Kept for the plain apiResource append. The 'api' block above supersedes
+    | these for the versioned scaffold; they are read only by ApiRouteGenerator.
     |
     */
     'api_version' => env('DB_INTROSPECTION_API_VERSION', 'v1'),
@@ -105,6 +135,22 @@ return [
     |--------------------------------------------------------------------------
     */
     'dry_run' => env('DB_INTROSPECTION_DRY_RUN', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Runtime Flags  (written by the commands — do not rely on editing these)
+    |--------------------------------------------------------------------------
+    |
+    | The generators read these as a fallback when GenerationOptions does not
+    | carry the corresponding field. anvil:generate-api sets them from --force /
+    | --dry-run at the start of every run. They exist so a DTO key mismatch
+    | cannot silently turn a generator off; see ResolvesSpecOptions.
+    |
+    */
+    'runtime' => [
+        'dry_run' => false,
+        'force' => false,
+    ],
 
     /*
     |--------------------------------------------------------------------------
@@ -162,12 +208,23 @@ return [
     | Model Base Class
     |--------------------------------------------------------------------------
     */
-    'base_model_class' => env('DB_INTROSPECTION_BASE_MODEL', 'Illuminate\\Database\\Eloquent\\Model'),
+    'base_model_class' => env('DB_INTROSPECTION_BASE_MODEL', Model::class),
 
     /*
     |--------------------------------------------------------------------------
     | Relationship Detection Settings
     |--------------------------------------------------------------------------
+    |
+    | 'inverse_naming' decides how a hasMany is named when the child table points
+    | at the same parent more than once — vehicle_bookings.customer_id and
+    | vehicle_bookings.assigned_agent_id both referencing users:
+    |
+    |   prefix → customerVehicleBookings() / assignedAgentVehicleBookings()
+    |   suffix → vehicleBookingsCustomer() / vehicleBookingsAssignedAgent()
+    |
+    | Without a qualifier both would be named vehicleBookings(), which is a fatal
+    | redeclaration. A single key to a parent is never qualified.
+    |
     */
     'relationships' => [
         'detect_belongs_to' => env('DB_INTROSPECTION_BELONGS_TO', true),
@@ -178,6 +235,32 @@ return [
         'smart_inverse_detection' => env('DB_INTROSPECTION_SMART_INVERSE', true),
         'typed_relationships' => env('DB_INTROSPECTION_TYPED_RELATIONS', true),
         'max_relationship_depth' => env('DB_INTROSPECTION_MAX_DEPTH', 3),
+        'inverse_naming' => env('ANVIL_INVERSE_NAMING', 'prefix'),   // prefix | suffix
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Domain Events & Listeners
+    |--------------------------------------------------------------------------
+    |
+    | Read by EventGenerator and ListenerGenerator. anvil:generate overwrites
+    | 'listeners', 'listener_style' and 'queued_listeners' at runtime from
+    | --listeners / --listener-style / --queued-listeners.
+    |
+    | listener_style:
+    |   per-event  → App\Listeners\{Model}\CreatedListener, one class per event
+    |   subscriber → App\Listeners\{Model}EventSubscriber, one class per model
+    |
+    | Laravel 11+ auto-discovers listeners under app/Listeners; subscribers must
+    | be registered manually (the generated class documents the call).
+    |
+    */
+    'events' => [
+        'namespace' => 'App\\Events',
+        'listeners' => false,
+        'listener_namespace' => 'App\\Listeners',
+        'listener_style' => env('ANVIL_LISTENER_STYLE', 'per-event'),   // per-event | subscriber
+        'queued_listeners' => false,   // implement ShouldQueue (per-event style only)
     ],
 
     /*
@@ -337,11 +420,12 @@ return [
     | Custom Generators
     |--------------------------------------------------------------------------
     |
-    | Add your own Generator implementations here. They will be appended to
-    | the orchestrator's generator list after all built-in generators.
+    | Add your own Generator implementations here. A flat list is appended to
+    | the core group; a group-keyed map targets a specific pipeline slice.
     |
     | Example:
-    |   App\Generators\OpenApiSpecGenerator::class,
+    |   App\Generators\SidecarGenerator::class,
+    |   'openapi' => [App\Generators\WebhookPathGenerator::class],
     |
     */
     'custom_generators' => [
@@ -419,6 +503,11 @@ return [
             'include_broadcast_stub' => true,   // Adds commented-out broadcastOn()
         ],
 
+        'listeners' => [
+            'namespace' => 'App\\Listeners',
+            'include_failed_hook' => true,   // failed() method on queued listeners
+        ],
+
         'observers' => [
             'namespace' => 'App\\Observers',
             'auto_register' => false,
@@ -447,28 +536,108 @@ return [
         ],
 
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | OpenAPI Specification
+    |--------------------------------------------------------------------------
+    |
+    | OUTPUT LAYOUT — 'versioned_output' puts each API version in its own
+    | directory so v1 and v2 coexist:
+    |
+    |   openapi/v1/openapi.yaml + schemas/ + paths/
+    |   openapi/v2/openapi.yaml + schemas/ + paths/
+    |
+    | Set it to false for the flat pre-versioning layout (openapi/openapi.yaml).
+    | Existing installs upgrading to versioned output should move their files:
+    |
+    |   mkdir -p openapi/v1 && git mv openapi/openapi.yaml openapi/schemas \
+    |       openapi/paths openapi/v1/
+    |
+    | 'title' is null so it falls back to config('app.name'). Setting a literal
+    | here means every project's spec is titled the same thing.
+    |
+    */
     'openapi' => [
-        'title' => env('ANVIL_OPENAPI_TITLE', 'Laravel Anvil'),
+        'title' => env('ANVIL_OPENAPI_TITLE', null),   // null → config('app.name')
+        'description' => null,
         'output_path' => 'openapi',
-        'format' => 'yaml',        // yaml | json
+        'versioned_output' => env('ANVIL_OPENAPI_VERSIONED', true),
+        'format' => env('ANVIL_OPENAPI_FORMAT', 'yaml'),   // yaml | json
         'split_files' => true,
-        'version' => '3.1.0',
+
+        'spec_version' => '3.1.0',        // the OpenAPI spec version itself
+        'api_version' => env('ANVIL_API_VERSION', 'v1'),   // which API version is being written
+
         'api_url' => env('APP_URL', 'http://localhost'),
-        'security' => 'sanctum',     // sanctum | passport | none
-        'publish_ui' => false,
+        'servers' => [],   // explicit server URLs; empty → derived from api_url + api.prefix + version
+        'security' => env('ANVIL_OPENAPI_SECURITY', 'sanctum'),   // sanctum | passport | bearer | apikey | none
+
+        'contact_name' => null,
+        'contact_email' => null,
+
+        // Runtime gates, written by anvil:generate-api. Leave false here: the
+        // generators OR these against GenerationOptions so a DTO key mismatch
+        // cannot silently no-op the whole spec pipeline.
+        'enabled' => false,
+        'ui' => false,
+
+        /*
+        |----------------------------------------------------------------------
+        | Interactive Docs
+        |----------------------------------------------------------------------
+        |
+        | 'route' is served dynamically by DocsController, which bundles the
+        | split $ref files into one document on the fly:
+        |
+        |   /docs                      Swagger UI, default version
+        |   /docs/v1                   Swagger UI for v1
+        |   /docs/v1/openapi.yaml      the bundled root spec
+        |   /docs/v1/schemas/User.yaml a raw split file
+        |
+        | 'public_path' is where --ui writes a STATIC bundle, and it MUST NOT
+        | equal 'route'. Publishing to public/docs makes that directory exist on
+        | disk, and both `php artisan serve` and an nginx try_files block then
+        | hand /docs to the static handler instead of PHP — the route silently
+        | stops working and you get the web server's own 404.
+        |
+        | 'remote_base' is for a spec published elsewhere (a CDN, a docs bucket,
+        | another service). Null — the default — reads from output_path on local
+        | disk. Do NOT point it at this application's own URL: that makes the app
+        | HTTP-fetch from itself and breaks whenever app.url is not the address
+        | actually being served.
+        |
+        | SECURITY: 'enabled' defaults to true only in local. Anywhere else, add
+        | 'auth' (or a signed/IP middleware) to 'middleware' before enabling it —
+        | the docs describe every endpoint you have.
+        |
+        */
         'docs' => [
-            'enabled' => env('ANVIL_DOCS_ENABLED', true),
-            'route' => env('ANVIL_DOCS_ROUTE', 'docs'),   // serves /docs and /docs/{file}
-            'middleware' => ['web'],                            // add 'auth' to gate it in prod
-            'ui_version' => '5.17.14',                          // swagger-ui-dist CDN version
+            'enabled' => env('ANVIL_DOCS_ENABLED', env('APP_ENV', 'production') === 'local'),
+            'route' => env('ANVIL_DOCS_ROUTE', 'docs'),
+            'public_path' => env('ANVIL_DOCS_PUBLIC_PATH', 'api-docs'),
+            'middleware' => ['web'],   // production: ['web', 'auth']
+            'ui_version' => '5.17.14',   // swagger-ui-dist CDN version
+            'remote_base' => env('ANVIL_DOCS_REMOTE_BASE', null),
+            'remote_timeout' => env('ANVIL_DOCS_REMOTE_TIMEOUT', 5),
         ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Web Scaffold
+    |--------------------------------------------------------------------------
+    */
     'web' => [
         'controller_namespace' => 'App\\Http\\Controllers\\Web',
         'route_file' => 'routes/web.php',
         'middleware' => ['web', 'auth'],   // routes wrapped in this group
         'layout' => 'layouts.anvil',   // views @extends this
         'generate_layout' => true,              // emit a Tailwind-CDN base layout once
+        'generate_nav' => true,
+        'livewire' => [
+            'namespace' => 'App\\Livewire',
+        ],
     ],
 
 ];

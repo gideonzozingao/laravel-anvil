@@ -76,7 +76,7 @@ class DatabaseInspector
                   AND schema_name NOT LIKE 'pg_temp_%'
                   AND schema_name NOT LIKE 'pg_toast_temp_%'
                 ORDER BY schema_name
-            "))->pluck('schema_name')->map(fn ($s) => (string) $s)->all(),
+            "))->pluck('schema_name')->map(fn ($s): string => (string) $s)->all(),
 
             // In MySQL a "schema" is a database.
             'mysql' => collect($this->connection->select("
@@ -84,7 +84,7 @@ class DatabaseInspector
                 FROM information_schema.schemata
                 WHERE schema_name NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')
                 ORDER BY schema_name
-            "))->pluck('schema_name')->map(fn ($s) => (string) $s)->all(),
+            "))->pluck('schema_name')->map(fn ($s): string => (string) $s)->all(),
 
             'sqlsrv' => collect($this->connection->select("
                 SELECT s.name AS schema_name
@@ -95,7 +95,7 @@ class DatabaseInspector
                                      'db_datawriter', 'db_denydatareader', 'db_denydatawriter')
                   AND s.principal_id <> 4
                 ORDER BY s.name
-            "))->pluck('schema_name')->map(fn ($s) => (string) $s)->all(),
+            "))->pluck('schema_name')->map(fn ($s): string => (string) $s)->all(),
 
             // SQLite: single schema.
             'sqlite' => ['main'],
@@ -115,17 +115,17 @@ class DatabaseInspector
      */
     public function resolveSchemas(string|array|null $selection): array
     {
-        if ($selection === null || $selection === '' || $selection === []) {
+        if (in_array($selection, [null, '', []], true)) {
             $default = $this->defaultSchema();
 
             return $default !== null ? [$default] : [];
         }
 
         if (is_string($selection)) {
-            $selection = array_map('trim', explode(',', $selection));
+            $selection = array_map(trim(...), explode(',', $selection));
         }
 
-        $selection = array_values(array_filter(array_map('strval', $selection), fn ($s) => $s !== ''));
+        $selection = array_values(array_filter(array_map(strval(...), $selection), fn ($s): bool => $s !== ''));
 
         if (in_array('all', $selection, true) || in_array('*', $selection, true)) {
             return $this->getSchemas();
@@ -190,7 +190,7 @@ class DatabaseInspector
             default => throw new \Exception('Unsupported database driver: '.$this->driver),
         };
 
-        return array_values(array_map('strval', $tables));
+        return array_values(array_map(strval(...), $tables));
     }
 
     /**
@@ -493,7 +493,7 @@ class DatabaseInspector
                     'referenced_column_name' => $fk->to,
                     'constraint_name' => null,
                 ])
-                ->toArray(),
+                ->all(),
 
             'sqlsrv' => $this->connection->select('
                 SELECT

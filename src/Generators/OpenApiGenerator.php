@@ -68,8 +68,8 @@ final class OpenApiGenerator implements Generator
         $requiredBlock = '';
         if (! empty($required)) {
             $requiredBlock = "required:\n"
-                .implode("\n", array_map(fn ($f) => "  - {$f}", $required))
-                ."\n";
+              .implode("\n", array_map(fn ($f): string => "  - {$f}", $required))
+              ."\n";
         }
 
         $content = <<<YAML
@@ -122,13 +122,13 @@ YAML;
             fn ($col) => $col['name'],
             array_filter(
                 $meta->columns,
-                fn ($col) => ! ($col['nullable'] ?? false)
-                    && ! in_array($col['name'], [
-                        $meta->primaryKey,
-                        'created_at',
-                        'updated_at',
-                        'deleted_at',
-                    ], true)
+                fn ($col): bool => ! ($col['nullable'] ?? false)
+                  && ! in_array($col['name'], [
+                      $meta->primaryKey,
+                      'created_at',
+                      'updated_at',
+                      'deleted_at',
+                  ], true)
             )
         ));
     }
@@ -429,7 +429,7 @@ YAML;
      */
     protected function mapColumnType(string $dbType): array
     {
-        $type = strtolower(preg_replace('/\(.*\)/', '', trim($dbType)));
+        $type = strtolower((string) preg_replace('/\(.*\)/', '', trim($dbType)));
 
         return match (true) {
             in_array($type, ['int', 'integer', 'smallint', 'mediumint']) => ['integer', 'int32'],

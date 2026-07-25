@@ -1,33 +1,35 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Zuqongtech\LaravelAnvil\Generators;
 
 use Zuqongtech\LaravelAnvil\Contracts\Generator;
+use Zuqongtech\LaravelAnvil\Generators\Concerns\WritesVersionedFiles;
+use Zuqongtech\LaravelAnvil\Support\ApiVersionProfile;
 use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
 
 /**
- * Generates a versioned API controller for each model.
+ * Generates a versioned API controller per model:
  *
- * Unlike the generic ControllerGenerator (which targets App\Http\Controllers\),
- * this generator places controllers under:
+ *   App\Http\Controllers\Api\V1\ApiController      (base, once per version)
+ *   App\Http\Controllers\Api\V1\UserController
  *
- *   App\Http\Controllers\Api\V{n}\{Model}Controller
+ * Wired to the version-scoped classes rather than global ones:
  *
- * The generated controller:
- *  - Extends the versioned base ApiController (also generated once per version)
- *  - Injects the model's Service class for all business logic
- *  - Uses StoreXxx / UpdateXxx FormRequests for validation
- *  - Returns XxxResource responses — every response is already JSON because
- *    the ForceJsonServiceProvider (generated separately) sets the Accept header
- *  - Handles index (paginated), show, store, update, destroy
- *  - Adds restore / forceDelete when the model uses SoftDeletes
- *  - All responses are wrapped in a consistent envelope via ApiResponse helper
+ *   App\Http\Requests\Api\V1\User\{Index,Store,Update}Request
+ *   App\Http\Resources\Api\V1\{UserResource, UserCollection}
+ *   App\Services\User Service                     (shared across versions)
+ *   App\Services\Api\V1\UserService               (when versioned_services=true)
  *
- * This generator is activated only when $options->api === true.
+ * Envelope helpers live on the base controller, so the shape is defined once
+ * instead of being pasted into every action.
  */
 final class ApiControllerGenerator implements Generator
 {
+    use WritesVersionedFiles;
+
     #[\Override]
     public function supports(GenerationOptions $options): bool
     {
@@ -43,195 +45,147 @@ final class ApiControllerGenerator implements Generator
     #[\Override]
     public function generate(ModelMetadata $meta, GenerationOptions $options): array
     {
-        $results = [];
-
-        // Ensure the versioned base controller exists (idempotent)
-        $results[] = $this->ensureBaseController($options);
-
-        // Generate the model-specific controller
-        $results[] = $this->generateModelController($meta, $options);
-
-        return $results;
-    }
-
-    // -----------------------------------------------------------------------
-    // Base controller (generated once per version)
-    // -----------------------------------------------------------------------
-
-    protected function ensureBaseController(GenerationOptions $options): array
-    {
-        $versionString = $options->getApiVersionString();
-        $dir = app_path("Http/Controllers/Api/{$versionString}");
-        $path = "{$dir}/ApiController.php";
-
-        if (file_exists($path)) {
-            return [
-                'type' => $this->getName().'Base',
-                'name' => "Api\\{$versionString}\\ApiController",
-                'path' => $path,
-                'status' => 'skipped',
-                'reason' => 'already exists',
-            ];
-        }
-
-        $content = $this->buildBaseController($options);
-
-        if (! $options->dryRun) {
-            if (! is_dir($dir)) {
-                mkdir($dir, 0755, true);
-            }
-            file_put_contents($path, $content);
-        }
+        $profile = $this->profile($options);
 
         return [
-            'type' => $this->getName().'Base',
-            'name' => "Api\\{$versionString}\\ApiController",
-            'path' => $path,
-            'status' => 'success',
-            'action' => 'created',
+            $this->writeClass(
+                $this->getName().'Base',
+                $profile->controllerNamespace(),
+                'ApiController',
+                $options,
+                fn (): string => $this->buildBaseController($profile),
+                overwritable: false,
+            ),
+            $this->writeClass(
+                $this->getName(),
+                $profile->controllerNamespace(),
+                $meta->model.'Controller',
+                $options,
+                fn (): string => $this->buildModelController($meta, $profile, $options),
+            ),
         ];
     }
 
-    protected function buildBaseController(GenerationOptions $options): string
+    // -----------------------------------------------------------------------
+    // Base controller
+    // -----------------------------------------------------------------------
+
+    protected function buildBaseController(ApiVersionProfile $profile): string
     {
-        $versionString = $options->getApiVersionString();
-        $versionSlug = $options->getApiVersionSlug();
+        $namespace = $profile->controllerNamespace();
+        $version = $profile->version;
 
         return <<<PHP
 <?php
 
-namespace App\Http\Controllers\Api\\{$versionString};
+namespace {$namespace};
 
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Validation\ValidatesRequests;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 
 /**
- * Base controller for all {$versionString} API endpoints.
+ * Base controller for {$version} API endpoints.
  *
- * Every response flowing through this controller is guaranteed to be JSON
- * because ForceJsonServiceProvider sets Accept: application/json globally.
+ * Every response is JSON because ForceJsonApiServiceProvider sets
+ * Accept: application/json for this route group.
  *
- * Use the ApiResponse trait's helpers for consistent envelope formatting:
- *   \$this->success(\$data, \$message, \$status)
- *   \$this->error(\$message, \$status, \$errors)
- *   \$this->paginated(\$paginator, ResourceClass::class)
+ * The envelope helpers below are real methods, not documentation: the previous
+ * generation described \$this->success() in a docblock while every action built
+ * the array inline, so changing the envelope meant editing every controller.
  */
 abstract class ApiController extends Controller
 {
     use AuthorizesRequests;
     use ValidatesRequests;
 
-    /** API version surfaced in every response envelope. */
-    protected string \$apiVersion = '{$versionSlug}';
+    /** Surfaced in every response envelope. */
+    protected string \$apiVersion = '{$version}';
+
+    /**
+     * @param  mixed  \$data
+     */
+    protected function success(\$data = null, ?string \$message = null, int \$status = 200): JsonResponse
+    {
+        return response()->json(array_filter([
+            'success' => true,
+            'version' => \$this->apiVersion,
+            'message' => \$message,
+            'data' => \$data,
+        ], static fn (\$value, \$key): bool => \$key === 'data' || \$value !== null, ARRAY_FILTER_USE_BOTH), \$status);
+    }
+
+    /**
+     * @param  array<string, mixed>  \$errors
+     */
+    protected function error(string \$message, int \$status = 400, array \$errors = []): JsonResponse
+    {
+        return response()->json(array_filter([
+            'success' => false,
+            'version' => \$this->apiVersion,
+            'message' => \$message,
+            'errors' => \$errors ?: null,
+        ], static fn (\$value): bool => \$value !== null), \$status);
+    }
+
+    /**
+     * 204 responses carry NO body. Sending one is a protocol violation that
+     * some HTTP clients reject outright.
+     */
+    protected function deleted(): JsonResponse
+    {
+        return response()->json(null, 204);
+    }
 }
 
 PHP;
     }
 
     // -----------------------------------------------------------------------
-    // Model-specific controller
+    // Model controller
     // -----------------------------------------------------------------------
 
-    protected function generateModelController(ModelMetadata $meta, GenerationOptions $options): array
-    {
-        $versionString = $options->getApiVersionString();
-        $controllerName = $meta->model.'Controller';
-        $dir = app_path("Http/Controllers/Api/{$versionString}");
-        $path = "{$dir}/{$controllerName}.php";
-
-        if (file_exists($path) && ! $options->force) {
-            return [
-                'type' => $this->getName(),
-                'name' => $controllerName,
-                'path' => $path,
-                'status' => 'skipped',
-                'reason' => 'already exists',
-            ];
-        }
-
-        $content = $this->buildModelController($meta, $options);
-
-        if (! $options->dryRun) {
-            if (! is_dir($dir)) {
-                mkdir($dir, 0755, true);
-            }
-            file_put_contents($path, $content);
-        }
-
-        return [
-            'type' => $this->getName(),
-            'name' => $controllerName,
-            'path' => $path,
-            'status' => 'success',
-            'action' => file_exists($path) ? 'overwritten' : 'created',
-        ];
-    }
-
-    protected function buildModelController(ModelMetadata $meta, GenerationOptions $options): string
+    protected function buildModelController(ModelMetadata $meta, ApiVersionProfile $profile, GenerationOptions $options): string
     {
         $model = $meta->model;
-        $versionString = $options->getApiVersionString();
-        $modelNamespace = trim($options->getNamespace(), '\\');
-        $fullModel = $modelNamespace.'\\'.$model;
         $variable = lcfirst($model);
-        $service = $model.'Service';
-        $resource = $model.'Resource';
-        $storeReq = 'Store'.$model.'Request';
-        $updateReq = 'Update'.$model.'Request';
+        $namespace = $profile->controllerNamespace();
 
-        $softDeleteMethods = '';
-        if ($meta->softDeletes) {
-            $softDeleteMethods = <<<PHP
+        $requestNamespace = $profile->requestNamespace($model);
+        $indexRequest = $profile->requestClass($model, 'index');
+        $storeRequest = $profile->requestClass($model, 'store');
+        $updateRequest = $profile->requestClass($model, 'update');
 
+        $resourceNamespace = $profile->resourceNamespace();
+        $resource = $profile->resourceClass($model);
+        $collection = $profile->collectionClass($model);
 
-    /**
-     * Restore a soft-deleted {$model}.
-     *
-     * PATCH {$variable}s/{id}/restore
-     */
-    public function restore(int|string \$id): JsonResponse
-    {
-        \${$variable} = \$this->service->restore(\$id);
+        [$serviceFqn, $service] = $this->serviceFor($model, $profile);
 
-        return response()->json([
-            'success' => true,
-            'version' => \$this->apiVersion,
-            'data'    => new {$resource}(\${$variable}),
+        $imports = array_unique([
+            "use {$requestNamespace}\\{$indexRequest};",
+            "use {$requestNamespace}\\{$storeRequest};",
+            "use {$requestNamespace}\\{$updateRequest};",
+            "use {$resourceNamespace}\\{$resource};",
+            "use {$resourceNamespace}\\{$collection};",
+            "use {$serviceFqn};",
+            'use Illuminate\Http\JsonResponse;',
         ]);
-    }
 
-    /**
-     * Permanently delete a {$model}.
-     *
-     * DELETE {$variable}s/{id}/force
-     */
-    public function forceDelete(int|string \$id): JsonResponse
-    {
-        \$this->service->forceDelete(\$id);
+        sort($imports);
+        $importBlock = implode("\n", $imports);
 
-        return response()->json([
-            'success' => true,
-            'version' => \$this->apiVersion,
-            'data'    => null,
-        ], 204);
-    }
-PHP;
-        }
+        $softDeletes = $meta->softDeletes
+            ? $this->buildSoftDeleteActions($model, $variable, $resource)
+            : '';
 
         return <<<PHP
 <?php
 
-namespace App\Http\Controllers\Api\\{$versionString};
+namespace {$namespace};
 
-use {$fullModel};
-use App\Http\Requests\\{$storeReq};
-use App\Http\Requests\\{$updateReq};
-use App\Http\Resources\\{$resource};
-use App\Services\\{$service};
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+{$importBlock}
 
 class {$model}Controller extends ApiController
 {
@@ -240,86 +194,108 @@ class {$model}Controller extends ApiController
     ) {}
 
     /**
-     * Return a paginated JSON listing of {$model} records.
+     * GET — paginated {$model} listing.
      *
-     * GET {$variable}s
+     * Page size comes from the request object, which clamps it to this version's
+     * maximum; an unclamped ?per_page= is a denial-of-service invitation.
      */
-    public function index(Request \$request): AnonymousResourceCollection
+    public function index({$indexRequest} \$request): {$collection}
     {
-        \$perPage = (int) \$request->query('per_page', 15);
-        \$filters = \$request->only([]);  // add filterable fields here
-
-        \$paginator = \$this->service->paginate(\$perPage, \$filters);
-
-        return {$resource}::collection(\$paginator);
+        return new {$collection}(
+            \$this->service->paginate(\$request->perPage())
+        );
     }
 
     /**
-     * Return a single {$model} as JSON.
-     *
-     * GET {$variable}s/{id}
+     * GET — a single {$model}.
      */
     public function show(int|string \$id): JsonResponse
     {
-        \${$variable} = \$this->service->findOrFail(\$id);
-
-        return response()->json([
-            'success' => true,
-            'version' => \$this->apiVersion,
-            'data'    => new {$resource}(\${$variable}),
-        ]);
+        return \$this->success(
+            new {$resource}(\$this->service->findOrFail(\$id))
+        );
     }
 
     /**
-     * Store a newly created {$model} and return it as JSON.
-     *
-     * POST {$variable}s
+     * POST — create a {$model}.
      */
-    public function store({$storeReq} \$request): JsonResponse
+    public function store({$storeRequest} \$request): JsonResponse
     {
         \${$variable} = \$this->service->create(\$request->validated());
 
-        return response()->json([
-            'success' => true,
-            'version' => \$this->apiVersion,
-            'data'    => new {$resource}(\${$variable}),
-        ], 201);
+        return \$this->success(new {$resource}(\${$variable}), '{$model} created.', 201);
     }
 
     /**
-     * Update a {$model} and return the updated resource as JSON.
-     *
-     * PUT/PATCH {$variable}s/{id}
+     * PUT/PATCH — update a {$model}.
      */
-    public function update({$updateReq} \$request, int|string \$id): JsonResponse
+    public function update({$updateRequest} \$request, int|string \$id): JsonResponse
     {
         \${$variable} = \$this->service->update(\$id, \$request->validated());
 
-        return response()->json([
-            'success' => true,
-            'version' => \$this->apiVersion,
-            'data'    => new {$resource}(\${$variable}),
-        ]);
+        return \$this->success(new {$resource}(\${$variable}), '{$model} updated.');
     }
 
     /**
-     * Delete a {$model} and return a 204 JSON response.
-     *
-     * DELETE {$variable}s/{id}
+     * DELETE — remove a {$model}.
      */
     public function destroy(int|string \$id): JsonResponse
     {
         \$this->service->delete(\$id);
 
-        return response()->json([
-            'success' => true,
-            'version' => \$this->apiVersion,
-            'data'    => null,
-        ], 204);
-    }
-{$softDeleteMethods}
+        return \$this->deleted();
+    }{$softDeletes}
 }
 
 PHP;
+    }
+
+    protected function buildSoftDeleteActions(string $model, string $variable, string $resource): string
+    {
+        return <<<PHP
+
+
+    /**
+     * PATCH — restore a soft-deleted {$model}.
+     */
+    public function restore(int|string \$id): JsonResponse
+    {
+        \${$variable} = \$this->service->restore(\$id);
+
+        return \$this->success(new {$resource}(\${$variable}), '{$model} restored.');
+    }
+
+    /**
+     * DELETE — permanently remove a {$model}.
+     */
+    public function forceDelete(int|string \$id): JsonResponse
+    {
+        \$this->service->forceDelete(\$id);
+
+        return \$this->deleted();
+    }
+PHP;
+    }
+
+    /**
+     * Business logic is shared across versions by default: a per-version copy of
+     * a service duplicates the logic the service layer exists to centralise.
+     * When anvil.api.versions.{v}.versioned_services is true, a thin SUBCLASS is
+     * generated instead, so a version can override behaviour without forking it.
+     *
+     * @return array{0: string, 1: string} [fqcn, short name]
+     */
+    protected function serviceFor(string $model, ApiVersionProfile $profile): array
+    {
+        $service = $model.'Service';
+
+        if (! (bool) $profile->get('versioned_services', false)) {
+            return ['App\\Services\\'.$service, $service];
+        }
+
+        $namespace = trim((string) $profile->get('namespaces.services', 'App\\Services\\Api'), '\\')
+            .'\\'.$profile->segment();
+
+        return [$namespace.'\\'.$service, $service];
     }
 }

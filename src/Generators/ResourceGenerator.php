@@ -292,7 +292,7 @@ PHP;
         }
 
         return implode("\n", array_map(
-            fn ($fqn) => "use {$fqn};",
+            fn ($fqn): string => "use {$fqn};",
             array_keys($imports)
         ));
     }

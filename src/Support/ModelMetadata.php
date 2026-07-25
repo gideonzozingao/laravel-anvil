@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Zuqongtech\LaravelAnvil\Support;
 
 use Illuminate\Support\Str;
@@ -33,6 +35,23 @@ final class ModelMetadata
 
     public array $inverseRelationships = [];
 
+    /**
+     * Relation method names, planned once and shared by every generator.
+     *
+     * @var array{belongsTo: array<string, string>, inverse: array<string, string>}|null
+     */
+    private ?array $relationNames = null;
+
+    /** @var list<array{name: string, wanted: string, column: string, related: string}> */
+    private array $relationCollisions = [];
+
+    /**
+     * Signature of the data the plan was built from. inverseRelationships is
+     * filled by the relationship-map pass, which may run after this object is
+     * constructed, so a stale plan must be detectable.
+     */
+    private ?string $relationSignature = null;
+
     public static function fromTable(string $table, DatabaseInspector $inspector, ?string $schema = null): self
     {
         $metadata = new self;
@@ -55,6 +74,104 @@ final class ModelMetadata
 
         return $metadata;
     }
+
+    // -----------------------------------------------------------------------
+    // Relation naming — one plan, every generator
+    // -----------------------------------------------------------------------
+
+    /**
+     * The relation method names for this model.
+     *
+     * Every generator that references a relation MUST read from here rather than
+     * deriving a name itself. The model generator's methods, its @method
+     * docblock, the API resource's whenLoaded() calls and the OpenAPI resource
+     * schema properties all have to agree; three of them independently calling
+     * Str::plural() is how a model ends up with two vehicleBookings() methods
+     * and a resource that loads a relation which does not exist.
+     *
+     * Computed lazily and re-computed if inverseRelationships changes, so the
+     * relationship-map pass can run before or after this is first touched.
+     *
+     * @return array{belongsTo: array<string, string>, inverse: array<string, string>}
+     */
+    public function relationNames(): array
+    {
+        $signature = $this->relationDataSignature();
+
+        if ($this->relationNames === null || $this->relationSignature !== $signature) {
+            $namer = RelationNamer::forModel($this);
+
+            $this->relationNames = $namer->plan($this);
+            $this->relationCollisions = $namer->collisions();
+            $this->relationSignature = $signature;
+        }
+
+        return $this->relationNames;
+    }
+
+    /**
+     * The belongsTo method name for a foreign key column.
+     *
+     *   $meta->belongsToName('tenant_id')          // 'tenant'
+     *   $meta->belongsToName('assigned_agent_id')  // 'assignedAgent'
+     */
+    public function belongsToName(string $column): ?string
+    {
+        return $this->relationNames()['belongsTo'][$column] ?? null;
+    }
+
+    /**
+     * The hasMany / hasOne method name for a child table + its foreign key.
+     *
+     *   $meta->inverseName('vehicle_bookings', 'customer_id')
+     *       // 'customerVehicleBookings'
+     */
+    public function inverseName(string $childTable, string $column): ?string
+    {
+        return $this->relationNames()['inverse'][$childTable.':'.$column] ?? null;
+    }
+
+    /**
+     * Names that had to be altered because the preferred one was taken. Worth
+     * reporting in the run summary — these are the tables a human should look at.
+     *
+     * @return list<array{name: string, wanted: string, column: string, related: string}>
+     */
+    public function relationCollisions(): array
+    {
+        $this->relationNames();
+
+        return $this->relationCollisions;
+    }
+
+    /** Force the next relationNames() call to re-plan. */
+    public function forgetRelationNames(): void
+    {
+        $this->relationNames = null;
+        $this->relationSignature = null;
+        $this->relationCollisions = [];
+    }
+
+    /**
+     * Cheap fingerprint of everything the plan depends on.
+     */
+    private function relationDataSignature(): string
+    {
+        return md5(serialize([
+            $this->table,
+            array_map(
+                static fn ($fk): array => is_array($fk) ? array_intersect_key($fk, array_flip(['column', 'referenced_table'])) : [],
+                $this->foreignKeys,
+            ),
+            $this->inverseRelationships,
+            array_column($this->columns, 'name'),
+            config('anvil.relationships.inverse_naming'),
+        ]));
+    }
+
+    // -----------------------------------------------------------------------
+    // Schema qualification
+    // -----------------------------------------------------------------------
 
     /**
      * True when this table lives in a non-default schema and therefore needs
@@ -89,6 +206,11 @@ final class ModelMetadata
      * StudlyCase namespace segment for this table's schema (e.g. "auth" → "Auth").
      * Returns null when there is nothing to add (no schema, or the default one
      * when $defaultSchema is supplied).
+     *
+     * NOTE: PHP reserved words are not legal namespace segments. A schema named
+     * "public" would yield App\Models\Public\Tenant, which is a parse error on
+     * older PHP and confuses some static analysers even where it parses — hence
+     * the suffix.
      */
     public function schemaNamespaceSegment(?string $defaultSchema = null): ?string
     {
@@ -96,7 +218,9 @@ final class ModelMetadata
             return null;
         }
 
-        return Str::studly(str_replace(['.', '-', ' '], '_', $this->schema));
+        $segment = Str::studly(str_replace(['.', '-', ' '], '_', $this->schema));
+
+        return self::isReservedNamespaceSegment($segment) ? $segment.'Schema' : $segment;
     }
 
     /**
@@ -110,5 +234,48 @@ final class ModelMetadata
         }
 
         return Str::kebab(str_replace(['.', ' '], '_', $this->schema));
+    }
+
+    private static function isReservedNamespaceSegment(string $segment): bool
+    {
+        static $reserved = [
+            'public',
+            'private',
+            'protected',
+            'static',
+            'class',
+            'interface',
+            'trait',
+            'enum',
+            'function',
+            'const',
+            'namespace',
+            'use',
+            'new',
+            'return',
+            'list',
+            'array',
+            'default',
+            'match',
+            'fn',
+            'readonly',
+            'never',
+            'void',
+            'null',
+            'true',
+            'false',
+            'int',
+            'float',
+            'string',
+            'bool',
+            'object',
+            'iterable',
+            'callable',
+            'mixed',
+            'parent',
+            'self',
+        ];
+
+        return in_array(strtolower($segment), $reserved, true);
     }
 }
