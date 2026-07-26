@@ -582,6 +582,10 @@ return [
         'enabled' => false,
         'ui' => false,
 
+        'base_path_location' => 'auto',
+        'servers' => [
+            ['url' => env('APP_URL', 'http://localhost') . '/api/v1', 'description' => 'Local'],
+        ],
         /*
         |----------------------------------------------------------------------
         | Interactive Docs
@@ -637,6 +641,16 @@ return [
         'generate_nav' => true,
         'livewire' => [
             'namespace' => 'App\\Livewire',
+        ],
+        'frontend' => [
+            'mode' => 'cdn',              // cdn | vite | none — how layouts load Tailwind
+            'tailwind_version' => 4,      // used only when installing from scratch
+            'livewire_constraint' => '^3.0',
+            'css_entrypoint' => 'resources/css/app.css',
+            'composer_binary' => 'composer',
+            'npm_binary' => 'npm',
+            'process_timeout' => 600,
+            'backup_before_patch' => true,
         ],
     ],
 
