@@ -69,7 +69,7 @@ final class FrontendDetector
             }
         }
 
-        return is_dir($this->path('vendor/' . $package));
+        return is_dir($this->path('vendor/'.$package));
     }
 
     private function composerPackageVersion(string $package): ?string
@@ -208,7 +208,7 @@ final class FrontendDetector
     {
         $base = $this->basePath ?? $this->applicationBasePath();
 
-        return rtrim($base, '/') . ($relative !== '' ? '/' . ltrim($relative, '/') : '');
+        return rtrim($base, '/').($relative !== '' ? '/'.ltrim($relative, '/') : '');
     }
 
     /**

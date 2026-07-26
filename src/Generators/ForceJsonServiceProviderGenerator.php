@@ -375,7 +375,7 @@ PHP;
                 continue;
             }
 
-            $entries[] = "        '" . addslashes($middleware) . "',";
+            $entries[] = "        '".addslashes($middleware)."',";
         }
 
         return implode("\n", array_values(array_unique($entries)));
@@ -400,7 +400,7 @@ PHP;
                 'ForceJsonApiServiceProvider',
                 $path,
                 'skipped',
-                'managed marker missing — add "' . $version . '" => "routes/api/' . $version . '.php" to $versions by hand',
+                'managed marker missing — add "'.$version.'" => "routes/api/'.$version.'.php" to $versions by hand',
             );
         }
 
@@ -410,7 +410,7 @@ PHP;
 
         $updated = str_replace(
             self::MANAGED_MARKER,
-            self::MANAGED_MARKER . "\n        '{$version}' => 'routes/api/{$version}.php',",
+            self::MANAGED_MARKER."\n        '{$version}' => 'routes/api/{$version}.php',",
             $contents,
         );
 
@@ -432,7 +432,7 @@ PHP;
         $outcome = $registrar->registerProvider(self::PROVIDER_FQN);
 
         return [
-            'type' => $this->getName() . 'Bootstrap',
+            'type' => $this->getName().'Bootstrap',
             'name' => $outcome['target'],
             'path' => $outcome['path'] ?? null,
             'status' => $outcome['status'],
@@ -477,7 +477,7 @@ PHP;
         ?string $action = null,
     ): array {
         $out = [
-            'type' => $this->getName() . $suffix,
+            'type' => $this->getName().$suffix,
             'name' => $name,
             'path' => $path,
             'status' => $status,

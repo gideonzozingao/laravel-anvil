@@ -343,13 +343,13 @@ class GenerateWebCommand extends Command
     private function summarise(string $stack, int $perPage, string $assetsMode): void
     {
         $layout = (string) config('anvil.web.layout', 'layouts.anvil');
-        $layoutPath = resource_path('views/' . str_replace('.', '/', $layout) . '.blade.php');
+        $layoutPath = resource_path('views/'.str_replace('.', '/', $layout).'.blade.php');
         $generatesLayout = (bool) config('anvil.web.generate_layout', true);
 
         $layoutState = match (true) {
-            file_exists($layoutPath) => $layout . ' (exists, left alone)',
-            $generatesLayout => $layout . ' (will be generated)',
-            default => $layout . ' — MISSING and generation disabled',
+            file_exists($layoutPath) => $layout.' (exists, left alone)',
+            $generatesLayout => $layout.' (will be generated)',
+            default => $layout.' — MISSING and generation disabled',
         };
 
         $rows = [
@@ -360,7 +360,7 @@ class GenerateWebCommand extends Command
             ['Layout', $layoutState],
             ['Navigation', config('anvil.web.generate_nav', true) ? 'generated (runtime-discovered links)' : 'skipped'],
             ['Assets', $this->describeAssetsMode($assetsMode)],
-            ['Rows per page', $perPage . ' (options: ' . implode(', ', $this->perPageOptions($perPage)) . ')'],
+            ['Rows per page', $perPage.' (options: '.implode(', ', $this->perPageOptions($perPage)).')'],
             ['Models', $this->option('skip-models') ? 'assumed to exist' : 'generated'],
         ];
 
@@ -376,16 +376,16 @@ class GenerateWebCommand extends Command
         if (! file_exists($layoutPath) && ! $generatesLayout) {
             $this->components->warn(sprintf(
                 'The views will extend "%s", which does not exist at %s. Create it, drop --no-layout, or pass a '
-                    . 'different --layout.',
+                    .'different --layout.',
                 $layout,
-                str_replace(base_path() . '/', '', $layoutPath),
+                str_replace(base_path().'/', '', $layoutPath),
             ));
         }
 
         if ($assetsMode === 'cdn') {
             $this->components->warn(
                 'The Tailwind Play CDN compiles styles in the browser and is not for production. '
-                    . 'Run `php artisan anvil:frontend --install`, then regenerate with --assets-mode=vite.',
+                    .'Run `php artisan anvil:frontend --install`, then regenerate with --assets-mode=vite.',
             );
         }
 

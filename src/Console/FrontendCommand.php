@@ -41,7 +41,7 @@ final class FrontendCommand extends Command
         $this->components->info('Anvil — frontend assets');
 
         foreach ($state->summary() as $note) {
-            $this->line('  <fg=gray>·</> ' . $note);
+            $this->line('  <fg=gray>·</> '.$note);
         }
 
         $missing = [];
@@ -63,7 +63,7 @@ final class FrontendCommand extends Command
         }
 
         if (! (bool) $this->option('install')) {
-            $this->components->warn('Missing: ' . implode(', ', $missing));
+            $this->components->warn('Missing: '.implode(', ', $missing));
             $this->line('  Run <fg=yellow>php artisan anvil:frontend --install</> to set them up,');
             $this->line('  or generate with <fg=yellow>--assets-mode=cdn</> to skip the asset build entirely.');
 
@@ -77,7 +77,7 @@ final class FrontendCommand extends Command
             runPackageManager: ! (bool) $this->option('no-package-manager'),
         );
 
-        $installer->onOutput(fn(string $line) => $this->line('  <fg=gray>' . $line . '</>'));
+        $installer->onOutput(fn (string $line) => $this->line('  <fg=gray>'.$line.'</>'));
 
         $ok = true;
 

@@ -569,8 +569,7 @@ return [
         'spec_version' => '3.1.0',        // the OpenAPI spec version itself
         'api_version' => env('ANVIL_API_VERSION', 'v1'),   // which API version is being written
 
-        'api_url' => env('APP_URL', 'http://localhost'),
-        'servers' => [],   // explicit server URLs; empty → derived from api_url + api.prefix + version
+        'api_url' => env('APP_URL', 'http://localhost'),   // explicit server URLs; empty → derived from api_url + api.prefix + version
         'security' => env('ANVIL_OPENAPI_SECURITY', 'sanctum'),   // sanctum | passport | bearer | apikey | none
 
         'contact_name' => null,
@@ -584,7 +583,7 @@ return [
 
         'base_path_location' => 'auto',
         'servers' => [
-            ['url' => env('APP_URL', 'http://localhost') . '/api/v1', 'description' => 'Local'],
+            ['url' => env('APP_URL', 'http://localhost').'/api/v1', 'description' => 'Local'],
         ],
         /*
         |----------------------------------------------------------------------
@@ -661,11 +660,10 @@ return [
         'validation' => 'rule',   // rule | in
     ],
 
-
     'graphql' => [
-        'output'    => 'graphql',
-        'guard'     => env('ANVIL_GRAPHQL_GUARD', 'sanctum'),   // '' = public, 'default' = @guard
-        'policies'  => true,       // emit @can bound to the generated policies
+        'output' => 'graphql',
+        'guard' => env('ANVIL_GRAPHQL_GUARD', 'sanctum'),   // '' = public, 'default' = @guard
+        'policies' => true,       // emit @can bound to the generated policies
         'mutations' => true,
     ],
 ];

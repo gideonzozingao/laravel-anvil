@@ -136,10 +136,10 @@ final readonly class OpenApiPathGenerator implements Generator
      * callers and tests. All five strings are derived from $meta plus config;
      * prefer letting generate() supply them rather than hand-assembling.
      *
-     * @param  string  $slug      Kebab-plural resource segment, e.g. "api-keys"
-     * @param  string  $pkParam   Route parameter name, e.g. "id"
-     * @param  string  $tag       Human tag, e.g. "Api Keys"
-     * @param  string  $version   API version used for base-path resolution
+     * @param  string  $slug  Kebab-plural resource segment, e.g. "api-keys"
+     * @param  string  $pkParam  Route parameter name, e.g. "id"
+     * @param  string  $tag  Human tag, e.g. "Api Keys"
+     * @param  string  $version  API version used for base-path resolution
      * @param  string  $security  Security scheme name, or "none"
      * @return array<string, array<string, mixed>>
      */
@@ -162,7 +162,7 @@ final readonly class OpenApiPathGenerator implements Generator
         // is), so the braces stay literal and the key becomes "{{ id }}",
         // which never matches the declared parameter name.
         $collectionPath = $this->joinPath($prefix, $slug);
-        $itemPath = $this->joinPath($collectionPath, '{' . $pkParam . '}');
+        $itemPath = $this->joinPath($collectionPath, '{'.$pkParam.'}');
 
         // securityBlock is [] for 'none', which emits `security: []` — the
         // explicit "this operation needs no auth" override. Harmless when the
@@ -581,7 +581,7 @@ final readonly class OpenApiPathGenerator implements Generator
     /** Normalized API base path, always leading-slashed and never trailing-slashed. */
     private function apiBasePath(string $version): string
     {
-        return $this->normalizeSegment((string) OpenApiLocator::apiBasePath($version));
+        return $this->normalizeSegment(OpenApiLocator::apiBasePath($version));
     }
 
     // -----------------------------------------------------------------------
@@ -598,11 +598,11 @@ final readonly class OpenApiPathGenerator implements Generator
     private function joinPath(string ...$segments): string
     {
         $parts = array_filter(
-            array_map(static fn(string $s): string => trim($s, '/'), $segments),
-            static fn(string $s): bool => $s !== '',
+            array_map(static fn (string $s): string => trim($s, '/'), $segments),
+            static fn (string $s): bool => $s !== '',
         );
 
-        $path = $this->normalizeSegment('/' . implode('/', $parts));
+        $path = $this->normalizeSegment('/'.implode('/', $parts));
 
         return $this->stripDoubledPrefix($path, $this->apiBasePath(OpenApiLocator::configuredVersion()));
     }
@@ -610,7 +610,7 @@ final readonly class OpenApiPathGenerator implements Generator
     private function normalizeSegment(string $path): string
     {
         $path = (string) preg_replace('#/+#', '/', $path);
-        $path = '/' . trim($path, '/');
+        $path = '/'.trim($path, '/');
 
         return $path;
     }
@@ -628,7 +628,7 @@ final readonly class OpenApiPathGenerator implements Generator
             return $path;
         }
 
-        $doubled = $prefix . $prefix;
+        $doubled = $prefix.$prefix;
 
         while (str_starts_with($path, $doubled)) {
             $remainder = substr($path, strlen($doubled));
@@ -826,7 +826,7 @@ final readonly class OpenApiPathGenerator implements Generator
      */
     private function pkParamName(ModelMetadata $meta): string
     {
-        $key = trim((string) ($meta->primaryKey ?? ''));
+        $key = trim($meta->primaryKey ?? '');
 
         return $key !== '' ? $key : 'id';
     }
@@ -855,8 +855,8 @@ final readonly class OpenApiPathGenerator implements Generator
         $style = strtolower(trim((string) config('anvil.openapi.operation_id_style', 'dot')));
 
         return match ($style) {
-            'camel' => Str::camel($slug . '_' . Str::snake($action)),
-            'snake' => Str::snake(str_replace('-', '_', $slug) . '_' . Str::snake($action)),
+            'camel' => Str::camel($slug.'_'.Str::snake($action)),
+            'snake' => Str::snake(str_replace('-', '_', $slug).'_'.Str::snake($action)),
             default => "{$slug}.{$action}",
         };
     }

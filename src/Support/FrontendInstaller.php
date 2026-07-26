@@ -68,7 +68,7 @@ final class FrontendInstaller
         $state = $this->detector->detect(fresh: true);
 
         if ($state->livewireUsable()) {
-            $this->record('livewire', 'skipped', 'already installed' . ($state->livewireVersion !== null ? " ({$state->livewireVersion})" : ''));
+            $this->record('livewire', 'skipped', 'already installed'.($state->livewireVersion !== null ? " ({$state->livewireVersion})" : ''));
 
             return true;
         }
@@ -159,7 +159,7 @@ final class FrontendInstaller
         return $this->run(
             array_merge([$this->npmBinary(), 'install', '-D'], $packages),
             'tailwind',
-            'npm install -D ' . implode(' ', $packages),
+            'npm install -D '.implode(' ', $packages),
         );
     }
 
@@ -169,7 +169,7 @@ final class FrontendInstaller
         $relative = $this->detector->viteConfigPath();
 
         if ($relative === null) {
-            $this->record('tailwind', 'manual', 'No vite.config.js found. ' . $this->viteSnippet());
+            $this->record('tailwind', 'manual', 'No vite.config.js found. '.$this->viteSnippet());
 
             return true;
         }
@@ -188,7 +188,7 @@ final class FrontendInstaller
         if ($patched === null) {
             // Rewriting an unrecognised config by regex is how you corrupt
             // someone's build. Print the snippet and let them paste it.
-            $this->record('vite', 'manual', "Could not safely patch {$relative}. " . $this->viteSnippet());
+            $this->record('vite', 'manual', "Could not safely patch {$relative}. ".$this->viteSnippet());
 
             return true;
         }
@@ -230,8 +230,8 @@ final class FrontendInstaller
         $insertAt = (int) $last[1] + strlen((string) $last[0]);
 
         $contents = substr($contents, 0, $insertAt)
-            . "\nimport tailwindcss from '@tailwindcss/vite';"
-            . substr($contents, $insertAt);
+            ."\nimport tailwindcss from '@tailwindcss/vite';"
+            .substr($contents, $insertAt);
 
         $patched = preg_replace(
             '/(plugins\s*:\s*\[)/',
@@ -270,7 +270,7 @@ final class FrontendInstaller
         }
 
         $namespace = str_replace('\\', '/', (string) config('anvil.web.livewire.namespace', 'App\\Livewire'));
-        $livewirePath = './' . ltrim(preg_replace('#^App/#', 'app/', $namespace) ?? 'app/Livewire', '/');
+        $livewirePath = './'.ltrim(preg_replace('#^App/#', 'app/', $namespace) ?? 'app/Livewire', '/');
 
         $this->write($configPath, <<<JS
             /** @type {import('tailwindcss').Config} */
@@ -329,7 +329,7 @@ final class FrontendInstaller
             mkdir($dir, 0o755, true);
         }
 
-        file_put_contents($path, $directives . ($existing !== '' ? "\n" . $existing : ''));
+        file_put_contents($path, $directives.($existing !== '' ? "\n".$existing : ''));
         $this->record('css', 'success', "added Tailwind directives to {$relative}");
     }
 
@@ -368,7 +368,7 @@ final class FrontendInstaller
         }
 
         if ($result->failed()) {
-            $this->record($step, 'failed', "{$label} exited {$result->exitCode()}: " . trim($result->errorOutput() ?: $result->output()));
+            $this->record($step, 'failed', "{$label} exited {$result->exitCode()}: ".trim($result->errorOutput() ?: $result->output()));
 
             return false;
         }
@@ -394,16 +394,16 @@ final class FrontendInstaller
 
     private function write(string $path, string $contents, string $step): void
     {
-        $contents = rtrim($contents) . "\n";
+        $contents = rtrim($contents)."\n";
 
         if ($this->dryRun) {
-            $this->record($step, 'dry-run', 'would write ' . basename($path));
+            $this->record($step, 'dry-run', 'would write '.basename($path));
 
             return;
         }
 
         file_put_contents($path, $contents);
-        $this->record($step, 'success', 'wrote ' . basename($path));
+        $this->record($step, 'success', 'wrote '.basename($path));
     }
 
     /** Timestamped copy before any in-place edit, so a bad patch is recoverable. */
@@ -413,7 +413,7 @@ final class FrontendInstaller
             return;
         }
 
-        $backup = $path . '.anvil-' . date('YmdHis') . '.bak';
+        $backup = $path.'.anvil-'.date('YmdHis').'.bak';
 
         if (@copy($path, $backup)) {
             $this->record('backup', 'success', basename($backup));

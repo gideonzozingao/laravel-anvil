@@ -14,17 +14,17 @@ namespace Zuqongtech\LaravelAnvil\Support;
 final readonly class FrontendState
 {
     /**
-     * @param  bool  $livewireInstalled     livewire/livewire resolvable via Composer
+     * @param  bool  $livewireInstalled  livewire/livewire resolvable via Composer
      * @param  string|null  $livewireVersion  Installed pretty version, when known
-     * @param  bool  $tailwindInstalled     tailwindcss present in package.json
-     * @param  int  $tailwindMajor          Major version, or 0 when undetermined
-     * @param  bool  $packageJsonPresent    base_path('package.json') exists
-     * @param  bool  $nodeModulesPresent    Dependencies actually installed
-     * @param  bool  $viteConfigPresent     vite.config.js|ts exists
-     * @param  bool  $tailwindWiredToVite   @tailwindcss/vite plugin referenced
-     * @param  bool  $postcssConfigured     Tailwind 3 style postcss pipeline
+     * @param  bool  $tailwindInstalled  tailwindcss present in package.json
+     * @param  int  $tailwindMajor  Major version, or 0 when undetermined
+     * @param  bool  $packageJsonPresent  base_path('package.json') exists
+     * @param  bool  $nodeModulesPresent  Dependencies actually installed
+     * @param  bool  $viteConfigPresent  vite.config.js|ts exists
+     * @param  bool  $tailwindWiredToVite  @tailwindcss/vite plugin referenced
+     * @param  bool  $postcssConfigured  Tailwind 3 style postcss pipeline
      * @param  string|null  $cssEntrypoint  Relative path to the CSS entry, if found
-     * @param  bool  $cssImportsTailwind    Entry CSS already pulls Tailwind in
+     * @param  bool  $cssImportsTailwind  Entry CSS already pulls Tailwind in
      */
     public function __construct(
         public bool $livewireInstalled,
@@ -76,7 +76,7 @@ final readonly class FrontendState
         $notes = [];
 
         $notes[] = $this->livewireInstalled
-            ? 'Livewire: installed' . ($this->livewireVersion !== null ? " ({$this->livewireVersion})" : '')
+            ? 'Livewire: installed'.($this->livewireVersion !== null ? " ({$this->livewireVersion})" : '')
             : 'Livewire: not installed';
 
         if ($this->livewireInstalled && ! $this->livewireUsable()) {

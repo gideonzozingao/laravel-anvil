@@ -155,7 +155,7 @@ final class ModelAuditor
         }
 
         // Drift the other way: a new column nobody can write to.
-        $writable = array_values(array_filter($columns, fn(string $column): bool => $column !== $meta->primaryKey
+        $writable = array_values(array_filter($columns, fn (string $column): bool => $column !== $meta->primaryKey
             && ! in_array($column, self::MANAGED, true)
             && ! in_array($column, $meta->compositePrimaryKey, true)));
 

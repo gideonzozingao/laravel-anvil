@@ -57,7 +57,7 @@ trait InstallsFrontendAssets
         $this->components->info('Frontend preflight');
 
         foreach ($state->summary() as $note) {
-            $this->line('  <fg=gray>·</> ' . $note);
+            $this->line('  <fg=gray>·</> '.$note);
         }
 
         $this->newLine();
@@ -68,7 +68,7 @@ trait InstallsFrontendAssets
             runPackageManager: ! (bool) $this->option('no-package-manager'),
         );
 
-        $installer->onOutput(fn(string $line) => $this->line('  <fg=gray>' . $line . '</>'));
+        $installer->onOutput(fn (string $line) => $this->line('  <fg=gray>'.$line.'</>'));
 
         $livewireInstalled = false;
         $ok = true;
@@ -96,7 +96,7 @@ trait InstallsFrontendAssets
                 // Not fatal: unstyled views are ugly, not broken.
                 $this->components->warn(
                     'Tailwind is not wired up — generated views will render unstyled. '
-                        . '--assets-mode=cdn is a build-free alternative.',
+                        .'--assets-mode=cdn is a build-free alternative.',
                 );
             }
         }

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Zuqongtech\LaravelAnvil\Console;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Str;
+use Nuwave\Lighthouse\LighthouseServiceProvider;
 use Zuqongtech\LaravelAnvil\Support\ApiVersionProfile;
 use Zuqongtech\LaravelAnvil\Support\DatabaseInspector;
 use Zuqongtech\LaravelAnvil\Support\EnumDetector;
@@ -59,7 +59,7 @@ class GenerateGraphQLCommand extends Command
         try {
             $inspector = new DatabaseInspector($connection);
         } catch (\Throwable $e) {
-            $this->error('Could not connect to the database: ' . $e->getMessage());
+            $this->error('Could not connect to the database: '.$e->getMessage());
 
             return self::FAILURE;
         }
@@ -155,18 +155,18 @@ class GenerateGraphQLCommand extends Command
 
         // Root: written once, then left alone. It is where hand-written
         // operations live, and regenerating it would eat them.
-        $written += $this->put($dir . '/schema.graphql', $this->rootSchema(), overwritable: false) ? 1 : 0;
-        $written += $this->put($dir . '/scalars.graphql', $this->scalars()) ? 1 : 0;
+        $written += $this->put($dir.'/schema.graphql', $this->rootSchema(), overwritable: false) ? 1 : 0;
+        $written += $this->put($dir.'/scalars.graphql', $this->scalars()) ? 1 : 0;
 
         $enums = $builder->enums($tables);
 
         if ($enums !== '') {
-            $written += $this->put($dir . '/enums.graphql', $this->header('Enums') . "\n" . $enums) ? 1 : 0;
+            $written += $this->put($dir.'/enums.graphql', $this->header('Enums')."\n".$enums) ? 1 : 0;
         }
 
         foreach ($tables as $meta) {
-            $path = $dir . '/types/' . $meta->model . '.graphql';
-            $contents = $this->header($meta->model . ' — ' . $meta->table) . "\n" . $builder->model($meta);
+            $path = $dir.'/types/'.$meta->model.'.graphql';
+            $contents = $this->header($meta->model.' — '.$meta->table)."\n".$builder->model($meta);
 
             $this->put($path, $contents) ? $written++ : $skipped++;
         }
@@ -189,18 +189,18 @@ class GenerateGraphQLCommand extends Command
             $parts[] = $builder->model($meta);
         }
 
-        $written = $this->put($dir . '/schema.graphql', implode("\n", array_filter($parts))) ? 1 : 0;
+        $written = $this->put($dir.'/schema.graphql', implode("\n", array_filter($parts))) ? 1 : 0;
 
         return $this->finish($written, 0, $dir, count($tables));
     }
 
     private function put(string $path, string $contents, bool $overwritable = true): bool
     {
-        $name = str_replace(base_path() . '/', '', $path);
+        $name = str_replace(base_path().'/', '', $path);
         $exists = is_file($path);
 
         if ($exists && (! $overwritable || ! $this->option('force'))) {
-            $this->line("    <fg=gray>–</> {$name} " . ($overwritable ? '(exists)' : '(never overwritten)'));
+            $this->line("    <fg=gray>–</> {$name} ".($overwritable ? '(exists)' : '(never overwritten)'));
 
             return false;
         }
@@ -236,7 +236,7 @@ class GenerateGraphQLCommand extends Command
 
     private function rootSchema(): string
     {
-        $guard = $this->option('guard') !== '' ? "\n" . <<<'GRAPHQL'
+        $guard = $this->option('guard') !== '' ? "\n".<<<'GRAPHQL'
 
 "The signed-in user."
 extend type Query {
@@ -320,14 +320,14 @@ GRAPHQL;
             ['Authorization', $this->option('policies') ? '@can, bound to the generated policies' : 'none'],
             ['Pagination', sprintf('%d default, %d max', $profile->perPageDefault(), $profile->perPageMax())],
             ['Hidden fields', implode(', ', $profile->hiddenFields()) ?: 'none'],
-            ['Output', str_replace(base_path() . '/', '', $dir)],
+            ['Output', str_replace(base_path().'/', '', $dir)],
         ]));
         $this->newLine();
 
-        if (! class_exists(\Nuwave\Lighthouse\LighthouseServiceProvider::class)) {
+        if (! class_exists(LighthouseServiceProvider::class)) {
             $this->components->warn(
                 'nuwave/lighthouse is not installed, so nothing will serve this schema: '
-                    . 'composer require nuwave/lighthouse'
+                    .'composer require nuwave/lighthouse'
             );
         }
 
@@ -350,7 +350,7 @@ GRAPHQL;
         $this->line('  <options=bold>Next</>');
         $this->line('    <fg=gray>composer require nuwave/lighthouse mll-lab/graphql-php-scalars</>');
         $this->line('    <fg=gray>php artisan vendor:publish --tag=lighthouse-config</>');
-        $this->line('    <fg=gray>config/lighthouse.php → \'schema_path\' => base_path(\'' . str_replace(base_path() . '/', '', $dir) . '/schema.graphql\')</>');
+        $this->line('    <fg=gray>config/lighthouse.php → \'schema_path\' => base_path(\''.str_replace(base_path().'/', '', $dir).'/schema.graphql\')</>');
         $this->line('    <fg=gray>php artisan lighthouse:validate-schema</>');
         $this->newLine();
 

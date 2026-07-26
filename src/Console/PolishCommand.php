@@ -11,7 +11,6 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
 use Zuqongtech\LaravelAnvil\Support\QualityRunner;
 use Zuqongtech\LaravelAnvil\Support\SchemaManifest;
 
-
 /**
  * Formats, modernises and audits generated code.
  *
@@ -132,7 +131,7 @@ class PolishCommand extends Command
     {
         if ($explicit = $this->option('paths')) {
             return array_map(
-                static fn(string $path): string => str_starts_with($path, '/') ? $path : base_path($path),
+                static fn (string $path): string => str_starts_with($path, '/') ? $path : base_path($path),
                 array_map(strval(...), $explicit),
             );
         }
@@ -201,9 +200,9 @@ class PolishCommand extends Command
             $availability[] = $available ? "<fg=green>{$tool}</>" : "<fg=gray>{$tool}</>";
         }
 
-        $this->line('  ' . implode('  ', $availability)
-            . '   <fg=gray>' . ($fix ? 'fixing' : 'reporting only') . ', '
-            . count($paths) . ' path(s)</>');
+        $this->line('  '.implode('  ', $availability)
+            .'   <fg=gray>'.($fix ? 'fixing' : 'reporting only').', '
+            .count($paths).' path(s)</>');
         $this->newLine();
     }
 
@@ -234,7 +233,7 @@ class PolishCommand extends Command
         // finding far better than any summary here could.
         if (! $result['ok'] && $result['output'] !== '') {
             foreach (array_slice(explode("\n", (string) $result['output']), 0, 40) as $line) {
-                $this->line('      <fg=gray>' . $line . '</>');
+                $this->line('      <fg=gray>'.$line.'</>');
             }
         }
     }
@@ -254,7 +253,7 @@ class PolishCommand extends Command
             $inspector = new DatabaseInspector($connection);
         } catch (\Throwable $e) {
             if (! $this->option('json')) {
-                $this->line('  <fg=gray>–</> audit    <fg=gray>no database connection: ' . $e->getMessage() . '</>');
+                $this->line('  <fg=gray>–</> audit    <fg=gray>no database connection: '.$e->getMessage().'</>');
             }
 
             return ['findings' => [], 'models' => 0];
@@ -284,7 +283,7 @@ class PolishCommand extends Command
                 '\\',
                 '/',
                 (str_starts_with($namespace, 'App\\') ? substr($namespace, 4) : $namespace),
-            ) . '/' . $meta->model . '.php');
+            ).'/'.$meta->model.'.php');
 
             if (! is_file($path)) {
                 continue;   // not generated yet; anvil:diff is the tool for that
@@ -319,7 +318,7 @@ class PolishCommand extends Command
         }
 
         $total = array_sum(array_map(count(...), $findings));
-        $this->line("  <fg=yellow>▲</> audit    <fg=gray>{$total} finding(s) across " . count($findings) . ' model(s)</>');
+        $this->line("  <fg=yellow>▲</> audit    <fg=gray>{$total} finding(s) across ".count($findings).' model(s)</>');
         $this->newLine();
 
         foreach ($findings as $model => $results) {
@@ -454,7 +453,7 @@ JSON;
      */
     private function exitCode(array $results, array $findings): int
     {
-        $failed = array_filter($results, static fn(array $r): bool => $r['ran'] && ! $r['ok']);
+        $failed = array_filter($results, static fn (array $r): bool => $r['ran'] && ! $r['ok']);
 
         $errors = 0;
 

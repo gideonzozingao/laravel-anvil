@@ -32,11 +32,11 @@ use Illuminate\Support\Str;
  * fields, read-only columns and pagination bounds; its casing is deliberately
  * ignored, because a snake_case REST v1 should still produce a camelCase graph.
  */
-final class GraphQLSchemaBuilder
+final readonly class GraphQLSchemaBuilder
 {
     public function __construct(
-        private readonly ApiVersionProfile $profile,
-        private readonly string $connection,
+        private ApiVersionProfile $profile,
+        private string $connection,
     ) {}
 
     // -----------------------------------------------------------------------
@@ -55,7 +55,7 @@ final class GraphQLSchemaBuilder
             $this->mutations($meta),
         ]);
 
-        return implode("\n\n", $sections) . "\n";
+        return implode("\n\n", $sections)."\n";
     }
 
     private function type(ModelMetadata $meta): string
@@ -105,7 +105,7 @@ GRAPHQL;
             $directives[] = "@rename(attribute: \"{$name}\")";
         }
 
-        $suffix = $directives === [] ? '' : ' ' . implode(' ', $directives);
+        $suffix = $directives === [] ? '' : ' '.implode(' ', $directives);
 
         return "    {$graphName}: {$type}{$suffix}";
     }
@@ -186,15 +186,15 @@ GRAPHQL;
             $graphName = Str::camel($name);
             $rename = $graphName !== $name ? " @rename(attribute: \"{$name}\")" : '';
             $rules = $this->rules($meta, $column);
-            $rulesDirective = $rules === [] ? '' : ' @rules(apply: [' . implode(', ', array_map(
-                static fn(string $rule): string => '"' . $rule . '"',
+            $rulesDirective = $rules === [] ? '' : ' @rules(apply: ['.implode(', ', array_map(
+                static fn (string $rule): string => '"'.$rule.'"',
                 $rules,
-            )) . '])';
+            )).'])';
 
             $required = ! ($column['nullable'] ?? false) && ($column['default'] ?? null) === null;
             $type = $this->graphType($meta, $column, forInput: true);
 
-            $create[] = "    {$graphName}: {$type}" . ($required ? '!' : '') . $rename . $rulesDirective;
+            $create[] = "    {$graphName}: {$type}".($required ? '!' : '').$rename.$rulesDirective;
 
             // Everything is optional on update — that is what a partial update is.
             $update[] = "    {$graphName}: {$type}{$rename}{$rulesDirective}";
@@ -239,7 +239,7 @@ GRAPHQL;
         $length = $column['length'] ?? $column['character_maximum_length'] ?? null;
 
         if ($length !== null && str_contains($type, 'char')) {
-            $rules[] = 'max:' . (int) $length;
+            $rules[] = 'max:'.(int) $length;
         }
 
         foreach ($meta->foreignKeys as $fk) {
@@ -308,19 +308,19 @@ GRAPHQL;
 
 
     "Restore a soft-deleted {$this->humanise($model)}."
-    restore{$model}({$key}: ID!): {$model} @restore{$guard}{$this->canDirective('restore', findKey:$key)}
+    restore{$model}({$key}: ID!): {$model} @restore{$guard}{$this->canDirective('restore', findKey: $key)}
 
     "Permanently remove a {$this->humanise($model)}."
-    forceDelete{$model}({$key}: ID!): {$model} @forceDelete{$guard}{$this->canDirective('forceDelete', findKey:$key)}
+    forceDelete{$model}({$key}: ID!): {$model} @forceDelete{$guard}{$this->canDirective('forceDelete', findKey: $key)}
 GRAPHQL : '';
 
         return <<<GRAPHQL
 extend type Mutation {
     create{$model}(input: Create{$model}Input! @spread): {$model}! @create{$guard}{$this->canDirective('create')}
 
-    update{$model}(input: Update{$model}Input! @spread): {$model}! @update{$guard}{$this->canDirective('update', findKey:$key)}
+    update{$model}(input: Update{$model}Input! @spread): {$model}! @update{$guard}{$this->canDirective('update', findKey: $key)}
 
-    delete{$model}({$key}: ID!): {$model} @delete{$guard}{$this->canDirective('delete', findKey:$key)}{$softDeletes}
+    delete{$model}({$key}: ID!): {$model} @delete{$guard}{$this->canDirective('delete', findKey: $key)}{$softDeletes}
 }
 GRAPHQL;
     }
@@ -357,7 +357,7 @@ GRAPHQL;
             $type = $this->graphType($meta, $column, forInput: true, bare: true);
             $rename = $graphName !== $name ? " key: \"{$name}\"" : '';
 
-            $arguments[] = "        {$graphName}: {$type} @eq(" . trim($rename) . ')';
+            $arguments[] = "        {$graphName}: {$type} @eq(".trim($rename).')';
         }
 
         // A text search over the searchable columns, if any exist.
@@ -366,7 +366,7 @@ GRAPHQL;
         if ($searchable !== []) {
             $arguments[] = sprintf(
                 '        search: String @whereAny(columns: [%s])',
-                implode(', ', array_map(static fn(string $c): string => '"' . $c . '"', $searchable)),
+                implode(', ', array_map(static fn (string $c): string => '"'.$c.'"', $searchable)),
             );
         }
 
@@ -416,7 +416,7 @@ GRAPHQL;
             }
         }
 
-        return $blocks === [] ? '' : implode("\n\n", $blocks) . "\n";
+        return $blocks === [] ? '' : implode("\n\n", $blocks)."\n";
     }
 
     // -----------------------------------------------------------------------
@@ -447,7 +447,7 @@ GRAPHQL;
         // the caller, and the ! is added by the input builder where appropriate.
         $required = ! ($column['nullable'] ?? false) && ! $forInput;
 
-        return $type . ($required ? '!' : '');
+        return $type.($required ? '!' : '');
     }
 
     private function scalarFor(string $dbType, string $columnName): string
@@ -510,10 +510,10 @@ GRAPHQL;
     {
         $columns = array_values(array_filter(
             array_map(strval(...), array_column($meta->columns, 'name')),
-            fn(string $name): bool => ! $this->profile->isHidden($name),
+            fn (string $name): bool => ! $this->profile->isHidden($name),
         ));
 
-        return implode(', ', array_map(static fn(string $c): string => '"' . $c . '"', $columns));
+        return implode(', ', array_map(static fn (string $c): string => '"'.$c.'"', $columns));
     }
 
     /**
@@ -550,7 +550,7 @@ GRAPHQL;
 
     private function describe(string $text, ModelMetadata $meta): string
     {
-        return '"' . $text . ' Generated from ' . $meta->table . '."';
+        return '"'.$text.' Generated from '.$meta->table.'."';
     }
 
     private function humanise(string $model): string
