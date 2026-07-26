@@ -249,7 +249,7 @@ PHP;
     {
         if (preg_match("/enum\('(.+?)'\)/i", $raw, $m)) {
             $values = array_map(
-                fn ($v): string => "'".trim((string) $v)."'",
+                fn ($v): string => "'".trim($v)."'",
                 explode("','", $m[1])
             );
 

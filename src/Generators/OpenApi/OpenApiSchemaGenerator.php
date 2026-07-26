@@ -45,7 +45,7 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiYamlSerializer;
  * wrote: the root spec globs the schemas directory, so stale files keep being
  * $ref'd until removed.
  */
-final class OpenApiSchemaGenerator implements Generator
+final readonly class OpenApiSchemaGenerator implements Generator
 {
     use ResolvesSpecOptions;
 
@@ -61,8 +61,8 @@ final class OpenApiSchemaGenerator implements Generator
      * is resolved through the container (autowired) or built with a bare `new`.
      */
     public function __construct(
-        private readonly OpenApiTypeMapper $mapper = new OpenApiTypeMapper,
-        private readonly OpenApiYamlSerializer $serializer = new OpenApiYamlSerializer,
+        private OpenApiTypeMapper $mapper = new OpenApiTypeMapper,
+        private OpenApiYamlSerializer $serializer = new OpenApiYamlSerializer,
     ) {}
 
     #[\Override]
@@ -146,9 +146,9 @@ final class OpenApiSchemaGenerator implements Generator
         $profile ??= ApiVersionProfile::for();
 
         $schemas = [
-            $meta->model . 'Resource' => $this->buildResourceSchema($meta, $profile),
-            $meta->model . 'Request' => $this->buildRequestSchema($meta, $profile),
-            $meta->model . 'Collection' => $this->buildCollectionSchema($meta),
+            $meta->model.'Resource' => $this->buildResourceSchema($meta, $profile),
+            $meta->model.'Request' => $this->buildRequestSchema($meta, $profile),
+            $meta->model.'Collection' => $this->buildCollectionSchema($meta),
         ];
 
         if ((bool) config('anvil.openapi.include_entity_schema', false)) {
@@ -181,7 +181,7 @@ final class OpenApiSchemaGenerator implements Generator
             }
 
             if (isset($fkMap[$name])) {
-                $property['description'] = 'Foreign key referencing ' . Helpers::tableToModelName($fkMap[$name]);
+                $property['description'] = 'Foreign key referencing '.Helpers::tableToModelName($fkMap[$name]);
             }
 
             $properties[$name] = $property;
@@ -191,7 +191,7 @@ final class OpenApiSchemaGenerator implements Generator
             }
         }
 
-        return $this->schema('Raw ' . $meta->table . ' row, in database column names.', $properties, $required);
+        return $this->schema('Raw '.$meta->table.' row, in database column names.', $properties, $required);
     }
 
     /**

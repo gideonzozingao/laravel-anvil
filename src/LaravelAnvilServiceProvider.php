@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Zuqongtech\LaravelAnvil;
 
-use App\Console\Commands\InstallSwaggerUi;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Zuqongtech\LaravelAnvil\Console\GenerateAuthCommand;
@@ -12,6 +11,7 @@ use Zuqongtech\LaravelAnvil\Console\GenerateModelsFromDatabase;
 use Zuqongtech\LaravelAnvil\Console\GenerateOpenApiCommand;
 use Zuqongtech\LaravelAnvil\Console\GenerateOpenApiDocsCommand;
 use Zuqongtech\LaravelAnvil\Console\GenerateWebCommand;
+use Zuqongtech\LaravelAnvil\Console\InstallSwaggerUi;
 use Zuqongtech\LaravelAnvil\Generators\ApiControllerGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ApiFormRequestGenerator;
 use Zuqongtech\LaravelAnvil\Generators\ApiResourceGenerator;
@@ -59,8 +59,8 @@ class LaravelAnvilServiceProvider extends ServiceProvider
          keys do not fall back to the package defaults. Re-publish with --force
          after upgrading, or add the missing keys by hand.
          * ***********************************************************************/
-        $this->mergeConfigFrom(__DIR__ . '/../config/anvil.php', 'anvil');
-        $this->mergeConfigFrom(__DIR__ . '/../config/anvil.php', 'laravel-anvil');
+        $this->mergeConfigFrom(__DIR__.'/../config/anvil.php', 'anvil');
+        $this->mergeConfigFrom(__DIR__.'/../config/anvil.php', 'laravel-anvil');
 
         // ── Generator pipeline (order is authoritative) ──────────────────────
         $generators = [
@@ -166,13 +166,13 @@ class LaravelAnvilServiceProvider extends ServiceProvider
             // existing deploy scripts continue to work.
             foreach (['anvil-config', 'config'] as $tag) {
                 $this->publishes([
-                    __DIR__ . '/../config/anvil.php' => config_path('anvil.php'),
+                    __DIR__.'/../config/anvil.php' => config_path('anvil.php'),
                 ], $tag);
             }
 
             foreach (['anvil-stubs', 'stubs'] as $tag) {
                 $this->publishes([
-                    __DIR__ . '/../stubs' => base_path('stubs/anvil'),
+                    __DIR__.'/../stubs' => base_path('stubs/anvil'),
                 ], $tag);
             }
         }
@@ -194,13 +194,13 @@ class LaravelAnvilServiceProvider extends ServiceProvider
             Route::get($prefix, [DocsController::class, 'ui'])
                 ->name('anvil.docs');
 
-            Route::get($prefix . '/{version}', [DocsController::class, 'ui'])
+            Route::get($prefix.'/{version}', [DocsController::class, 'ui'])
                 ->where('version', 'v?\d+')
                 ->name('anvil.docs.version');
 
             // $file arrives as "v1/openapi.yaml" or "v1/schemas/User.yaml";
             // DocsController splits the leading version segment off.
-            Route::get($prefix . '/{file}', [DocsController::class, 'spec'])
+            Route::get($prefix.'/{file}', [DocsController::class, 'spec'])
                 ->where('file', '.*')
                 ->name('anvil.docs.spec');
         });

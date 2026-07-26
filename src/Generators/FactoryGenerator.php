@@ -237,7 +237,7 @@ PHP;
         if (str_starts_with($type, 'enum')) {
             if (preg_match("/enum\('(.+?)'\)/i", $dbType, $m)) {
                 $values = array_map(
-                    fn ($v): string => "'".trim((string) $v)."'",
+                    fn ($v): string => "'".trim($v)."'",
                     explode("','", $m[1])
                 );
 

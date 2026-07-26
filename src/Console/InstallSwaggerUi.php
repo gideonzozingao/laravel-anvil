@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Console\Commands;
+namespace Zuqongtech\LaravelAnvil\Console;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
@@ -24,7 +24,7 @@ use Symfony\Component\Finder\Finder;
 class InstallSwaggerUi extends Command
 {
     protected $signature = 'anvil:install-swagger-ui
-                             {--version= : swagger-ui-dist version to install (defaults to config anvil.openapi.docs.ui_version)}
+                             {--ui-version= : swagger-ui-dist version to install (defaults to config anvil.openapi.docs.ui_version)}
                              {--all-versions : Regenerate docs for every API version present on disk}
                              {--api-version= : Regenerate docs for a single API version}
                              {--skip-npm : Skip the npm install/copy step and only rewrite existing HTML}
@@ -47,7 +47,7 @@ class InstallSwaggerUi extends Command
 
     public function handle(): int
     {
-        $version = $this->option('version')
+        $version = $this->option('ui-version')
             ?? config('anvil.openapi.docs.ui_version', '5.17.14');
 
         $this->info("Target swagger-ui-dist version: {$version}");
@@ -66,13 +66,15 @@ class InstallSwaggerUi extends Command
 
         if ($rewritten === 0) {
             $this->warn('No generated docs found to rewrite. Did you run this before generating any API version? '
-                . 'Try: php artisan anvil:generate-api --api-version=1 --ui, then re-run this command.');
+                .'Try: php artisan anvil:generate-api --api-version=1 --ui, then re-run this command.');
 
             return self::FAILURE;
         }
 
+        $vendorDir = self::VENDOR_DIR;
+
         $this->newLine();
-        $this->info("Done. {$rewritten} file(s) now load Swagger UI from /{$this::VENDOR_DIR} instead of unpkg.com.");
+        $this->info("Done. {$rewritten} file(s) now load Swagger UI from /{$vendorDir} instead of unpkg.com.");
         $this->line('Verify with: php artisan route:list --path=docs, then check the Network tab on /docs.');
 
         return self::SUCCESS;
@@ -80,7 +82,7 @@ class InstallSwaggerUi extends Command
 
     private function installAndCopyAssets(string $version): bool
     {
-        $packageDir = base_path("node_modules/swagger-ui-dist");
+        $packageDir = base_path('node_modules/swagger-ui-dist');
         $installedVersionFile = base_path('node_modules/swagger-ui-dist/package.json');
 
         $needsInstall = true;
@@ -125,7 +127,7 @@ class InstallSwaggerUi extends Command
             $copied++;
         }
 
-        $this->line("Copied {$copied} asset file(s) to public/" . self::VENDOR_DIR);
+        $this->line("Copied {$copied} asset file(s) to public/".self::VENDOR_DIR);
 
         return true;
     }
@@ -143,7 +145,7 @@ class InstallSwaggerUi extends Command
         }
 
         $this->line('Regenerating Anvil API docs: php artisan anvil:generate-apidocs '
-            . collect($params)->map(fn($v, $k) => $v === true ? $k : "{$k}={$v}")->implode(' '));
+            .collect($params)->map(fn ($v, $k) => $v === true ? $k : "{$k}={$v}")->implode(' '));
 
         $this->call('anvil:generate-apidocs', $params);
     }
@@ -156,9 +158,9 @@ class InstallSwaggerUi extends Command
             return 0;
         }
 
-        $finder = (new Finder())->in($docsRoot)->name('*.html')->files();
+        $finder = (new Finder)->in($docsRoot)->name('*.html')->files();
 
-        $localBase = '/' . self::VENDOR_DIR;
+        $localBase = '/'.self::VENDOR_DIR;
 
         $replacements = [
             "https://unpkg.com/swagger-ui-dist@{$version}/swagger-ui-bundle.js" => "{$localBase}/swagger-ui-bundle.js",
@@ -182,7 +184,7 @@ class InstallSwaggerUi extends Command
             if ($contents !== $original) {
                 File::put($file->getRealPath(), $contents);
                 $count++;
-                $this->line("  rewritten: " . str_replace(public_path() . '/', '', $file->getRealPath()));
+                $this->line('  rewritten: '.str_replace(public_path().'/', '', $file->getRealPath()));
             }
         }
 

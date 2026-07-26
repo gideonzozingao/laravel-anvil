@@ -275,12 +275,8 @@ final class GenerationOptions implements \Stringable
             ?: self::cfg('connection')
             ?: config('database.default');
 
-        if (! is_string($connection) || $connection === '') {
-            throw new RuntimeException(
-                'No database connection could be resolved. Set database.default in config/database.php, '
-                    .'anvil.connection in config/anvil.php, or pass --connection=name.'
-            );
-        }
+        throw_if(! is_string($connection) || $connection === '', RuntimeException::class, 'No database connection could be resolved. Set database.default in config/database.php, '
+            .'anvil.connection in config/anvil.php, or pass --connection=name.');
 
         return $connection;
     }
@@ -374,7 +370,7 @@ final class GenerationOptions implements \Stringable
      */
     protected static function normalizeSchemas(string|array|null $value): array
     {
-        if ($value === null || $value === '' || $value === []) {
+        if (in_array($value, [null, '', []], true)) {
             return [];
         }
 
@@ -557,7 +553,7 @@ final class GenerationOptions implements \Stringable
 
         $value = $command->option($name);
 
-        return $value === null ? $default : $value;
+        return $value ?? $default;
     }
 
     /**
@@ -583,7 +579,7 @@ final class GenerationOptions implements \Stringable
 
     private static function stringOrNull(mixed $value): ?string
     {
-        if ($value === null || $value === '' || $value === []) {
+        if (in_array($value, [null, '', []], true)) {
             return null;
         }
 
