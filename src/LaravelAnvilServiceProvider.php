@@ -10,6 +10,7 @@ use Zuqongtech\LaravelAnvil\Console\DiffCommand;
 use Zuqongtech\LaravelAnvil\Console\DoctorCommand;
 use Zuqongtech\LaravelAnvil\Console\GenerateAuthCommand;
 use Zuqongtech\LaravelAnvil\Console\GenerateClientCommand;
+use Zuqongtech\LaravelAnvil\Console\GenerateGraphQLCommand;
 use Zuqongtech\LaravelAnvil\Console\GenerateModelsFromDatabase;
 use Zuqongtech\LaravelAnvil\Console\GenerateOpenApiCommand;
 use Zuqongtech\LaravelAnvil\Console\GenerateOpenApiDocsCommand;
@@ -76,6 +77,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
         InstallSwaggerUi::class,
 
         PolishCommand::class,
+        GenerateGraphQLCommand::class,
     ];
 
     /**
