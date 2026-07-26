@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Zuqongtech\LaravelAnvil\Console\DiffCommand;
 use Zuqongtech\LaravelAnvil\Console\DoctorCommand;
+use Zuqongtech\LaravelAnvil\Console\FrontendCommand;
 use Zuqongtech\LaravelAnvil\Console\GenerateAuthCommand;
 use Zuqongtech\LaravelAnvil\Console\GenerateClientCommand;
 use Zuqongtech\LaravelAnvil\Console\GenerateGraphQLCommand;
@@ -78,6 +79,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
 
         PolishCommand::class,
         GenerateGraphQLCommand::class,
+        FrontendCommand::class,
     ];
 
     /**
