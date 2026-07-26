@@ -646,4 +646,12 @@ return [
         'naming' => 'model_column',
         'validation' => 'rule',   // rule | in
     ],
+
+
+    'graphql' => [
+        'output'    => 'graphql',
+        'guard'     => env('ANVIL_GRAPHQL_GUARD', 'sanctum'),   // '' = public, 'default' = @guard
+        'policies'  => true,       // emit @can bound to the generated policies
+        'mutations' => true,
+    ],
 ];
