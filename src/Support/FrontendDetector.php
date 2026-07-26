@@ -206,9 +206,27 @@ final class FrontendDetector
 
     public function path(string $relative = ''): string
     {
-        $base = $this->basePath ?? (function_exists('base_path') ? base_path() : getcwd() ?: '.');
+        $base = $this->basePath ?? $this->applicationBasePath();
 
         return rtrim($base, '/') . ($relative !== '' ? '/' . ltrim($relative, '/') : '');
+    }
+
+    /**
+     * base_path() when the framework is booted, cwd otherwise.
+     *
+     * Split into its own method rather than a nested ternary: mixing `? :` with
+     * `?:` in one expression is a PHP 8 compile error, not a runtime one, so it
+     * takes the whole file down the moment the autoloader touches it.
+     */
+    private function applicationBasePath(): string
+    {
+        if (function_exists('base_path')) {
+            return base_path();
+        }
+
+        $cwd = getcwd();
+
+        return $cwd !== false ? $cwd : '.';
     }
 
     private function read(string $relative): ?string
