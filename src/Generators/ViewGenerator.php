@@ -151,133 +151,133 @@ final class ViewGenerator implements Generator
     protected function layoutTemplate(): string
     {
         return <<<'BLADE'
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', config('app.name', 'Laravel'))</title>
+            <!DOCTYPE html>
+            <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full">
+            <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <meta name="csrf-token" content="{{ csrf_token() }}">
+                <title>@yield('title', config('app.name', 'Laravel'))</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+                <link rel="preconnect" href="https://fonts.googleapis.com">
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
-                    colors: {
-                        brand: {
-                            50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
-                            400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
-                            800: '#3730a3', 900: '#312e81',
+                <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+                <script>
+                    tailwind.config = {
+                        theme: {
+                            extend: {
+                                fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                                colors: {
+                                    brand: {
+                                        50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+                                        400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+                                        800: '#3730a3', 900: '#312e81',
+                                    },
+                                },
+                                boxShadow: { card: '0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.06)' },
+                            },
                         },
-                    },
-                    boxShadow: { card: '0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.06)' },
-                },
-            },
-        };
-    </script>
+                    };
+                </script>
 
-    @verbatim
-    <style type="text/tailwindcss">
-        @layer base {
-            body { @apply antialiased; }
-            [x-cloak] { display: none !important; }
-        }
+                @verbatim
+                <style type="text/tailwindcss">
+                    @layer base {
+                        body { @apply antialiased; }
+                        [x-cloak] { display: none !important; }
+                    }
 
-        @layer components {
-            .card { @apply rounded-xl border border-gray-200 bg-white shadow-card; }
-            .card-header { @apply flex flex-col gap-3 border-b border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between; }
-            .card-footer { @apply flex flex-col gap-3 border-t border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between; }
+                    @layer components {
+                        .card { @apply rounded-xl border border-gray-200 bg-white shadow-card; }
+                        .card-header { @apply flex flex-col gap-3 border-b border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between; }
+                        .card-footer { @apply flex flex-col gap-3 border-t border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between; }
 
-            .form-label { @apply mb-1.5 block text-sm font-medium text-gray-700; }
-            .form-hint { @apply mt-1 text-xs text-gray-500; }
-            .form-error { @apply mt-1 text-sm text-red-600; }
-            .form-input,
-            .form-select,
-            .form-textarea { @apply w-full rounded-lg border-gray-300 bg-white text-sm text-gray-900 shadow-sm transition placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30; }
-            .form-input-error { @apply border-red-400 focus:border-red-500 focus:ring-red-500/30; }
+                        .form-label { @apply mb-1.5 block text-sm font-medium text-gray-700; }
+                        .form-hint { @apply mt-1 text-xs text-gray-500; }
+                        .form-error { @apply mt-1 text-sm text-red-600; }
+                        .form-input,
+                        .form-select,
+                        .form-textarea { @apply w-full rounded-lg border-gray-300 bg-white text-sm text-gray-900 shadow-sm transition placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30; }
+                        .form-input-error { @apply border-red-400 focus:border-red-500 focus:ring-red-500/30; }
 
-            .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50; }
-            .btn-primary { @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700 focus:ring-brand-500; }
-            .btn-secondary { @apply btn border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-gray-400; }
-            .btn-danger { @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700 focus:ring-red-500; }
-            .btn-sm { @apply px-3 py-1.5 text-xs; }
+                        .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50; }
+                        .btn-primary { @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700 focus:ring-brand-500; }
+                        .btn-secondary { @apply btn border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-gray-400; }
+                        .btn-danger { @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700 focus:ring-red-500; }
+                        .btn-sm { @apply px-3 py-1.5 text-xs; }
 
-            .icon-btn { @apply inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500/30; }
-            .icon-btn-danger { @apply hover:bg-red-50 hover:text-red-600; }
+                        .icon-btn { @apply inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500/30; }
+                        .icon-btn-danger { @apply hover:bg-red-50 hover:text-red-600; }
 
-            .badge { @apply inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700; }
-            .badge-success { @apply bg-green-100 text-green-700; }
-            .badge-muted { @apply bg-gray-100 text-gray-500; }
+                        .badge { @apply inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700; }
+                        .badge-success { @apply bg-green-100 text-green-700; }
+                        .badge-muted { @apply bg-gray-100 text-gray-500; }
 
-            .table-th { @apply whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500; }
-            .table-td { @apply px-4 py-3 text-sm text-gray-700; }
+                        .table-th { @apply whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500; }
+                        .table-td { @apply px-4 py-3 text-sm text-gray-700; }
 
-            .alert { @apply flex items-start gap-3 rounded-lg border px-4 py-3 text-sm; }
-            .link { @apply font-medium text-brand-600 transition hover:text-brand-800; }
-        }
-    </style>
-    @endverbatim
-</head>
-<body class="h-full bg-gray-50 font-sans text-gray-800">
-    {{-- Collapsible sidebar; links are discovered at runtime --}}
-    @include('layouts._anvil-nav')
+                        .alert { @apply flex items-start gap-3 rounded-lg border px-4 py-3 text-sm; }
+                        .link { @apply font-medium text-brand-600 transition hover:text-brand-800; }
+                    }
+                </style>
+                @endverbatim
+            </head>
+            <body class="h-full bg-gray-50 font-sans text-gray-800">
+                {{-- Collapsible sidebar; links are discovered at runtime --}}
+                @include('layouts._anvil-nav')
 
-    {{-- Main column — padding shifts to make room for the sidebar on desktop --}}
-    <div id="anvil-main" class="flex min-h-full flex-col transition-[padding] duration-300 ease-in-out lg:pl-64">
-        <header class="sticky top-0 z-30 border-b border-gray-200 bg-white/90 backdrop-blur">
-            <div class="flex h-16 items-center gap-3 px-4 sm:px-6">
-                <button type="button" data-anvil-toggle class="icon-btn" aria-label="Toggle navigation">
-                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                </button>
-                <h1 class="truncate text-base font-semibold text-gray-800">@yield('title', config('app.name', 'Laravel'))</h1>
-            </div>
-        </header>
-
-        <main class="flex-1">
-            <div class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-                @if (session('success'))
-                    <div class="alert mb-6 border-green-200 bg-green-50 text-green-800" role="status">
-                        <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        <span>{{ session('success') }}</span>
-                    </div>
-                @endif
-
-                @if (session('error'))
-                    <div class="alert mb-6 border-red-200 bg-red-50 text-red-800" role="alert">
-                        <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        <span>{{ session('error') }}</span>
-                    </div>
-                @endif
-
-                @if ($errors->any())
-                    <div class="alert mb-6 border-red-200 bg-red-50 text-red-800" role="alert">
-                        <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        <div>
-                            <p class="font-semibold">Please fix the following:</p>
-                            <ul class="mt-1 list-inside list-disc">
-                                @foreach ($errors->all() as $error)
-                                    <li>{{ $error }}</li>
-                                @endforeach
-                            </ul>
+                {{-- Main column — padding shifts to make room for the sidebar on desktop --}}
+                <div id="anvil-main" class="flex min-h-full flex-col transition-[padding] duration-300 ease-in-out lg:pl-64">
+                    <header class="sticky top-0 z-30 border-b border-gray-200 bg-white/90 backdrop-blur">
+                        <div class="flex h-16 items-center gap-3 px-4 sm:px-6">
+                            <button type="button" data-anvil-toggle class="icon-btn" aria-label="Toggle navigation">
+                                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                                </svg>
+                            </button>
+                            <h1 class="truncate text-base font-semibold text-gray-800">@yield('title', config('app.name', 'Laravel'))</h1>
                         </div>
-                    </div>
-                @endif
+                    </header>
 
-                @yield('content')
-            </div>
-        </main>
-    </div>
-</body>
-</html>
-BLADE;
+                    <main class="flex-1">
+                        <div class="mx-auto w-full max-w-12xl px-4 py-6 sm:px-6 sm:py-8">
+                            @if (session('success'))
+                                <div class="alert mb-6 border-green-200 bg-green-50 text-green-800" role="status">
+                                    <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    <span>{{ session('success') }}</span>
+                                </div>
+                            @endif
+
+                            @if (session('error'))
+                                <div class="alert mb-6 border-red-200 bg-red-50 text-red-800" role="alert">
+                                    <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    <span>{{ session('error') }}</span>
+                                </div>
+                            @endif
+
+                            @if ($errors->any())
+                                <div class="alert mb-6 border-red-200 bg-red-50 text-red-800" role="alert">
+                                    <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    <div>
+                                        <p class="font-semibold">Please fix the following:</p>
+                                        <ul class="mt-1 list-inside list-disc">
+                                            @foreach ($errors->all() as $error)
+                                                <li>{{ $error }}</li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                </div>
+                            @endif
+
+                            @yield('content')
+                        </div>
+                    </main>
+                </div>
+            </body>
+        </html>
+        BLADE;
     }
 
     // -----------------------------------------------------------------------
@@ -306,14 +306,15 @@ BLADE;
             mkdir($layoutDir, 0755, true);
         }
 
-        file_put_contents($path, $this->navTemplate());
+        file_put_contents($path, $this->navTemplate($options->isLivewire()));
 
         return $this->result('_anvil-nav.blade.php', $path, 'success', 'nav created');
     }
 
-    protected function navTemplate(): string
+    protected function navTemplate(bool $wireNavigate = false): string
     {
         $namespace = addslashes((string) config('anvil.web.controller_namespace', 'App\\Http\\Controllers\\Web'));
+        $wireNav = $wireNavigate ? ' wire:navigate.hover' : '';
 
         $tpl = <<<'BLADE'
 @php
@@ -347,7 +348,7 @@ BLADE;
        class="fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full transform flex-col bg-[#1a1a2e] text-gray-200
               transition-transform duration-300 ease-in-out lg:translate-x-0">
     <div class="flex h-16 shrink-0 items-center gap-2 border-b border-white/10 px-5">
-        <a href="{{ url('/') }}" class="group flex items-center gap-2">
+        <a href="{{ url('/') }}"%WIRE_NAV% class="group flex items-center gap-2">
             <span class="text-2xl leading-none">&#9874;</span>
             <span class="font-bold tracking-wide text-white transition group-hover:text-brand-300">
                 {{ config('app.name', 'Laravel') }}
@@ -366,7 +367,7 @@ BLADE;
         <p class="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Resources</p>
 
         @forelse ($anvilNavItems as $item)
-            <a href="{{ $item->url }}" data-anvil-link
+            <a href="{{ $item->url }}"%WIRE_NAV% data-anvil-link
                @if ($item->active) aria-current="page" @endif
                class="group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition
                       {{ $item->active ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-white' }}">
@@ -378,9 +379,8 @@ BLADE;
             <p class="px-3 py-2 text-sm text-gray-500">No resources yet.</p>
         @endforelse
     </nav>
-
     <div class="shrink-0 border-t border-white/10 px-5 py-3 text-xs text-gray-500">
-        &#9874; Forged by Anvil
+        &#9874; Forged by Laravel Anvil
     </div>
 </aside>
 
@@ -443,7 +443,7 @@ BLADE;
 </script>
 BLADE;
 
-        return str_replace('%NAMESPACE%', $namespace, $tpl);
+        return str_replace(['%NAMESPACE%', '%WIRE_NAV%'], [$namespace, $wireNav], $tpl);
     }
 
     // -----------------------------------------------------------------------

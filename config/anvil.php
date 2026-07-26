@@ -640,4 +640,10 @@ return [
         ],
     ],
 
+    'enums' => [
+        'enabled' => true,
+        'namespace' => 'App\\Enums',
+        'naming' => 'model_column',
+        'validation' => 'rule',   // rule | in
+    ],
 ];
