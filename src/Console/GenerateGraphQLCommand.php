@@ -36,7 +36,7 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  */
 class GenerateGraphQLCommand extends Command
 {
-    protected $signature = 'anvil:generate-graphql
+    protected $signature = 'anvil:forge-graphql
                             {--output=graphql   : Directory for the schema files}
                             {--api-version=1    : Version profile supplying hidden fields and pagination bounds}
                             {--guard=           : Auth guard for @guard (empty = none, "default" = @guard)}

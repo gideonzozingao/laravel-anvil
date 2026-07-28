@@ -52,7 +52,7 @@ class GenerateModelsFromDatabase extends Command
         ListenerGenerator::STYLE_SUBSCRIBER,
     ];
 
-    protected $signature = 'anvil:generate
+    protected $signature = 'anvil:forge
                             {--all                       : Generate every artifact type}
                             {--models                    : Eloquent models (always on)}
                             {--controllers               : Resource controllers}

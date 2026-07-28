@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Category;
+use App\Models\PriceHistory;
 use Illuminate\Database\Eloquent\Model;
 
 return [
@@ -436,6 +438,12 @@ return [
     |--------------------------------------------------------------------------
     | Per-Generator Configuration
     |--------------------------------------------------------------------------
+    |
+    | NOTE: web scaffold settings (controller namespace, route file, layout,
+    | etc.) live in the single top-level 'web' block below, not here — this
+    | key list used to duplicate that block verbatim. WebGenerator should
+    | resolve against config('anvil.web'), not a generators.web sub-array.
+    |
     */
     'generators' => [
 
@@ -525,14 +533,6 @@ return [
             'namespace' => 'Tests\\Feature',
             'use_pest' => false,   // set true to emit Pest-style tests
             'auth_guard' => 'sanctum',
-        ],
-
-        'web' => [
-            'controller_namespace' => 'App\\Http\\Controllers\\Web',
-            'route_file' => 'routes/web.php',
-            'middleware' => ['web', 'auth'],   // routes wrapped in this group
-            'layout' => 'layouts.anvil',   // views @extends this
-            'generate_layout' => true,              // emit a Tailwind-CDN base layout once
         ],
 
     ],
@@ -665,5 +665,24 @@ return [
         'guard' => env('ANVIL_GRAPHQL_GUARD', 'sanctum'),   // '' = public, 'default' = @guard
         'policies' => true,       // emit @can bound to the generated policies
         'mutations' => true,
+    ],
+
+    'cache' => [
+        'enabled' => env('ANVIL_CACHE', true),
+        'store' => null,                     // null = default store
+        'prefix' => 'anvil',
+        'scope' => 'auth',                   // none | auth | tenant
+        'jitter' => 0.1,
+        'stale_while_revalidate' => 30,      // 0 = lock-and-recompute instead
+        'lock_seconds' => 5,
+        'allow_bypass' => env('ANVIL_CACHE_BYPASS', false),
+        'ttl' => ['single' => 300, 'list' => 60, 'aggregate' => 30, 'reference' => 3600],
+        'profiles' => [
+            'reference' => ['ttl' => ['single' => 3600, 'list' => 3600]],
+        ],
+        'models' => [
+            Category::class => ['profile' => 'reference'],
+            PriceHistory::class => ['enabled' => false],   // too volatile
+        ],
     ],
 ];

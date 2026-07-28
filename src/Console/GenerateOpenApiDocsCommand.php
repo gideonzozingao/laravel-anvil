@@ -40,7 +40,7 @@ class GenerateOpenApiDocsCommand extends Command
     /** @var list<string> */
     private const FORMATS = ['yaml', 'json'];
 
-    protected $signature = 'anvil:generate-apidocs
+    protected $signature = 'anvil:forge-apidocs
                             {--api-version=   : Target a single version (1, v1); default: the configured version}
                             {--all-versions   : Target every version already present on disk}
                             {--check          : Report only — generate nothing}

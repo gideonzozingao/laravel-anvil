@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zuqongtech\LaravelAnvil\Console;
 
 use Illuminate\Console\Command;
+use Zuqongtech\LaravelAnvil\Console\Concerns\ConfiguresGeneratedCache;
 use Zuqongtech\LaravelAnvil\Console\Concerns\RunsGenerationPipeline;
 use Zuqongtech\LaravelAnvil\Support\ApiVersionProfile;
 use Zuqongtech\LaravelAnvil\Support\ConfigValidator;
@@ -33,6 +34,7 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
  */
 class GenerateOpenApiCommand extends Command
 {
+    use ConfiguresGeneratedCache;
     use RunsGenerationPipeline;
 
     /**
@@ -62,7 +64,8 @@ class GenerateOpenApiCommand extends Command
      * application already defines a global --version (-V) and merging a
      * same-named command option throws a LogicException.
      */
-    protected $signature = 'anvil:generate-api
+    protected $signature = 'anvil:forge-api
+
                             {--api-version=1         : Version of the API scaffold (1, 2, v2 …)}
                             {--prefix=api            : Route prefix for the versioned group}
                             {--auth=sanctum          : Auth scheme: sanctum|passport|jwt|token|none}
@@ -103,12 +106,24 @@ class GenerateOpenApiCommand extends Command
                             {--path=app              : Base path used to resolve the referenced models}
                             {--force                 : Overwrite existing files without prompting}
                             {--backup                : Backup existing files before overwriting}
-                            {--dry-run               : Preview without writing files}';
+                            {--dry-run               : Preview without writing files}
+                            {--no-cache              : Force caching off, overriding anvil.cache.enabled}
+                            {--cache                 : Generate services that cache query results}
+                            {--cache-store=          : Cache store to use (default: the app default store)}
+                            {--cache-ttl=            : TTL seconds — "300" for every profile, or "single=300,list=60"}
+                            {--cache-stale=          : Seconds a stale value may be served while refreshing; 0 disables}
+                            {--cache-scope=          : Result isolation: auth|tenant|none (default: auth)}
+                            {--cache-profile=        : Default volatility profile for every model}
+                            {--cache-jitter=         : TTL randomisation as a fraction, e.g. 0.1 for +/-10%}
+                            {--cache-bypass          : Allow callers to request uncached reads (never in production)}
+                            {--cache-model=*         : Per-model override: "Category:reference", "PriceHistory:off"}
+                            {--etag                  : Emit ETag/If-None-Match handling and document 304 in the spec}
+                            ';
 
     protected $description = 'Generate a versioned JSON API scaffold and an OpenAPI 3.1 specification from live database introspection';
 
     /** @var array<int, string> */
-    protected $aliases = ['anvil:generate-openapi'];
+    protected $aliases = ['anvil:forge-openapi'];
 
     public function handle(): int
     {

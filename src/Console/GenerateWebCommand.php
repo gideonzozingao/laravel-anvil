@@ -58,7 +58,7 @@ class GenerateWebCommand extends Command
      * the definition from $signature via configureUsingFluentDefinition() and
      * never consults getOptions() on a signature-based command.
      */
-    protected $signature = 'anvil:generate-web
+    protected $signature = 'anvil:forge-webapp
                             {--stack=blade   : Frontend stack — "blade" (Blade + Tailwind) or "livewire" (Blade + Livewire 3)}
                             {--tables=*      : Limit generation to specific tables}
                             {--only=*        : Alias for --tables}

@@ -23,7 +23,7 @@ use Symfony\Component\Finder\Finder;
  */
 class InstallSwaggerUi extends Command
 {
-    protected $signature = 'anvil:install-swagger-ui
+    protected $signature = 'anvil:install:swagger-ui
                              {--ui-version= : swagger-ui-dist version to install (defaults to config anvil.openapi.docs.ui_version)}
                              {--all-versions : Regenerate docs for every API version present on disk}
                              {--api-version= : Regenerate docs for a single API version}

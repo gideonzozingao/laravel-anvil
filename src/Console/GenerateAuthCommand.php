@@ -30,7 +30,7 @@ class GenerateAuthCommand extends Command
     /** Columns the generated components reference directly. */
     private const REQUIRED_COLUMNS = ['email', 'password'];
 
-    protected $signature = 'anvil:generate-auth
+    protected $signature = 'anvil:forge-auth
                             {--connection=       : Database connection to introspect}
                             {--schema=           : Schema the users table lives in (multi-schema DBs)}
                             {--users-table=users : The users/authenticatable table}

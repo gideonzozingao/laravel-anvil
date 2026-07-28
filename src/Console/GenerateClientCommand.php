@@ -36,7 +36,7 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
  */
 class GenerateClientCommand extends Command
 {
-    protected $signature = 'anvil:generate-client
+    protected $signature = 'anvil:forge-client
                             {--api-version=1 : API version to target (1, v1, V1)}
                             {--output=       : Output directory (default: resources/js/api)}
                             {--stack=ts      : Client flavour: ts}

@@ -47,6 +47,11 @@ use Zuqongtech\LaravelAnvil\Generators\ViewGenerator;
 use Zuqongtech\LaravelAnvil\Generators\WebControllerGenerator;
 use Zuqongtech\LaravelAnvil\Generators\WebRouteGenerator;
 use Zuqongtech\LaravelAnvil\Http\DocsController;
+use Zuqongtech\LaravelAnvil\Runtime\Cache\CacheInvalidationListener;
+use Zuqongtech\LaravelAnvil\Runtime\Cache\CacheKey;
+use Zuqongtech\LaravelAnvil\Runtime\Cache\CachePolicy;
+use Zuqongtech\LaravelAnvil\Runtime\Cache\CacheStamps;
+use Zuqongtech\LaravelAnvil\Runtime\Cache\QueryCache;
 use Zuqongtech\LaravelAnvil\Support\GenerationOrchestrator;
 
 class LaravelAnvilServiceProvider extends ServiceProvider
@@ -172,6 +177,9 @@ class LaravelAnvilServiceProvider extends ServiceProvider
         if (! $this->app->runningInConsole()) {
             return;
         }
+        if (config('anvil.cache.enabled', true)) {
+            $this->app->make(CacheInvalidationListener::class)->subscribe($this->app['events']);
+        }
 
         $this->commands(self::COMMANDS);
 
@@ -196,7 +204,10 @@ class LaravelAnvilServiceProvider extends ServiceProvider
         // bound explicitly as singletons for clarity and reuse.
         $this->app->singleton(OpenApiSchemaGenerator::class);
         $this->app->singleton(OpenApiPathGenerator::class);
-
+        $this->app->singleton(CachePolicy::class);
+        $this->app->singleton(CacheStamps::class);
+        $this->app->singleton(CacheKey::class);
+        $this->app->singleton(QueryCache::class);
         foreach (self::GENERATORS as $generator) {
             $this->app->singleton($generator);
         }
