@@ -72,14 +72,14 @@ final readonly class GuestLayoutPart implements ScaffoldPart
         if ($this->usesVite()) {
             return [
                 'Import the auth stylesheet from resources/css/app.css:  @import "./anvil-auth.css";  then run '
-                    .'npm run build.',
+                    . 'npm run build.',
             ];
         }
 
         return [
             'The guest layout uses the Tailwind Play CDN, which compiles styles in the browser and is not for '
-                .'production. Run  php artisan anvil:frontend --install  and regenerate with '
-                .'anvil.web.frontend.mode=vite.',
+                . 'production. Run  php artisan anvil:frontend --install  and regenerate with '
+                . 'anvil.web.frontend.mode=vite.',
         ];
     }
 

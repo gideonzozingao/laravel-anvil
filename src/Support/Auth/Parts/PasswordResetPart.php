@@ -51,12 +51,12 @@ final readonly class PasswordResetPart implements ScaffoldPart
     {
         $notes = [
             'Reset revokes the user\'s other sessions. That requires the database session driver — with the file or '
-                .'cookie driver the clean-up is skipped silently.',
+                . 'cookie driver the clean-up is skipped silently.',
         ];
 
         if ($context->twoFactor) {
             $notes[] = 'A reset does NOT clear two-factor enrolment, by design: someone who can read the mailbox '
-                .'should not thereby be able to strip the second factor.';
+                . 'should not thereby be able to strip the second factor.';
         }
 
         return $notes;

@@ -41,12 +41,12 @@ final readonly class RegisterPart implements ScaffoldPart
     {
         $notes = [
             'Set the password policy centrally in a service provider:  Password::defaults(fn () => '
-                .'Password::min(12)->mixedCase()->numbers()->symbols()->uncompromised());',
+                . 'Password::min(12)->mixedCase()->numbers()->symbols()->uncompromised());',
         ];
 
         if ($context->rbac && ! $context->assignsDefaultRole()) {
             $notes[] = 'No default role is assigned on registration. Pass --default-role=<name> to assign one, or '
-                .'handle it in a Registered event listener.';
+                . 'handle it in a Registered event listener.';
         }
 
         return $notes;
@@ -184,7 +184,7 @@ PHP;
         $hasName = $context->has('name');
 
         $name = $hasName
-            ? $this->ui->field('name', 'Full name', 'text', 'name', 'user', autofocus: true, placeholder: 'Ada Lovelace')."\n\n"
+            ? $this->ui->field('name', 'Full name', 'text', 'name', 'user', autofocus: true, placeholder: 'Ada Lovelace') . "\n\n"
             : '';
 
         $email = $this->ui->field(
