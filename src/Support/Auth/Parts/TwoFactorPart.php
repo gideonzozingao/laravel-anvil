@@ -81,7 +81,7 @@ final readonly class TwoFactorPart implements ScaffoldPart
 
         if ($context->needsTwoFactorMigration()) {
             $writer->migration(
-                'add_two_factor_columns_to_' . $context->usersTable . '_table',
+                'add_two_factor_columns_to_'.$context->usersTable.'_table',
                 $writer->tokens()->render($this->migration()),
                 '2fa columns',
             );
@@ -96,11 +96,11 @@ final readonly class TwoFactorPart implements ScaffoldPart
         return [
             'Install the TOTP library:  composer require pragmarx/google2fa',
             'Install the QR renderer:  composer require bacon/bacon-qr-code  — without it the enrolment screen falls '
-                . 'back to manual secret entry. Nothing is ever sent to a third-party QR service.',
+                .'back to manual secret entry. Nothing is ever sent to a third-party QR service.',
             'Link to the setup screen from your account area:  route(\'two-factor.settings\')',
             "Cast the columns:  'two_factor_confirmed_at' => 'datetime'  in the User model's \$casts.",
             'Recovery codes are hashed, so they cannot be re-displayed. Regenerating them is the only way to recover '
-                . 'a lost list.',
+                .'a lost list.',
         ];
     }
 
@@ -590,7 +590,7 @@ PHP;
         $okIcon = $this->ui->icon('check-circle', 'mt-0.5 h-5 w-5 shrink-0');
         $infoIcon = $this->ui->icon('info', 'mt-0.5 h-5 w-5 shrink-0');
 
-        $passwordInput = static fn(string $label): string => <<<BLADE
+        $passwordInput = static fn (string $label): string => <<<BLADE
             <div>
                 <label class="form-label" for="password">{$label}</label>
                 <div class="relative">

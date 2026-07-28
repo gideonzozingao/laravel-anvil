@@ -1,193 +1,298 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Zuqongtech\LaravelAnvil\Console;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Process;
-use Symfony\Component\Finder\Finder;
+use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
+use Zuqongtech\LaravelAnvil\Support\SwaggerUiInstaller;
 
 /**
- * php artisan anvil:install-swagger-ui
+ * Vendors the Swagger UI assets into public/ so the docs page does not depend on
+ * a CDN at request time.
  *
- * One command that:
- *   1. Runs `npm install swagger-ui-dist@{version}` (skipped if already present)
- *   2. Copies the built assets into public/vendor/swagger-ui
- *   3. Regenerates Anvil's API docs (anvil:generate-apidocs --ui)
- *   4. Rewrites every unpkg.com CDN reference in the generated static bundle
- *      (public/api-docs/**\/index.html) to point at the local copy
+ *   php artisan anvil:install:swagger-ui
+ *   php artisan anvil:install:swagger-ui --source=http --api-version=1
+ *   php artisan anvil:install:swagger-ui --source=npm --timeout=1800
+ *   php artisan anvil:install:swagger-ui --check
  *
- * Config (config/anvil.php -> openapi.docs.ui_version) decides which
- * swagger-ui-dist version is installed, so the local copy always matches
- * what Anvil thinks it published.
+ * The assets are three static files. Acquisition therefore tries, in order:
+ * an existing node_modules copy, a direct download, and only then npm — see
+ * SwaggerUiInstaller for why that order matters.
  */
 class InstallSwaggerUi extends Command
 {
+    /** @var list<string> */
+    private const SOURCES = ['auto', 'local', 'http', 'npm'];
+
     protected $signature = 'anvil:install:swagger-ui
-                             {--ui-version= : swagger-ui-dist version to install (defaults to config anvil.openapi.docs.ui_version)}
-                             {--all-versions : Regenerate docs for every API version present on disk}
-                             {--api-version= : Regenerate docs for a single API version}
-                             {--skip-npm : Skip the npm install/copy step and only rewrite existing HTML}
-                             {--skip-generate : Skip regenerating Anvil docs and only rewrite existing HTML}';
+                            {--ui-version=       : swagger-ui-dist version (default: anvil.openapi.docs.ui_version)}
+                            {--api-version=      : API version whose docs directory receives the assets}
+                            {--source=auto       : Where to get the files: auto | local | http | npm}
+                            {--timeout=          : Seconds allowed for the npm fallback (default 900)}
+                            {--http-timeout=120  : Seconds allowed per file download}
+                            {--check             : Report what would happen and exit}
+                            {--skip-generate     : Do not regenerate the spec first}
+                            {--force             : Re-download even when the correct version is already present}
+                            {--dry-run           : Preview without writing files}';
 
-    protected $description = 'Install swagger-ui-dist locally and point Anvil\'s generated docs at it instead of the unpkg CDN';
-
-    private const VENDOR_DIR = 'vendor/swagger-ui';
-
-    private const ASSET_FILES = [
-        'swagger-ui-bundle.js',
-        'swagger-ui-bundle.js.map',
-        'swagger-ui-standalone-preset.js',
-        'swagger-ui-standalone-preset.js.map',
-        'swagger-ui.css',
-        'swagger-ui.css.map',
-        'favicon-32x32.png',
-        'favicon-16x16.png',
-    ];
+    protected $description = 'Install the Swagger UI assets locally so the docs page does not load them from a CDN';
 
     public function handle(): int
     {
-        $version = $this->option('ui-version')
-            ?? config('anvil.openapi.docs.ui_version', '5.17.14');
+        $source = strtolower(trim((string) $this->option('source')));
 
-        $this->info("Target swagger-ui-dist version: {$version}");
-
-        if (! $this->option('skip-npm')) {
-            if (! $this->installAndCopyAssets($version)) {
-                return self::FAILURE;
-            }
-        }
-
-        if (! $this->option('skip-generate')) {
-            $this->regenerateDocs();
-        }
-
-        $rewritten = $this->rewriteCdnReferences($version);
-
-        if ($rewritten === 0) {
-            $this->warn('No generated docs found to rewrite. Did you run this before generating any API version? '
-                .'Try: php artisan anvil:generate-api --api-version=1 --ui, then re-run this command.');
+        if (! in_array($source, self::SOURCES, true)) {
+            $this->components->error(sprintf(
+                'Unknown --source "%s". Expected one of: %s.',
+                $source,
+                implode(', ', self::SOURCES),
+            ));
 
             return self::FAILURE;
         }
 
-        $vendorDir = self::VENDOR_DIR;
+        foreach (['timeout', 'http-timeout'] as $option) {
+            $value = (string) ($this->option($option) ?? '');
 
+            if ($value !== '' && (! ctype_digit($value) || (int) $value < 1)) {
+                $this->components->error("--{$option} must be a positive integer number of seconds.");
+
+                return self::FAILURE;
+            }
+        }
+
+        $version = $this->resolveVersion();
+        $apiVersion = OpenApiLocator::normaliseVersion(
+            $this->option('api-version') ?: OpenApiLocator::configuredVersion(),
+        );
+        $targetDir = OpenApiLocator::publicDocsDir($apiVersion).'/assets';
+
+        $this->components->info('Anvil — Swagger UI assets');
+        $this->table(['', ''], [
+            ['swagger-ui-dist', $version],
+            ['API version', $apiVersion],
+            ['Target', ltrim(str_replace(base_path(), '', $targetDir), '/').'/'],
+            ['Source', $source === 'auto' ? 'auto (node_modules → download → npm)' : $source],
+        ]);
         $this->newLine();
-        $this->info("Done. {$rewritten} file(s) now load Swagger UI from /{$vendorDir} instead of unpkg.com.");
-        $this->line('Verify with: php artisan route:list --path=docs, then check the Network tab on /docs.');
 
-        return self::SUCCESS;
+        $installer = new SwaggerUiInstaller(
+            version: $version,
+            targetDir: $targetDir,
+            dryRun: (bool) $this->option('dry-run') || (bool) $this->option('check'),
+            httpTimeout: (int) ($this->option('http-timeout') ?: 120),
+            npmTimeout: (int) ($this->option('timeout') ?: 900),
+        );
+
+        $installer->onOutput(fn (string $line) => $this->line('  <fg=gray>'.$line.'</>'));
+
+        if ($this->option('check')) {
+            return $this->reportCheck($installer, $version, $targetDir);
+        }
+
+        if (! $this->option('skip-generate') && ! $this->regenerateSpec($apiVersion)) {
+            return self::FAILURE;
+        }
+
+        $result = $installer->install(
+            $this->strategiesFor($source),
+            (bool) $this->option('force'),
+        );
+
+        $this->reportLog($installer);
+
+        return $result['ok']
+            ? $this->reportSuccess($result, $apiVersion, $targetDir)
+            : $this->reportFailure($source, $version);
     }
 
-    private function installAndCopyAssets(string $version): bool
+    // -----------------------------------------------------------------------
+    // Resolution
+    // -----------------------------------------------------------------------
+
+    private function resolveVersion(): string
     {
-        $packageDir = base_path('node_modules/swagger-ui-dist');
-        $installedVersionFile = base_path('node_modules/swagger-ui-dist/package.json');
+        $version = trim((string) ($this->option('ui-version') ?: config('anvil.openapi.docs.ui_version', '5.17.14')));
 
-        $needsInstall = true;
+        return ltrim($version, 'v');
+    }
 
-        if (File::exists($installedVersionFile)) {
-            $installed = json_decode(File::get($installedVersionFile), true)['version'] ?? null;
-            $needsInstall = $installed !== $version;
+    /**
+     * @return list<string>
+     */
+    private function strategiesFor(string $source): array
+    {
+        return $source === 'auto' ? ['local', 'http', 'npm'] : [$source];
+    }
 
-            if (! $needsInstall) {
-                $this->line("swagger-ui-dist@{$version} already installed, skipping npm install.");
-            }
+    /**
+     * Regenerate the spec before publishing the UI, unless told not to.
+     *
+     * Wrapped: a spec-generation failure should not surface as an unrelated stack
+     * trace from inside the asset installer.
+     */
+    private function regenerateSpec(string $apiVersion): bool
+    {
+        if (! $this->getApplication()?->has('anvil:generate-api')) {
+            $this->components->warn(
+                'anvil:generate-api is not registered, so the spec was not regenerated. Pass --skip-generate to '
+                    .'silence this.',
+            );
+
+            return true;
         }
 
-        if ($needsInstall) {
-            $this->line("Running: npm install swagger-ui-dist@{$version}");
+        try {
+            $status = $this->call('anvil:generate-api', [
+                '--spec-only' => true,
+                '--api-version' => ltrim($apiVersion, 'v'),
+            ]);
+        } catch (\Throwable $e) {
+            $this->components->error('Spec generation failed: '.$e->getMessage());
+            $this->line('  Pass <fg=yellow>--skip-generate</> to install the assets without regenerating.');
 
-            $result = Process::path(base_path())
-                ->timeout(180)
-                ->run("npm install swagger-ui-dist@{$version}");
-
-            if (! $result->successful()) {
-                $this->error('npm install failed:');
-                $this->line($result->errorOutput());
-
-                return false;
-            }
+            return false;
         }
 
-        $target = public_path(self::VENDOR_DIR);
-        File::ensureDirectoryExists($target);
+        if ($status !== self::SUCCESS) {
+            $this->components->error('Spec generation returned a non-zero status; not installing assets.');
+            $this->line('  Pass <fg=yellow>--skip-generate</> to install the assets anyway.');
 
-        $copied = 0;
-
-        foreach (self::ASSET_FILES as $file) {
-            $source = "{$packageDir}/{$file}";
-
-            if (! File::exists($source)) {
-                continue; // .map files and favicons are not guaranteed in every release
-            }
-
-            File::copy($source, "{$target}/{$file}");
-            $copied++;
+            return false;
         }
-
-        $this->line("Copied {$copied} asset file(s) to public/".self::VENDOR_DIR);
 
         return true;
     }
 
-    private function regenerateDocs(): void
-    {
-        $params = ['--ui' => true, '--force' => true];
+    // -----------------------------------------------------------------------
+    // Reporting
+    // -----------------------------------------------------------------------
 
-        if ($this->option('all-versions')) {
-            $params['--all-versions'] = true;
-        } elseif ($apiVersion = $this->option('api-version')) {
-            $params['--api-version'] = $apiVersion;
-        } else {
-            $params['--all-versions'] = true;
+    private function reportCheck(SwaggerUiInstaller $installer, string $version, string $targetDir): int
+    {
+        if ($installer->alreadyInstalled()) {
+            $this->components->info("swagger-ui-dist {$version} is already installed. Nothing to do.");
+
+            return self::SUCCESS;
         }
 
-        $this->line('Regenerating Anvil API docs: php artisan anvil:generate-apidocs '
-            .collect($params)->map(fn ($v, $k) => $v === true ? $k : "{$k}={$v}")->implode(' '));
+        $present = [];
+        $missing = [];
 
-        $this->call('anvil:generate-apidocs', $params);
+        foreach (SwaggerUiInstaller::REQUIRED_FILES as $file) {
+            is_file($targetDir.'/'.$file) ? $present[] = $file : $missing[] = $file;
+        }
+
+        if ($present !== []) {
+            $this->line('  <fg=gray>present:</> '.implode(', ', $present));
+        }
+
+        $this->components->warn(sprintf(
+            '%d required file(s) missing: %s',
+            count($missing),
+            implode(', ', $missing),
+        ));
+
+        $this->line('  Run without <fg=yellow>--check</> to install.');
+
+        return self::FAILURE;
     }
 
-    private function rewriteCdnReferences(string $version): int
+    /**
+     * @param  array{ok: bool, strategy: ?string, files: list<string>, bytes: int}  $result
+     */
+    private function reportSuccess(array $result, string $apiVersion, string $targetDir): int
     {
-        $docsRoot = public_path('api-docs');
+        $this->newLine();
 
-        if (! File::isDirectory($docsRoot)) {
-            return 0;
+        if ($result['strategy'] === 'cache') {
+            $this->components->info('Already installed — nothing to do. Pass --force to re-download.');
+
+            return self::SUCCESS;
         }
 
-        $finder = (new Finder)->in($docsRoot)->name('*.html')->files();
+        if ($this->option('dry-run')) {
+            $this->components->info('Dry run complete — nothing was written.');
 
-        $localBase = '/'.self::VENDOR_DIR;
-
-        $replacements = [
-            "https://unpkg.com/swagger-ui-dist@{$version}/swagger-ui-bundle.js" => "{$localBase}/swagger-ui-bundle.js",
-            "https://unpkg.com/swagger-ui-dist@{$version}/swagger-ui-standalone-preset.js" => "{$localBase}/swagger-ui-standalone-preset.js",
-            "https://unpkg.com/swagger-ui-dist@{$version}/swagger-ui.css" => "{$localBase}/swagger-ui.css",
-            "https://unpkg.com/swagger-ui-dist@{$version}/favicon-32x32.png" => "{$localBase}/favicon-32x32.png",
-        ];
-
-        // Also catch any stale version number left over from a previous ui_version.
-        $pattern = '~https://unpkg\.com/swagger-ui-dist@[^/]+/(swagger-ui-bundle\.js|swagger-ui-standalone-preset\.js|swagger-ui\.css|favicon-32x32\.png)~';
-
-        $count = 0;
-
-        foreach ($finder as $file) {
-            $contents = File::get($file->getRealPath());
-            $original = $contents;
-
-            $contents = strtr($contents, $replacements);
-            $contents = preg_replace($pattern, "{$localBase}/$1", $contents);
-
-            if ($contents !== $original) {
-                File::put($file->getRealPath(), $contents);
-                $count++;
-                $this->line('  rewritten: '.str_replace(public_path().'/', '', $file->getRealPath()));
-            }
+            return self::SUCCESS;
         }
 
-        return $count;
+        $this->components->info(sprintf(
+            '%d files installed via %s.',
+            count($result['files']),
+            $result['strategy'],
+        ));
+
+        $relative = ltrim(str_replace(public_path(), '', $targetDir), '/');
+
+        $this->line('  Point the docs page at these assets by setting:');
+        $this->line("    <fg=yellow>anvil.openapi.docs.asset_base</fg=yellow> = '/{$relative}'");
+        $this->newLine();
+        $this->line('  Docs: <options=bold>'.OpenApiLocator::docsUrl($apiVersion).'</>');
+        $this->newLine();
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Every strategy failed. Say what was tried and what to do about it — the
+     * previous behaviour was an uncaught ProcessTimedOutException, which named a
+     * vendor file and a line number and nothing the operator could act on.
+     */
+    private function reportFailure(string $source, string $version): int
+    {
+        $this->newLine();
+        $this->components->error("Could not install swagger-ui-dist {$version}.");
+
+        $suggestions = [];
+
+        if ($source === 'auto' || $source === 'npm') {
+            $suggestions[] = 'Skip npm entirely — the files are static: <fg=yellow>--source=http</>';
+            $suggestions[] = 'Allow npm longer on a slow link: <fg=yellow>--timeout=1800</>';
+        }
+
+        if ($source === 'auto' || $source === 'http') {
+            $suggestions[] = 'Check outbound access to cdn.jsdelivr.net and unpkg.com, including any proxy';
+            $suggestions[] = 'Behind a proxy, export <fg=yellow>HTTPS_PROXY</> before running';
+        }
+
+        $suggestions[] = sprintf(
+            'Install it yourself and re-run with --source=local:  npm install --no-save swagger-ui-dist@%s',
+            $version,
+        );
+        $suggestions[] = 'Or leave the docs page on the CDN: it works without local assets, it just needs the network '
+            .'at request time';
+
+        $this->line('  <options=bold>Options</>');
+
+        foreach ($suggestions as $suggestion) {
+            $this->line('   • '.$suggestion);
+        }
+
+        $this->newLine();
+
+        return self::FAILURE;
+    }
+
+    private function reportLog(SwaggerUiInstaller $installer): void
+    {
+        foreach ($installer->log() as $entry) {
+            $colour = match ($entry['status']) {
+                'success' => 'green',
+                'failed' => 'red',
+                'dry-run' => 'cyan',
+                default => 'gray',
+            };
+
+            $this->line(sprintf(
+                '  <fg=%s>%-8s</> <fg=gray>%-11s</> %s',
+                $colour,
+                $entry['status'],
+                $entry['strategy'],
+                $entry['detail'],
+            ));
+        }
     }
 }

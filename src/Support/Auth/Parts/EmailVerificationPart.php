@@ -42,7 +42,7 @@ final readonly class EmailVerificationPart implements ScaffoldPart
         // decorative and hasVerifiedEmail() is meaningless.
         if (! $context->has('email_verified_at')) {
             $writer->migration(
-                'add_email_verified_at_to_' . $context->usersTable . '_table',
+                'add_email_verified_at_to_'.$context->usersTable.'_table',
                 $writer->tokens()->render($this->migration()),
                 'email_verified_at column',
             );
@@ -56,7 +56,7 @@ final readonly class EmailVerificationPart implements ScaffoldPart
     {
         return [
             'Implement MustVerifyEmail on the User model:  class User extends Authenticatable implements '
-                . 'MustVerifyEmail  — without it the resend button cannot work.',
+                .'MustVerifyEmail  — without it the resend button cannot work.',
             "Cast the column:  'email_verified_at' => 'datetime'  in the User model's \$casts.",
             "Protect routes that require a verified address with the 'verified' middleware.",
         ];

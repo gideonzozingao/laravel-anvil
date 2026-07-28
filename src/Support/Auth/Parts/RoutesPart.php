@@ -60,7 +60,7 @@ final readonly class RoutesPart implements ScaffoldPart
         if ($context->guard !== 'web') {
             $notes[] = sprintf(
                 'The routes are guarded with auth:%s / guest:%s. Confirm auth.guards.%s exists in config/auth.php — '
-                    . 'an undefined guard throws on the first request.',
+                    .'an undefined guard throws on the first request.',
                 $context->guard,
                 $context->guard,
                 $context->guard,
@@ -92,7 +92,7 @@ final readonly class RoutesPart implements ScaffoldPart
         sort($classes);
 
         return implode("\n", array_map(
-            static fn(string $class): string => 'use %AUTH_NS%\\' . $class . ';',
+            static fn (string $class): string => 'use %AUTH_NS%\\'.$class.';',
             $classes,
         ));
     }
@@ -110,8 +110,8 @@ PHP;
             // Guest, not auth: Login logs the user back out before redirecting
             // here, so the challenge is reached without an authenticated session.
             $routes .= "\n    Route::get('two-factor-challenge', TwoFactorChallenge::class)"
-                . "\n        ->middleware('throttle:20,1')"
-                . "\n        ->name('two-factor.login');";
+                ."\n        ->middleware('throttle:20,1')"
+                ."\n        ->name('two-factor.login');";
         }
 
         return $routes;

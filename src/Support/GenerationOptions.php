@@ -276,7 +276,7 @@ final class GenerationOptions implements \Stringable
             ?: config('database.default');
 
         throw_if(! is_string($connection) || $connection === '', RuntimeException::class, 'No database connection could be resolved. Set database.default in config/database.php, '
-            .'anvil.connection in config/anvil.php, or pass --connection=name.');
+            . 'anvil.connection in config/anvil.php, or pass --connection=name.');
 
         return $connection;
     }
@@ -286,7 +286,7 @@ final class GenerationOptions implements \Stringable
      */
     public function getApiVersionString(): string
     {
-        return 'V'.$this->apiVersion;
+        return 'V' . $this->apiVersion;
     }
 
     /**
@@ -294,7 +294,7 @@ final class GenerationOptions implements \Stringable
      */
     public function getApiVersionSlug(): string
     {
-        return 'v'.$this->apiVersion;
+        return 'v' . $this->apiVersion;
     }
 
     /**
@@ -305,7 +305,7 @@ final class GenerationOptions implements \Stringable
     {
         $base = trim((string) self::cfg('api.defaults.namespaces.controllers', 'App\\Http\\Controllers\\Api'), '\\');
 
-        return $base.'\\'.$this->getApiVersionString();
+        return $base . '\\' . $this->getApiVersionString();
     }
 
     /**
@@ -379,8 +379,8 @@ final class GenerationOptions implements \Stringable
         }
 
         return array_values(array_filter(
-            array_map(static fn ($s): string => trim((string) $s), $value),
-            static fn (string $s): bool => $s !== '',
+            array_map(static fn($s): string => trim((string) $s), $value),
+            static fn(string $s): bool => $s !== '',
         ));
     }
 
@@ -499,20 +499,20 @@ final class GenerationOptions implements \Stringable
         $gens = $this->getEnabledGenerators();
 
         if ($gens !== []) {
-            $parts[] = 'Generators: '.implode(', ', $gens);
+            $parts[] = 'Generators: ' . implode(', ', $gens);
         }
         if ($this->api) {
-            $parts[] = 'API version: '.$this->getApiVersionString();
+            $parts[] = 'API version: ' . $this->getApiVersionString();
         }
         if ($this->web) {
             $parts[] = 'Web scaffold';
         }
         if ($this->openApi) {
-            $parts[] = 'OpenAPI format: '.strtoupper($this->openApiFormat);
+            $parts[] = 'OpenAPI format: ' . strtoupper($this->openApiFormat);
             $parts[] = $this->openApiSingleFile ? 'Single-file spec' : 'Split-file spec';
         }
         if ($this->listeners) {
-            $parts[] = 'Listeners: '.$this->listenerStyle.($this->queuedListeners ? ' (queued)' : '');
+            $parts[] = 'Listeners: ' . $this->listenerStyle . ($this->queuedListeners ? ' (queued)' : '');
         }
         if ($this->force) {
             $parts[] = 'Force overwrite';
@@ -524,7 +524,7 @@ final class GenerationOptions implements \Stringable
             $parts[] = 'Backup enabled';
         }
         if ($this->tables !== []) {
-            $parts[] = 'Tables: '.implode(', ', $this->tables);
+            $parts[] = 'Tables: ' . implode(', ', $this->tables);
         }
 
         return implode(' | ', $parts);

@@ -494,7 +494,7 @@ class GenerateOpenApiCommand extends Command
             );
         }
 
-        $version = (string) ($options->apiVersion ?? '');
+        $version = $options->apiVersion ?? '';
 
         if ($version !== '' && OpenApiLocator::normaliseVersion($version) !== $this->versionSegment()) {
             $this->components->warn(sprintf(
