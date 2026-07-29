@@ -132,12 +132,21 @@ class InstallSwaggerUi extends Command
      *
      * Wrapped: a spec-generation failure should not surface as an unrelated stack
      * trace from inside the asset installer.
+     *
+     * Delegates to 'anvil:forge-api' — GenerateOpenApiCommand's registered
+     * signature name. This previously called 'anvil:generate-api', a name left
+     * over from before that command was renamed; since it was never
+     * registered under that name, has() always returned false, this method
+     * always took the "not registered" branch, and --skip-generate was
+     * effectively the only path that worked. Keep this in sync with
+     * GenerateOpenApiCommand::$signature if that command is ever renamed
+     * again.
      */
     private function regenerateSpec(string $apiVersion): bool
     {
-        if (! $this->getApplication()?->has('anvil:generate-api')) {
+        if (! $this->getApplication()?->has('anvil:forge-api')) {
             $this->components->warn(
-                'anvil:generate-api is not registered, so the spec was not regenerated. Pass --skip-generate to '
+                'anvil:forge-api is not registered, so the spec was not regenerated. Pass --skip-generate to '
                     .'silence this.',
             );
 
@@ -145,7 +154,7 @@ class InstallSwaggerUi extends Command
         }
 
         try {
-            $status = $this->call('anvil:generate-api', [
+            $status = $this->call('anvil:forge-api', [
                 '--spec-only' => true,
                 '--api-version' => ltrim($apiVersion, 'v'),
             ]);

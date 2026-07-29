@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zuqongtech\LaravelAnvil\Support;
 
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 /**
@@ -317,8 +319,6 @@ final class ModelAuditor
     {
         $findings = [];
 
-        // hasMany without an explicit FK guesses "<parent>_id", which is wrong for
-        // every qualified relation (customer_id, assigned_agent_id).
         if (preg_match_all('/->(hasMany|hasOne)\(\s*([^,)]+)\s*\)/', $source, $matches, PREG_SET_ORDER) !== false) {
             foreach ($matches as $match) {
                 $findings[] = $this->finding(
@@ -330,7 +330,6 @@ final class ModelAuditor
             }
         }
 
-        // Duplicate method names: the fatal this whole thread started with.
         if (preg_match_all('/public\s+function\s+(\w+)\s*\(/', $source, $matches) !== false) {
             $counts = array_count_values($matches[1] ?? []);
 
@@ -344,11 +343,31 @@ final class ModelAuditor
                     );
                 }
             }
+
+            // A relation method reusing a name Model (or SoftDeletes) already
+            // declares — created_by → created() is the classic case — is loaded
+            // fine by PHP's parser but fatals at class-definition time with
+            // "not compatible with" the parent's signature.
+            $reserved = array_map(strtolower(...), array_unique(array_merge(
+                get_class_methods(Model::class),
+                get_class_methods(SoftDeletes::class),
+            )));
+
+            foreach (array_unique($matches[1] ?? []) as $method) {
+                if (in_array(strtolower($method), $reserved, true)) {
+                    $findings[] = $this->finding(
+                        self::ERROR,
+                        'relations',
+                        "{$method}() redeclares a method Model (or SoftDeletes) already defines, so PHP fatals with "
+                            .'a "not compatible with" signature error at class-load time.',
+                        "Rename to \"{$method}Relation\" (or similar) and regenerate — the namer now avoids reserved method names.",
+                    );
+                }
+            }
         }
 
         return $findings;
     }
-
     // -----------------------------------------------------------------------
     // Parsing helpers
     // -----------------------------------------------------------------------

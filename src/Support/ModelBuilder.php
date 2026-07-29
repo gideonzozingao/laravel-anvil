@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Zuqongtech\LaravelAnvil\Support;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
@@ -55,12 +58,57 @@ class ModelBuilder
     protected ?string $rootNamespace = null;
 
     /**
+     * The connection's default schema (public / dbo / the MySQL database name).
+     *
+     * Without this, a foreign key carrying referenced_schema="public" produces a
+     * reference to App\Models\PublicSchema\Tenant while the Tenant model itself
+     * is generated at App\Models\Tenant — a class that does not exist. The
+     * pipeline suppresses the segment for the model being generated; this is how
+     * the builder learns to suppress it for the models it points AT.
+     */
+    protected ?string $defaultSchema = null;
+
+    /**
      * Memoised output of resolvedRelationNames(). Invalidated by any setter that
      * feeds into naming.
      *
      * @var array{belongsTo: array<string, string>, inverse: array<int, string>, collisions: list<array<string, string>>}|null
      */
     private ?array $resolvedNames = null;
+
+    /**
+     * FQCN => alias, for every class that needs a `use` statement in the
+     * generated file. Populated during build().
+     *
+     * @var array<string, string>
+     */
+    private array $imports = [];
+
+    /**
+     * FQCN => alias already handed out, including classes that needed no import
+     * (same namespace). Keeps repeat references stable.
+     *
+     * @var array<string, string>
+     */
+    private array $references = [];
+
+    /**
+     * lowercased alias => the FQCN currently holding it. Guards against two
+     * different classes both wanting the short name `Tenant`.
+     *
+     * @var array<string, string>
+     */
+    private array $takenAliases = [];
+
+    /**
+     * Eloquent relation class per relation type, used for the native return type
+     * on the generated method.
+     */
+    private const RELATION_RETURN_TYPES = [
+        'belongsTo' => BelongsTo::class,
+        'hasMany' => HasMany::class,
+        'hasOne' => HasOne::class,
+    ];
 
     public function __construct(protected string $tableName, string $namespace)
     {
@@ -89,6 +137,19 @@ class ModelBuilder
     public function setRootNamespace(?string $rootNamespace): self
     {
         $this->rootNamespace = $rootNamespace !== null ? Helpers::normalizeNamespace($rootNamespace) : null;
+
+        return $this;
+    }
+
+    /**
+     * Set the connection's default schema. Related models living in it resolve
+     * to the root namespace with no schema segment.
+     */
+    public function setDefaultSchema(?string $defaultSchema): self
+    {
+        $this->defaultSchema = ($defaultSchema === null || trim($defaultSchema) === '')
+            ? null
+            : trim($defaultSchema);
 
         return $this;
     }
@@ -225,7 +286,8 @@ class ModelBuilder
      * customerVehicleBookings() and assignedAgentVehicleBookings() instead of
      * two identical vehicleBookings() methods and a fatal redeclaration.
      *
-     * The extra parameters are optional so existing callers keep working:
+     * The extra parameters are optional so existing callers keep working, but
+     * omitting them is lossy:
      *   $relatedTable  gives better pluralisation and grouping than the model name
      *   $unique        emits hasOne instead of hasMany
      *   $relatedSchema resolves the related model across schemas
@@ -253,20 +315,28 @@ class ModelBuilder
     }
 
     /**
-     * Build the model content
+     * Build the model content.
+     *
+     * Order is load-bearing: buildRelationships() and buildClassDocBlock()
+     * register the class imports that buildUses() renders, so buildUses() must
+     * run last. Calling it first silently drops every import.
      */
     public function build(): string
     {
         $modelName = Helpers::tableToModelName($this->tableName);
-        $uses = $this->buildUses();
+
+        $this->resetImports($modelName);
+
+        $relationships = $this->buildRelationships();
         $docBlock = $this->withPhpDoc ? $this->buildClassDocBlock() : '';
+        $uses = $this->buildUses();
+
         $primaryKeyProperty = $this->buildPrimaryKeyProperty();
         $timestampsProperty = StubGenerator::timestampsStub($this->timestamps);
         $fillable = $this->buildFillable();
         $hidden = $this->buildHidden();
         $casts = $this->buildCasts();
         $dates = $this->buildDates();
-        $relationships = $this->buildRelationships();
         $constraintComments = $this->withConstraintComments ? $this->buildConstraintComments() : '';
 
         $generator = new StubGenerator([
@@ -286,6 +356,109 @@ class ModelBuilder
         ]);
 
         return $generator->generate();
+    }
+
+    // -----------------------------------------------------------------------
+    // Imports — FQCN in, short alias + `use` statement out
+    // -----------------------------------------------------------------------
+
+    /**
+     * Reset the import table for a fresh build and pre-claim the names that
+     * cannot be given away.
+     */
+    private function resetImports(string $modelName): void
+    {
+        $this->imports = [];
+        $this->references = [];
+        $this->takenAliases = [];
+
+        // The class being generated owns its own short name. A self-referential
+        // FK (parent_id → same table) therefore emits a bare Foo::class with no
+        // import, while a same-named table in another schema gets aliased.
+        $this->takenAliases[strtolower($modelName)] = $this->namespace.'\\'.$modelName;
+
+        // Relation return types keep their short names; a model unluckily called
+        // "HasMany" is the one that gets aliased.
+        foreach (self::RELATION_RETURN_TYPES as $relationClass) {
+            $this->takenAliases[strtolower(class_basename($relationClass))] = $relationClass;
+        }
+
+        if ($this->softDeletes) {
+            $this->takenAliases['softdeletes'] = SoftDeletes::class;
+        }
+    }
+
+    /**
+     * Register $fqcn for import and return the alias to write in the file.
+     *
+     * Aliases are disambiguated with the parent namespace segment, so a model
+     * generated as App\Models\Tenant with a cross-schema FK to
+     * App\Models\Core\Tenant emits `use App\Models\Core\Tenant as CoreTenant`
+     * and references CoreTenant::class.
+     */
+    protected function importClass(string $fqcn): string
+    {
+        $fqcn = ltrim($fqcn, '\\');
+
+        if (isset($this->references[$fqcn])) {
+            return $this->references[$fqcn];
+        }
+
+        $short = class_basename($fqcn);
+        $owner = str_contains($fqcn, '\\') ? substr($fqcn, 0, (int) strrpos($fqcn, '\\')) : '';
+        $alias = $this->uniqueAlias($fqcn, $short);
+
+        // A class in this file's own namespace needs no import — unless we had to
+        // alias it, in which case the `use ... as ...` is what makes the alias real.
+        if ($alias !== $short || $owner !== $this->namespace) {
+            $this->imports[$fqcn] = $alias;
+        }
+
+        $this->references[$fqcn] = $alias;
+        $this->takenAliases[strtolower($alias)] = $fqcn;
+
+        return $alias;
+    }
+
+    /**
+     * The token to write in generated code: "Tenant::class".
+     */
+    protected function classReference(string $fqcn): string
+    {
+        return $this->importClass($fqcn).'::class';
+    }
+
+    private function uniqueAlias(string $fqcn, string $short): string
+    {
+        $holder = fn (string $alias): ?string => $this->takenAliases[strtolower($alias)] ?? null;
+
+        $held = $holder($short);
+
+        if ($held === null || $held === $fqcn) {
+            return $short;
+        }
+
+        // Prefix with the parent namespace segment: App\Models\Core\Tenant → CoreTenant.
+        $segments = explode('\\', $fqcn);
+        array_pop($segments);
+        $parent = (string) array_pop($segments);
+
+        if ($parent !== '') {
+            $candidate = Str::studly($parent).$short;
+            $held = $holder($candidate);
+
+            if ($held === null || $held === $fqcn) {
+                return $candidate;
+            }
+        }
+
+        $suffix = 2;
+
+        while (($held = $holder($short.$suffix)) !== null && $held !== $fqcn) {
+            $suffix++;
+        }
+
+        return $short.$suffix;
     }
 
     // -----------------------------------------------------------------------
@@ -312,8 +485,6 @@ class ModelBuilder
             array_values(array_filter(array_column($this->columns, 'name'))),
         );
 
-        // belongsTo first: these derive straight from a column and are the names
-        // a developer expects, so they win any contest with an inverse relation.
         $belongsTo = [];
 
         foreach ($this->foreignKeys as $fk) {
@@ -323,11 +494,11 @@ class ModelBuilder
                 continue;
             }
 
-            $belongsTo[$column] = $namer->belongsTo($column, (string) ($fk['referenced_table'] ?? ''));
+            $belongsTo[$column] = $this->safeMethodName(
+                $namer->belongsTo($column, (string) ($fk['referenced_table'] ?? '')),
+            );
         }
 
-        // How many entries point at each related model? That count is the sole
-        // trigger for qualifying a name.
         $counts = [];
 
         foreach ($this->inverseRelationships as $row) {
@@ -341,20 +512,20 @@ class ModelBuilder
             $count = $counts[$this->inverseGroupKey($row)] ?? 1;
 
             if ($count < 2 && $row['method'] !== '') {
-                // Unambiguous: honour the caller's name, but still claim it so a
-                // clash with a belongsTo relation or a column cannot slip through.
-                $inverse[$index] = $namer->preferred($row['method'], $row['foreign_key'], (string) $row['model']);
+                $inverse[$index] = $this->safeMethodName(
+                    $namer->preferred($row['method'], $row['foreign_key'], (string) $row['model']),
+                );
 
                 continue;
             }
 
-            $inverse[$index] = $namer->inverseForModel(
+            $inverse[$index] = $this->safeMethodName($namer->inverseForModel(
                 (string) $row['model'],
                 (string) $row['foreign_key'],
                 $count,
                 (bool) $row['unique'],
                 (string) ($row['table'] ?? ''),
-            );
+            ));
         }
 
         return $this->resolvedNames = [
@@ -362,6 +533,15 @@ class ModelBuilder
             'inverse' => $inverse,
             'collisions' => $namer->collisions(),
         ];
+    }
+
+    /**
+     * Guard against redeclaring a method that Eloquent\Model or SoftDeletes
+     * already defines. See ReservedNames for why this fatals rather than warns.
+     */
+    protected function safeMethodName(string $name): string
+    {
+        return ReservedNames::safeMethodName($name);
     }
 
     /**
@@ -385,9 +565,13 @@ class ModelBuilder
         return $table !== '' ? $table : (string) $row['model'];
     }
 
+    // -----------------------------------------------------------------------
+    // Related-class resolution
+    // -----------------------------------------------------------------------
+
     /**
      * Fully-qualified class name of a related model, honouring the foreign key's
-     * schema when present (so a cross-schema FK resolves to App\Models\{Schema}\{Model}).
+     * schema when it is not the default one.
      */
     protected function relatedModelFqn(array $fk): string
     {
@@ -407,86 +591,85 @@ class ModelBuilder
     }
 
     /**
-     * Resolve a model name to an FQCN, adding a schema segment when the related
-     * table lives elsewhere.
+     * Resolve a model name to an FQCN, adding a schema segment only when the
+     * related table lives in a NON-DEFAULT schema.
      */
     protected function qualifyModel(string $model, ?string $schema): string
     {
-        if ($schema === null || $schema === '' || $this->rootNamespace === null) {
+        // No schema information, or no root namespace to hang a segment off:
+        // resolve inside this model's own namespace (legacy behaviour, and the
+        // right guess for a same-schema sibling).
+        if ($schema === null || trim($schema) === '' || $this->rootNamespace === null) {
             return $this->namespace.'\\'.$model;
         }
 
-        $segment = Str::studly(str_replace(['.', '-', ' '], '_', $schema));
+        $segment = $this->schemaSegment($schema);
 
-        // "public" is not a legal namespace segment — App\Models\Public\Tenant
-        // fails to parse on some versions and confuses static analysis on the
-        // rest.
-        if (self::isReservedNamespaceSegment($segment)) {
-            $segment .= 'Schema';
+        // Note this resolves off the ROOT namespace, not $this->namespace: a model
+        // in App\Models\Core with a FK into the default schema must point at
+        // App\Models\Tenant, not App\Models\Core\Tenant.
+        return $segment === null
+            ? $this->rootNamespace.'\\'.$model
+            : $this->rootNamespace.'\\'.$segment.'\\'.$model;
+    }
+
+    /**
+     * The namespace segment for a schema, or null when none is warranted.
+     */
+    protected function schemaSegment(string $schema): ?string
+    {
+        if (ReservedNames::isDefaultSchema($schema, $this->defaultSchema)) {
+            return null;
         }
 
-        return $this->rootNamespace.'\\'.$segment.'\\'.$model;
+        return ReservedNames::namespaceSegment($schema);
     }
 
     protected static function isReservedNamespaceSegment(string $segment): bool
     {
-        static $reserved = [
-            'public',
-            'private',
-            'protected',
-            'static',
-            'class',
-            'interface',
-            'trait',
-            'enum',
-            'function',
-            'const',
-            'namespace',
-            'use',
-            'new',
-            'return',
-            'list',
-            'array',
-            'default',
-            'match',
-            'fn',
-            'readonly',
-            'never',
-            'void',
-            'null',
-            'true',
-            'false',
-            'int',
-            'float',
-            'string',
-            'bool',
-            'object',
-            'iterable',
-            'callable',
-            'mixed',
-            'parent',
-            'self',
-        ];
-
-        return in_array(strtolower($segment), $reserved, true);
+        return ReservedNames::isReservedNamespaceSegment($segment);
     }
 
+    // -----------------------------------------------------------------------
+    // Rendering
+    // -----------------------------------------------------------------------
+
     /**
-     * Build uses statements
+     * Build uses statements.
+     *
+     * Entries are either a bare FQCN or "FQCN as Alias"; StubGenerator::usesStub()
+     * only has to prefix `use ` and append `;`.
      */
     protected function buildUses(): string
     {
         $uses = [];
 
         if ($this->softDeletes) {
-            $uses[] = SoftDeletes::class;
+            $uses[SoftDeletes::class] = SoftDeletes::class;
         }
 
-        return StubGenerator::usesStub($uses);
+        foreach ($this->imports as $fqcn => $alias) {
+            $uses[$fqcn] = $alias === class_basename($fqcn)
+                ? $fqcn
+                : $fqcn.' as '.$alias;
+        }
+
+        if ($uses === []) {
+            return StubGenerator::usesStub([]);
+        }
+
+        // Alphabetical by FQCN, so the block is stable across runs (PSR-12).
+        ksort($uses, SORT_STRING | SORT_FLAG_CASE);
+
+        return StubGenerator::usesStub(array_values($uses));
     }
 
     /**
-     * Build class-level DocBlock
+     * Build class-level DocBlock.
+     *
+     * @method lines stay fully qualified on purpose: \App\Models\Tenant is
+     * unambiguous in a docblock regardless of what the import table decided, and
+     * a leading backslash never needs aliasing.
      */
     protected function buildClassDocBlock(): string
     {
@@ -769,7 +952,11 @@ class ModelBuilder
         }
 
         // Indexes
-        $nonUniqueIndexes = array_filter($this->constraintAnalysis['indexes'], fn (array $idx): bool => ! $idx['is_unique'] && ! $idx['is_primary']);
+        $nonUniqueIndexes = array_filter(
+            $this->constraintAnalysis['indexes'],
+            fn (array $idx): bool => ! $idx['is_unique'] && ! $idx['is_primary'],
+        );
+
         if ($nonUniqueIndexes !== []) {
             $comments[] = 'Indexes:';
             foreach ($nonUniqueIndexes as $index) {
@@ -793,7 +980,7 @@ class ModelBuilder
     }
 
     /**
-     * Build relationship methods
+     * Build relationship methods.
      */
     protected function buildRelationships(): string
     {
@@ -809,13 +996,12 @@ class ModelBuilder
                 continue;
             }
 
-            $relationships[] = StubGenerator::relationshipStub(
+            $relationships[] = $this->renderRelationship(
                 'belongsTo',
                 $methodName,
                 $this->relatedModelFqn($fk),
-                $fk['column'],
-                $fk['referenced_column'],
-                $this->withPhpDoc
+                (string) $fk['column'],
+                isset($fk['referenced_column']) ? (string) $fk['referenced_column'] : null,
             );
         }
 
@@ -828,13 +1014,12 @@ class ModelBuilder
                     continue;
                 }
 
-                $relationships[] = StubGenerator::relationshipStub(
+                $relationships[] = $this->renderRelationship(
                     $inverse['unique'] ? 'hasOne' : 'hasMany',
                     $methodName,
                     $this->inverseModelFqn($inverse),
-                    $inverse['foreign_key'],
+                    (string) $inverse['foreign_key'],
                     null,
-                    $this->withPhpDoc
                 );
             }
         }
@@ -844,6 +1029,67 @@ class ModelBuilder
         }
 
         return "\n".implode("\n\n", $relationships)."\n";
+    }
+
+    /**
+     * Render one relation method.
+     *
+     * Rendered here rather than in StubGenerator::relationshipStub() because the
+     * related class and the return type both have to go through the import table,
+     * which only this object owns. Output:
+     *
+     *     public function tenant(): BelongsTo
+     *     {
+     *         return $this->belongsTo(Tenant::class, 'tenant_id', 'id');
+     *     }
+     */
+    protected function renderRelationship(
+        string $type,
+        string $methodName,
+        string $relatedFqcn,
+        string $foreignKey,
+        ?string $ownerKey,
+    ): string {
+        $relationClass = self::RELATION_RETURN_TYPES[$type] ?? null;
+
+        // Register the model first so it keeps the natural short name when a
+        // schema segment forces an alias somewhere.
+        $related = $this->classReference($relatedFqcn);
+        $returnType = $relationClass !== null ? $this->importClass($relationClass) : null;
+
+        $arguments = [$related];
+
+        if ($foreignKey !== '') {
+            $arguments[] = "'{$foreignKey}'";
+        }
+
+        if ($ownerKey !== null && $ownerKey !== '') {
+            $arguments[] = "'{$ownerKey}'";
+        }
+
+        $indent = '    ';
+        $out = '';
+
+        if ($this->withPhpDoc) {
+            $out .= "{$indent}/**\n";
+            $out .= "{$indent} * Get the {$methodName} relationship.\n";
+
+            if ($relationClass !== null) {
+                $out .= "{$indent} *\n";
+                $out .= "{$indent} * @return \\{$relationClass}\n";
+            }
+
+            $out .= "{$indent} */\n";
+        }
+
+        $hint = $returnType !== null ? ': '.$returnType : '';
+
+        $out .= "{$indent}public function {$methodName}(){$hint}\n";
+        $out .= "{$indent}{\n";
+        $out .= "{$indent}    return \$this->{$type}(".implode(', ', $arguments).");\n";
+        $out .= "{$indent}}";
+
+        return $out;
     }
 
     /**

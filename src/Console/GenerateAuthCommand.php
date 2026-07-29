@@ -7,6 +7,7 @@ namespace Zuqongtech\LaravelAnvil\Console;
 use Illuminate\Console\Command;
 use Livewire\Component;
 use PragmaRX\Google2FA\Google2FA;
+use Zuqongtech\LaravelAnvil\Support\Auth\Ui;
 use Zuqongtech\LaravelAnvil\Support\AuthScaffolder;
 use Zuqongtech\LaravelAnvil\Support\DatabaseInspector;
 
@@ -22,8 +23,9 @@ use Zuqongtech\LaravelAnvil\Support\DatabaseInspector;
  * match the web scaffold, and the auth routes.
  *
  * Pre-flight checks run before anything is written: the required columns must
- * exist on the users table, and the packages the generated code imports must be
- * installed. Generating code that cannot possibly run is worse than refusing.
+ * exist on the users table, the guard must be configured, and the packages the
+ * generated code imports must be installed. Generating code that cannot possibly
+ * run is worse than refusing.
  */
 class GenerateAuthCommand extends Command
 {
@@ -37,6 +39,7 @@ class GenerateAuthCommand extends Command
                             {--guard=web         : Auth guard the components authenticate against}
                             {--namespace=App\\Livewire\\Auth : Namespace for the generated Livewire auth components}
                             {--layout=           : Guest layout view to extend (default: generates layouts.guest)}
+                            {--accent=indigo     : Tailwind accent colour for the generated UI: indigo|blue|emerald|violet|rose|slate}
                             {--default-role=     : Role name assigned to newly registered users}
                             {--roles-table=roles : Roles table (RBAC)}
                             {--permissions-table=permissions : Permissions table (RBAC)}
@@ -58,6 +61,26 @@ class GenerateAuthCommand extends Command
         if (! class_exists(Component::class)) {
             $this->error('This command generates Livewire 3 components. Install it first:');
             $this->line('   composer require livewire/livewire');
+
+            return self::FAILURE;
+        }
+
+        $accent = strtolower(trim((string) $this->option('accent')));
+
+        if (! Ui::supportsAccent($accent)) {
+            $this->error(sprintf(
+                'Unknown --accent "%s". Expected one of: %s.',
+                $accent,
+                implode(', ', Ui::accents()),
+            ));
+
+            return self::FAILURE;
+        }
+
+        $guard = (string) $this->option('guard');
+
+        if (($problem = $this->checkGuard($guard)) !== null) {
+            $this->error($problem);
 
             return self::FAILURE;
         }
@@ -95,9 +118,10 @@ class GenerateAuthCommand extends Command
             'connection' => $connection,
             'schema' => $schema,
             'users_table' => $usersTable,
-            'guard' => (string) $this->option('guard'),
+            'guard' => $guard,
             'namespace' => trim((string) $this->option('namespace'), '\\'),
             'layout' => $this->option('layout') ?: null,
+            'accent' => $accent,
             'default_role' => $this->option('default-role') ?: null,
             'roles_table' => (string) $this->option('roles-table'),
             'permissions_table' => (string) $this->option('permissions-table'),
@@ -110,14 +134,80 @@ class GenerateAuthCommand extends Command
             'dry_run' => (bool) $this->option('dry-run'),
         ]);
 
+        // The context knows things the checks above cannot: whether the RBAC
+        // tables have the shape the middleware assumes, whether --default-role
+        // exists, whether the schema/guard pair is coherent. Asking it was
+        // always the intent; nothing was calling it.
+        if (($problem = $scaffolder->validate()) !== null) {
+            $this->error($problem);
+
+            return self::FAILURE;
+        }
+
         $this->summarise($inspector, $scaffolder, $connection, $usersTable, $schema);
 
-        return $this->report($scaffolder->generate(), $scaffolder);
+        try {
+            $results = $scaffolder->generate();
+        } catch (\RuntimeException $e) {
+            $this->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        return $this->report($results, $scaffolder);
     }
 
     // -----------------------------------------------------------------------
     // Pre-flight
     // -----------------------------------------------------------------------
+
+    /**
+     * A guard that is not configured produces components whose attempt() always
+     * throws "Auth guard [x] is not defined" — at request time, on a login page,
+     * long after this command reported success.
+     */
+    private function checkGuard(string $guard): ?string
+    {
+        $guards = (array) config('auth.guards', []);
+
+        if (! array_key_exists($guard, $guards)) {
+            return sprintf(
+                "Auth guard '%s' is not defined in config/auth.php.%s",
+                $guard,
+                $guards === [] ? '' : "\n   Configured guards: ".implode(', ', array_keys($guards)),
+            );
+        }
+
+        $providerName = $guards[$guard]['provider'] ?? null;
+
+        if ($providerName === null) {
+            return sprintf("Auth guard '%s' has no provider configured in config/auth.php.", $guard);
+        }
+
+        $provider = config("auth.providers.{$providerName}");
+
+        if ($provider === null) {
+            return sprintf(
+                "Auth guard '%s' references provider '%s', which is not defined in config/auth.php.",
+                $guard,
+                $providerName,
+            );
+        }
+
+        $model = $provider['model'] ?? null;
+
+        if (is_string($model) && ! class_exists($model)) {
+            return sprintf(
+                "Auth provider '%s' points at model %s, which does not exist.\n"
+                    .'   Generate it first (anvil:forge --models --tables=%s) or fix config/auth.php.',
+                $providerName,
+                $model,
+                (string) $this->option('users-table'),
+            );
+        }
+
+        return null;
+    }
 
     private function checkUsersTable(
         DatabaseInspector $inspector,
@@ -127,7 +217,7 @@ class GenerateAuthCommand extends Command
     ): ?string {
         $tables = array_map(strval(...), array_column($inspector->getAllSchemaTables($schema), 'table'));
 
-        if (in_array($usersTable, $tables, true)) {
+        if ($this->containsInsensitive($tables, $usersTable)) {
             return null;
         }
 
@@ -153,7 +243,15 @@ class GenerateAuthCommand extends Command
      */
     private function checkRequiredColumns(string $usersTable, array $columns): ?string
     {
-        $missing = array_values(array_diff(self::REQUIRED_COLUMNS, $columns));
+        $missing = [];
+
+        // Case-insensitive: SQL Server and quoted Postgres identifiers do not
+        // fold the way the rest of this comparison assumes.
+        foreach (self::REQUIRED_COLUMNS as $required) {
+            if (! $this->containsInsensitive($columns, $required)) {
+                $missing[] = $required;
+            }
+        }
 
         if ($missing === []) {
             return null;
@@ -178,17 +276,23 @@ class GenerateAuthCommand extends Command
     {
         $warnings = [];
 
-        if (! in_array('name', $columns, true)) {
+        if (! $this->containsInsensitive($columns, 'name')) {
             $warnings[] = 'No "name" column — the register form will omit that field.';
         }
 
-        if (! in_array('email_verified_at', $columns, true) && ! $this->option('no-verification')) {
+        if (! $this->containsInsensitive($columns, 'email_verified_at') && ! $this->option('no-verification')) {
             $warnings[] = 'No "email_verified_at" column — email verification cannot work. '
                 .'Add the column or pass --no-verification.';
         }
 
         if (! $this->option('no-lockout')) {
-            $lockoutColumns = array_values(array_diff(['failed_login_attempts', 'locked_until'], $columns));
+            $lockoutColumns = [];
+
+            foreach (['failed_login_attempts', 'locked_until'] as $column) {
+                if (! $this->containsInsensitive($columns, $column)) {
+                    $lockoutColumns[] = $column;
+                }
+            }
 
             if ($lockoutColumns !== []) {
                 $warnings[] = 'Missing lockout column(s) '.implode(', ', $lockoutColumns)
@@ -196,13 +300,25 @@ class GenerateAuthCommand extends Command
             }
         }
 
-        if (! in_array('last_login_at', $columns, true)) {
+        if (! $this->containsInsensitive($columns, 'last_login_at')) {
             $warnings[] = 'No "last_login_at" column — login stamps it; the generated migration adds it.';
         }
 
         if (! $this->option('no-2fa') && ! class_exists(Google2FA::class)) {
             $warnings[] = 'pragmarx/google2fa is not installed; the generated TwoFactorAuthenticationService '
                 .'will not resolve until you run: composer require pragmarx/google2fa';
+        }
+
+        // Silent double-hashing is the single most common auth bug in generated
+        // code: a `hashed` cast is idempotent, a hand-rolled mutator is not.
+        $model = config('auth.providers.'.(config("auth.guards.{$this->option('guard')}.provider", 'users')).'.model');
+
+        if (is_string($model) && class_exists($model) && method_exists($model, 'setPasswordAttribute')) {
+            $warnings[] = sprintf(
+                '%s defines setPasswordAttribute() — the generated register form calls Hash::make(), so the '
+                    .'mutator would hash the hash. Remove the mutator and use the "hashed" cast instead.',
+                class_basename($model),
+            );
         }
 
         foreach ($warnings as $warning) {
@@ -212,6 +328,20 @@ class GenerateAuthCommand extends Command
         if ($warnings !== []) {
             $this->newLine();
         }
+    }
+
+    /**
+     * @param  list<string>  $haystack
+     */
+    private function containsInsensitive(array $haystack, string $needle): bool
+    {
+        foreach ($haystack as $candidate) {
+            if (strcasecmp($candidate, $needle) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // -----------------------------------------------------------------------
@@ -233,6 +363,7 @@ class GenerateAuthCommand extends Command
             ['Guard', (string) $this->option('guard')],
             ['Components', trim((string) $this->option('namespace'), '\\')],
             ['Guest layout', (string) $layout],
+            ['Accent', (string) $this->option('accent')],
             ['Dark mode', $this->option('dark') ? 'toggle included' : 'follows system only'],
             ['Two-factor', $this->option('no-2fa') ? 'off' : 'challenge + setup'],
             ['Lockout', $this->option('no-lockout') ? 'off' : 'on (5 attempts, 15 min)'],
@@ -256,16 +387,25 @@ class GenerateAuthCommand extends Command
     private function report(array $results, AuthScaffolder $scaffolder): int
     {
         $counts = ['success' => 0, 'skipped' => 0, 'dry-run' => 0, 'failed' => 0];
+        $unknown = 0;
 
         foreach ($results as $result) {
             $status = $result['status'] ?? 'success';
-            $counts[$status] = ($counts[$status] ?? 0) + 1;
+
+            // An unrecognised status used to be counted into a bucket the summary
+            // line never printed, so the totals silently disagreed with the list.
+            if (array_key_exists($status, $counts)) {
+                $counts[$status]++;
+            } else {
+                $unknown++;
+            }
 
             $icon = match ($status) {
                 'success' => '<fg=green>✔</>',
                 'dry-run' => '<fg=cyan>◌</>',
                 'skipped' => '<fg=gray>–</>',
-                default => '<fg=red>✘</>',
+                'failed' => '<fg=red>✘</>',
+                default => '<fg=yellow>?</>',
             };
 
             $this->line(sprintf(
@@ -279,11 +419,12 @@ class GenerateAuthCommand extends Command
 
         $this->newLine();
         $this->line(sprintf(
-            '  <options=bold>%d written</>   %d skipped   %d previewed   %s',
+            '  <options=bold>%d written</>   %d skipped   %d previewed   %s%s',
             $counts['success'],
             $counts['skipped'],
             $counts['dry-run'],
             $counts['failed'] > 0 ? "<fg=red>{$counts['failed']} failed</>" : '0 failed',
+            $unknown > 0 ? "   <fg=yellow>{$unknown} unreported</>" : '',
         ));
 
         $notes = $scaffolder->postInstallNotes();

@@ -3,7 +3,6 @@
 namespace Zuqongtech\LaravelAnvil\Console\Concerns;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Str;
 use Zuqongtech\LaravelAnvil\Support\ConstraintAnalyzer;
 use Zuqongtech\LaravelAnvil\Support\DatabaseInspector;
 use Zuqongtech\LaravelAnvil\Support\FileWriter;
@@ -13,6 +12,8 @@ use Zuqongtech\LaravelAnvil\Support\Helpers;
 use Zuqongtech\LaravelAnvil\Support\ModelBuilder;
 use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
 use Zuqongtech\LaravelAnvil\Support\RelationshipDetector;
+use Zuqongtech\LaravelAnvil\Support\ReservedNames;
+use Zuqongtech\LaravelAnvil\Support\WebStack;
 
 /**
  * Shared generation pipeline used by anvil:generate and anvil:generate-web.
@@ -57,9 +58,14 @@ trait RunsGenerationPipeline
 
         $this->info('📊 Found '.count($tablesToProcess)." table(s) to process.\n");
 
-        if ($options->withInverse) {
+        // The map is also what --validate-fk validates, so build it for either flag.
+        // Pass the {schema, table} pairs, not bare names: without the schema, an
+        // inverse relationship on a cross-schema child resolves into the parent's
+        // namespace and emits a ::class reference to a class never written.
+        if ($options->withInverse || $options->validateFk) {
             $this->info('🔗 Building relationship map...');
-            $this->relationshipDetector->buildForeignKeyMap(array_column($tablesToProcess, 'table'));
+            $this->relationshipDetector->buildForeignKeyMap($tablesToProcess);
+
             if ($options->validateFk) {
                 $this->validateForeignKeys();
             }
@@ -131,7 +137,12 @@ trait RunsGenerationPipeline
         }
 
         if ($options->web) {
-            $this->info('🌐 Web scaffold — controllers, Blade views and web routes');
+            $stack = $this->webStack($options);
+            $this->info('🌐 Web scaffold ['.$stack->value().'] — '.$stack->label());
+
+            if (! $stack->isAvailable()) {
+                $this->components->warn($stack->unavailableMessage());
+            }
         }
 
         if ($options->openApi) {
@@ -141,6 +152,23 @@ trait RunsGenerationPipeline
         }
 
         $this->newLine();
+    }
+
+    /**
+     * The front-end stack for this run.
+     *
+     * Reads the DTO field when it exists and falls back to config, so the trait
+     * keeps working on a GenerationOptions that has not yet grown $stack — the
+     * same tolerance the listener flags needed while they lived in config only.
+     */
+    protected function webStack(GenerationOptions $options): WebStack
+    {
+        $value = property_exists($options, 'stack') ? $options->stack : null;
+
+        return WebStack::make(
+            is_string($value) && $value !== '' ? $value : null,
+            (string) config('anvil.web.stack', WebStack::BLADE),
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -191,7 +219,7 @@ trait RunsGenerationPipeline
                 $meta = ModelMetadata::fromTable($table, $this->inspector, $schema);
 
                 if ($options->withInverse) {
-                    $meta->inverseRelationships = $this->relationshipDetector->getInverseRelationships($table);
+                    $meta->inverseRelationships = $this->relationshipDetector->getInverseRelationships($table, $schema);
                 }
                 if ($options->withConstraints) {
                     $meta->constraintAnalysis = $this->constraintAnalyzer->analyzeTable($table);
@@ -243,7 +271,10 @@ trait RunsGenerationPipeline
 
         // Schema segment (e.g. "Core") so cross-schema tables of the same name
         // don't collide: App\Models\Core\Employer at app/Models/Core/Employer.php.
-        $segment = $isQualified ? Str::studly(str_replace(['.', '-', ' '], '_', $schema)) : null;
+        // Must go through ReservedNames — ModelBuilder resolves related models the
+        // same way, and if the two disagree on the segment (Public vs PublicSchema)
+        // every relation points at a class that was never written.
+        $segment = $isQualified ? ReservedNames::namespaceSegment($schema) : null;
         $namespace = $segment !== null ? $options->getNamespace().'\\'.$segment : $options->getNamespace();
         $basePath = $options->getPath();
 
@@ -284,6 +315,10 @@ trait RunsGenerationPipeline
         $builder = new ModelBuilder($table, $namespace);
         $builder->setTable($modelTable)
             ->setRootNamespace($options->getNamespace())
+            // Without this the builder cannot tell "public" from a real schema and
+            // emits App\Models\PublicSchema\Tenant for a model written to
+            // App\Models\Tenant.
+            ->setDefaultSchema($defaultSchema)
             ->setColumns($columns)
             ->setForeignKeys($foreignKeys)
             ->setIndexes($indexes)
@@ -299,13 +334,27 @@ trait RunsGenerationPipeline
 
         $inverseRelations = [];
         if ($options->withInverse) {
-            $inverseRelations = $this->relationshipDetector->getInverseRelationships($table);
+            $inverseRelations = $this->relationshipDetector->getInverseRelationships($table, $schema);
+
             foreach ($inverseRelations as $relation) {
-                $builder->addInverseRelationship($relation['method'], $relation['model'], $relation['foreign_key']);
+                // Pass the child table, its uniqueness and its schema. Dropping
+                // them makes every inverse a hasMany, groups collisions by model
+                // name instead of table, and loses cross-schema resolution.
+                $builder->addInverseRelationship(
+                    $relation['method'],
+                    $relation['model'],
+                    $relation['foreign_key'],
+                    $relation['table'] ?? $relation['source_table'] ?? null,
+                    (bool) ($relation['unique'] ?? false),
+                    $relation['schema'] ?? $relation['source_schema'] ?? null,
+                );
             }
         }
 
-        $writeResult = $this->fileWriter->writeModel($builder->build(), $namespace, $modelName, $basePath);
+        $content = $builder->build();
+        $collisions = $builder->relationCollisions();
+
+        $writeResult = $this->fileWriter->writeModel($content, $namespace, $modelName, $basePath);
 
         return [
             'table' => $table,
@@ -319,6 +368,7 @@ trait RunsGenerationPipeline
             'inverse_relationships' => count($inverseRelations),
             'indexes' => count($indexes),
             'unique_constraints' => count($uniqueConstraints),
+            'collisions' => $collisions,
         ];
     }
 
@@ -344,12 +394,23 @@ trait RunsGenerationPipeline
             }
 
             if ($options->web) {
+                $stack = $this->webStack($options);
                 $routeFile = config('anvil.web.route_file', 'routes/web.php');
                 $layout = config('anvil.web.layout', 'layouts.anvil');
+
+                $this->line('   Stack        : '.$stack->value());
                 $this->line('   Controllers  : App\\Http\\Controllers\\Web\\');
                 $this->line("   Route file   : {$routeFile}");
-                $this->line('   Views        : resources/views/{resource}/');
+                $this->line('   Views        : resources/views/{resource}/ ('.implode(', ', $stack->views()).')');
                 $this->line("   Layout       : {$layout}");
+
+                if ($stack->isLivewire()) {
+                    $componentRoot = config('anvil.livewire.namespace', 'App\\Livewire');
+                    $viewRoot = config('anvil.livewire.view_path', 'resources/views/livewire');
+                    $this->line("   Components   : {$componentRoot}\\{Resource}\\{Form, Table}");
+                    $this->line("   Component views: {$viewRoot}/{resource}/{form, table}.blade.php");
+                    $this->line('   Form state   : untyped properties + NormalizesFormState');
+                }
             }
 
             if ($options->openApi) {
@@ -410,6 +471,8 @@ trait RunsGenerationPipeline
             $this->line("   {$type}: ".implode('  ', $parts));
         }
 
+        $this->displayRelationCollisions($results);
+
         // Finalization results (OpenAPI root spec, Swagger UI)
         if (! empty($finalResults)) {
             $this->newLine();
@@ -440,12 +503,19 @@ trait RunsGenerationPipeline
 
         // Web scaffold summary
         if ($options->web) {
+            $stack = $this->webStack($options);
             $routeFile = config('anvil.web.route_file', 'routes/web.php');
             $this->newLine();
-            $this->info('🌐 Web scaffold complete.');
+            $this->info('🌐 Web scaffold complete ['.$stack->value().'].');
             $this->line('   Controllers : App\\Http\\Controllers\\Web\\');
             $this->line("   Routes      : {$routeFile} (Route::resource within the configured middleware group)");
-            $this->line('   Views       : resources/views/{resource}/ (index, create, edit, show, _form)');
+            $this->line('   Views       : resources/views/{resource}/ ('.implode(', ', $stack->views()).')');
+
+            if ($stack->isLivewire()) {
+                $componentRoot = config('anvil.livewire.namespace', 'App\\Livewire');
+                $this->line("   Components  : {$componentRoot}\\{Resource}\\ (Form, Table)");
+                $this->line('   create/edit views are wrappers — the fields live in the component view.');
+            }
         }
 
         // Pivot tables
@@ -465,6 +535,54 @@ trait RunsGenerationPipeline
 
         if ($options->dryRun) {
             $this->warn('🔸 Dry run — no files written.');
+        }
+    }
+
+    /**
+     * Relation names that had to be altered because the preferred one was taken.
+     * These are the tables worth a human glance — a generated name that reads
+     * oddly is usually a schema that wants an explicit relation name.
+     */
+    protected function displayRelationCollisions(array $results): void
+    {
+        $rows = [];
+
+        foreach ($results as $result) {
+            foreach ($result['model']['collisions'] ?? [] as $collision) {
+                if (! is_array($collision)) {
+                    continue;
+                }
+
+                $name = (string) ($collision['name'] ?? '');
+                $wanted = (string) ($collision['wanted'] ?? '');
+
+                if ($name === '' && $wanted === '') {
+                    continue;
+                }
+
+                $detail = trim(implode(' ', array_filter([
+                    isset($collision['column']) ? "via {$collision['column']}" : null,
+                    isset($collision['related']) ? "→ {$collision['related']}" : null,
+                ])));
+
+                $rows[] = sprintf(
+                    '   %s: %s → %s%s',
+                    $result['table'] ?? '?',
+                    $wanted !== '' ? $wanted : '?',
+                    $name !== '' ? $name : '?',
+                    $detail !== '' ? "  ({$detail})" : '',
+                );
+            }
+        }
+
+        if ($rows === []) {
+            return;
+        }
+
+        $this->newLine();
+        $this->warn('⚠️  Renamed relations ('.count($rows).'):');
+        foreach ($rows as $row) {
+            $this->line($row);
         }
     }
 

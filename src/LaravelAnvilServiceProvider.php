@@ -7,6 +7,7 @@ namespace Zuqongtech\LaravelAnvil;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Zuqongtech\LaravelAnvil\Console\DiffCommand;
+use Zuqongtech\LaravelAnvil\Console\DocsSyncCommand;
 use Zuqongtech\LaravelAnvil\Console\DoctorCommand;
 use Zuqongtech\LaravelAnvil\Console\FrontendCommand;
 use Zuqongtech\LaravelAnvil\Console\GenerateAuthCommand;
@@ -64,6 +65,9 @@ class LaravelAnvilServiceProvider extends ServiceProvider
      * anvil:doctor reports schema shapes that break codegen before they do, and
      * anvil:diff reports drift between the database and what was last generated.
      *
+     * anvil:docs-sync is a third kind: it reports drift between the database-derived
+     * spec and the payload code a developer hand-edited afterwards, and can close it.
+     *
      * @var list<class-string<Command>>
      */
     private const COMMANDS = [
@@ -78,6 +82,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
         // ── Inspection ──────────────────────────────────────────────────────
         DiffCommand::class,                  // anvil:diff
         DoctorCommand::class,                // anvil:doctor
+        DocsSyncCommand::class,              // anvil:docs-sync
 
         // ── Installation helpers ────────────────────────────────────────────
         InstallSwaggerUi::class,
@@ -90,7 +95,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
     /**
      * The generator pipeline. Order is authoritative.
      *
-     * @var list<class-string<Generator>>
+     * @var list<class-string>
      */
     private const GENERATORS = [
         // Core per-model artifacts
@@ -161,6 +166,10 @@ class LaravelAnvilServiceProvider extends ServiceProvider
          * contains an 'openapi' or 'api' key REPLACES that whole subtree — new
          * keys do not fall back to package defaults. Re-publish with --force
          * after upgrading, or add the missing keys by hand.
+         *
+         * This is why every anvil.openapi.sync.* key has a code-side default in
+         * SyncConfig: an install whose published config predates docs-sync has no
+         * 'sync' key at all, and the shallow merge will not supply one.
          */
         $this->mergeConfigFrom(__DIR__.'/../config/anvil.php', 'anvil');
         $this->mergeConfigFrom(__DIR__.'/../config/anvil.php', 'laravel-anvil');
@@ -170,15 +179,29 @@ class LaravelAnvilServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Registered unconditionally (not gated behind runningInConsole()):
+        // 'anvil::docs.show' must resolve on a normal HTTP request, since that's
+        // when DocsController::render() actually calls view(). Config merging
+        // above already ran in register(), so anvil.openapi.docs.enabled is
+        // readable here regardless of which root it came from.
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'anvil');
+
         if (config('anvil.openapi.docs.enabled', false)) {
             $this->registerDocsRoutes();
         }
 
-        if (! $this->app->runningInConsole()) {
-            return;
-        }
+        // Cache invalidation is a RUNTIME concern, so it must be subscribed before
+        // the console guard below. Model writes overwhelmingly happen during HTTP
+        // requests; subscribing only in console meant a web request could write a
+        // row and never invalidate the entry caching it, and QueryCache would keep
+        // serving the stale value until its TTL expired. Console commands are the
+        // one context where invalidation matters least.
         if (config('anvil.cache.enabled', true)) {
             $this->app->make(CacheInvalidationListener::class)->subscribe($this->app['events']);
+        }
+
+        if (! $this->app->runningInConsole()) {
+            return;
         }
 
         $this->commands(self::COMMANDS);
@@ -196,6 +219,15 @@ class LaravelAnvilServiceProvider extends ServiceProvider
                 __DIR__.'/../stubs' => base_path('stubs/anvil'),
             ], $tag);
         }
+
+        // Lets a consumer run `php artisan vendor:publish --tag=anvil-views` to
+        // get an editable copy under resources/views/vendor/anvil/docs/…
+        // Laravel's view finder prefers the published copy over the package's
+        // own automatically, so no config change is needed after publishing —
+        // config('anvil.openapi.docs.view') stays 'anvil::docs.show' either way.
+        $this->publishes([
+            __DIR__.'/../resources/views' => resource_path('views/vendor/anvil'),
+        ], 'anvil-views');
     }
 
     protected function registerGenerators(): void
@@ -208,6 +240,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
         $this->app->singleton(CacheStamps::class);
         $this->app->singleton(CacheKey::class);
         $this->app->singleton(QueryCache::class);
+
         foreach (self::GENERATORS as $generator) {
             $this->app->singleton($generator);
         }
@@ -232,6 +265,24 @@ class LaravelAnvilServiceProvider extends ServiceProvider
 
             return $orchestrator;
         });
+
+        /*
+         * DocsSynchronizer is deliberately NOT bound.
+         *
+         * It is built per invocation by SyncConfig::synchronizer($version), because
+         * the spec directory it reads is fixed at construction. A singleton would be
+         * pinned to whichever version was current when the container first resolved
+         * it, and `anvil:docs-sync --api-version=v2` would then silently reconcile
+         * v1's spec — wrong output, exit code 0, no warning.
+         *
+         * Custom readers therefore go in config, alongside custom_generators above:
+         *
+         *   'openapi' => ['sync' => ['readers' => [App\Docs\DtoShapeReader::class]]]
+         *
+         * SyncConfig resolves them through the container, so they may take
+         * constructor dependencies, and it keeps pace with the DocsSynchronizer
+         * constructor so no call site has to repeat its arguments.
+         */
     }
 
     /**

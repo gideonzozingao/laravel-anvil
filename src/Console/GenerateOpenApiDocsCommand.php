@@ -12,16 +12,16 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
  * Generates the API documentation for one or more API versions, then reports
  * where each version lives.
  *
- *   php artisan anvil:generate-apidocs                        # default version
- *   php artisan anvil:generate-apidocs --api-version=2        # just v2
- *   php artisan anvil:generate-apidocs --api-version=2 --force --ui
- *   php artisan anvil:generate-apidocs --all-versions --force  # refresh every version on disk
- *   php artisan anvil:generate-apidocs --check                 # report only, no writes
- *   php artisan anvil:generate-apidocs --check --strict         # CI gate: non-zero if a spec is missing
- *   php artisan anvil:generate-apidocs --json                  # implies --check
- *   php artisan anvil:generate-apidocs --open
+ *   php artisan anvil:forge-apidocs                        # default version
+ *   php artisan anvil:forge-apidocs --api-version=2        # just v2
+ *   php artisan anvil:forge-apidocs --api-version=2 --force --ui
+ *   php artisan anvil:forge-apidocs --all-versions --force  # refresh every version on disk
+ *   php artisan anvil:forge-apidocs --check                 # report only, no writes
+ *   php artisan anvil:forge-apidocs --check --strict         # CI gate: non-zero if a spec is missing
+ *   php artisan anvil:forge-apidocs --json                  # implies --check
+ *   php artisan anvil:forge-apidocs --open
  *
- * Generation itself is delegated to anvil:generate-api --spec-only, so there is
+ * Generation itself is delegated to anvil:forge-api --spec-only, so there is
  * exactly one implementation of the spec pipeline; this command owns version
  * targeting and reporting.
  */
@@ -30,12 +30,17 @@ class GenerateOpenApiDocsCommand extends Command
     /**
      * The command this one delegates spec generation to.
      *
-     * Careful with find-and-replace across the package: this value is a strict
-     * PREFIX of this command's own name, and setting it to
-     * 'anvil:generate-apidocs' makes the command call itself. resolveApiCommand()
-     * detects that, but the names themselves remain the hazard.
+     * Careful with find-and-replace across the package: this value used to be
+     * a strict PREFIX of this command's own name ('anvil:generate-api' vs.
+     * 'anvil:generate-apidocs'), and a rename that touched one but not the
+     * other silently broke delegation — resolveApiCommand() reported "the
+     * anvil:generate-api command is not registered" even though the spec
+     * generator was very much registered, just under 'anvil:forge-api'. Both
+     * command names now share the 'anvil:forge-' prefix instead, and
+     * resolveApiCommand() still guards against this class of bug regardless
+     * of what either name is renamed to next.
      */
-    private const API_COMMAND = 'anvil:generate-api';
+    private const API_COMMAND = 'anvil:forge-api';
 
     /** @var list<string> */
     private const FORMATS = ['yaml', 'json'];
@@ -67,7 +72,7 @@ class GenerateOpenApiDocsCommand extends Command
             return self::FAILURE;
         }
 
-        // Captured before delegating: anvil:generate-api overwrites
+        // Captured before delegating: anvil:forge-api overwrites
         // anvil.openapi.api_version at runtime, which would otherwise move the
         // "(default)" marker to whichever version was generated last.
         $default = OpenApiLocator::configuredVersion();
@@ -186,10 +191,12 @@ class GenerateOpenApiDocsCommand extends Command
      * Resolve the command that actually generates specs, or return a string
      * explaining why it cannot be used.
      *
-     * Four distinct failures, each with its own message. The previous version
-     * checked only `has()`, which cannot catch the worst case: API_COMMAND
-     * pointing back at this command, which then passed --spec-only to itself and
-     * surfaced as Symfony's opaque "the --spec-only option does not exist".
+     * Four distinct failures, each with its own message. A naive check would
+     * only verify `has()`, which cannot catch the worst case: API_COMMAND
+     * pointing back at this command, which would then pass --spec-only to
+     * itself and surface as Symfony's opaque "the --spec-only option does not
+     * exist". That exact failure mode is why this method also checks identity,
+     * not just registration.
      */
     protected function resolveApiCommand(): SymfonyCommand|string
     {
@@ -212,7 +219,8 @@ class GenerateOpenApiDocsCommand extends Command
         if ($command === $this || $command->getName() === $this->getName()) {
             return sprintf(
                 'API_COMMAND resolves to this command (%s), which would recurse. It must name the spec generator. '
-                    .'Note that "%s" is a prefix of "%s" — a careless find-and-replace produces exactly this.',
+                    .'Note that "%s" and "%s" share a prefix — a careless rename or find-and-replace can point one '
+                    .'back at the other.',
                 $this->getName(),
                 self::API_COMMAND,
                 (string) $this->getName(),

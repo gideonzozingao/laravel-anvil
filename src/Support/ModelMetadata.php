@@ -100,13 +100,30 @@ final class ModelMetadata
 
         if ($this->relationNames === null || $this->relationSignature !== $signature) {
             $namer = RelationNamer::forModel($this);
+            $plan = $namer->plan($this);
 
-            $this->relationNames = $namer->plan($this);
+            $this->relationNames = [
+                'belongsTo' => $this->sanitizeRelationNames($plan['belongsTo'] ?? []),
+                'inverse' => $this->sanitizeRelationNames($plan['inverse'] ?? []),
+            ];
             $this->relationCollisions = $namer->collisions();
             $this->relationSignature = $signature;
         }
 
         return $this->relationNames;
+    }
+
+    /**
+     * @param  array<string, string>  $names
+     * @return array<string, string>
+     */
+    private function sanitizeRelationNames(array $names): array
+    {
+        foreach ($names as $key => $name) {
+            $names[$key] = ReservedNames::safeMethodName((string) $name);
+        }
+
+        return $names;
     }
 
     /**
@@ -185,7 +202,7 @@ final class ModelMetadata
             return false;
         }
 
-        return $defaultSchema === null || $this->schema !== $defaultSchema;
+        return $defaultSchema === null || ! ReservedNames::isDefaultSchema($this->schema, $defaultSchema);
     }
 
     /**
@@ -210,7 +227,7 @@ final class ModelMetadata
      * NOTE: PHP reserved words are not legal namespace segments. A schema named
      * "public" would yield App\Models\Public\Tenant, which is a parse error on
      * older PHP and confuses some static analysers even where it parses — hence
-     * the suffix.
+     * the suffix applied by ReservedNames::namespaceSegment().
      */
     public function schemaNamespaceSegment(?string $defaultSchema = null): ?string
     {
@@ -218,9 +235,25 @@ final class ModelMetadata
             return null;
         }
 
-        $segment = Str::studly(str_replace(['.', '-', ' '], '_', $this->schema));
+        return ReservedNames::namespaceSegment($this->schema);
+    }
 
-        return self::isReservedNamespaceSegment($segment) ? $segment.'Schema' : $segment;
+    /**
+     * The fully-qualified class name of this model under $rootNamespace, with the
+     * schema segment applied only when it is warranted.
+     *
+     * Use this from the resource / OpenAPI / controller generators instead of
+     * concatenating a segment by hand — that is what produced references to
+     * App\Models\PublicSchema\Tenant for a model written to App\Models\Tenant.
+     */
+    public function modelFqn(string $rootNamespace, ?string $defaultSchema = null): string
+    {
+        $rootNamespace = Helpers::normalizeNamespace($rootNamespace);
+        $segment = $this->schemaNamespaceSegment($defaultSchema);
+
+        return $segment === null
+            ? $rootNamespace.'\\'.$this->model
+            : $rootNamespace.'\\'.$segment.'\\'.$this->model;
     }
 
     /**
@@ -234,48 +267,5 @@ final class ModelMetadata
         }
 
         return Str::kebab(str_replace(['.', ' '], '_', $this->schema));
-    }
-
-    private static function isReservedNamespaceSegment(string $segment): bool
-    {
-        static $reserved = [
-            'public',
-            'private',
-            'protected',
-            'static',
-            'class',
-            'interface',
-            'trait',
-            'enum',
-            'function',
-            'const',
-            'namespace',
-            'use',
-            'new',
-            'return',
-            'list',
-            'array',
-            'default',
-            'match',
-            'fn',
-            'readonly',
-            'never',
-            'void',
-            'null',
-            'true',
-            'false',
-            'int',
-            'float',
-            'string',
-            'bool',
-            'object',
-            'iterable',
-            'callable',
-            'mixed',
-            'parent',
-            'self',
-        ];
-
-        return in_array(strtolower($segment), $reserved, true);
     }
 }

@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Zuqongtech\LaravelAnvil\Support;
 
+use RuntimeException;
 use Zuqongtech\LaravelAnvil\Support\Auth\AuthContext;
-// use Zuqongtech\LaravelAnvil\Support\Auth\Contracts\ScaffoldPart;
+use Zuqongtech\LaravelAnvil\Support\Auth\Contracts\ScaffoldPart;
 use Zuqongtech\LaravelAnvil\Support\Auth\Parts\AuthorizationPart;
 use Zuqongtech\LaravelAnvil\Support\Auth\Parts\EmailVerificationPart;
 use Zuqongtech\LaravelAnvil\Support\Auth\Parts\GuestLayoutPart;
@@ -25,9 +26,6 @@ use Zuqongtech\LaravelAnvil\Support\Auth\TokenMap;
  * migrations, authorization, routes, file IO and post-install guidance. Each of
  * those now lives in a class that can be read, tested and changed on its own; what
  * remains here is ordering and aggregation.
- *
- * The public surface is unchanged, so GenerateAuthCommand needs no edits beyond
- * the up-front validate() call.
  *
  * ORDER MATTERS in one place only: RoutesPart is emitted last, because it names
  * every component class and reads the context's feature flags to decide which
@@ -78,7 +76,9 @@ class AuthScaffolder
     /**
      * A reason the scaffold cannot run, or null.
      *
-     * The command should call this before generate() — see AuthContext::validate().
+     * generate() enforces this itself now. It previously relied on the command
+     * remembering to ask, and the command did not — which made every check in
+     * AuthContext::validate() dead code.
      */
     public function validate(): ?string
     {
@@ -87,9 +87,15 @@ class AuthScaffolder
 
     /**
      * @return list<array{type: string, name: string, status: string, reason?: string, path?: string}>
+     *
+     * @throws RuntimeException when the context is not viable
      */
     public function generate(): array
     {
+        // Half a scaffold is worse than none: the operator gets a login screen
+        // that cannot authenticate and no signal that anything was wrong.
+        throw_if(($problem = $this->validate()) !== null, RuntimeException::class, $problem);
+
         foreach ($this->parts as $part) {
             if (! $part->supports($this->context)) {
                 continue;
@@ -106,13 +112,15 @@ class AuthScaffolder
      *
      * Previously one hand-maintained list at the bottom of the class tried to
      * describe everything above it, and drifted from it. Now a part that stops
-     * needing a step stops mentioning it.
+     * needing a step stops mentioning it — including the "require auth.php" step,
+     * which belongs to RoutesPart and was hardcoded here even on runs where
+     * RoutesPart was skipped.
      *
      * @return list<string>
      */
     public function postInstallNotes(): array
     {
-        $notes = ["Require the auth routes: add  require __DIR__.'/auth.php';  to routes/web.php"];
+        $notes = [];
 
         foreach ($this->parts as $part) {
             if (! $part->supports($this->context)) {

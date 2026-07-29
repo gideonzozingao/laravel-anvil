@@ -444,6 +444,10 @@ return [
     | key list used to duplicate that block verbatim. WebGenerator should
     | resolve against config('anvil.web'), not a generators.web sub-array.
     |
+    | The 'resources' and 'form_requests' namespaces below are also read by
+    | anvil:docs-sync to work out where to look for hand-edited payloads, so
+    | changing one of them moves discovery with it. See openapi.sync.roots.
+    |
     */
     'generators' => [
 
@@ -557,6 +561,11 @@ return [
     | 'title' is null so it falls back to config('app.name'). Setting a literal
     | here means every project's spec is titled the same thing.
     |
+    | anvil:docs-sync reads 'output_path', 'versioned_output', 'format',
+    | 'api_version' and 'split_files' to locate the spec it must reconcile, so
+    | those five keys describe one spec for both the writer and the reconciler.
+    | Changing 'versioned_output' moves both.
+    |
     */
     'openapi' => [
         'title' => env('ANVIL_OPENAPI_TITLE', null),   // null → config('app.name')
@@ -565,6 +574,10 @@ return [
         'versioned_output' => env('ANVIL_OPENAPI_VERSIONED', true),
         'format' => env('ANVIL_OPENAPI_FORMAT', 'yaml'),   // yaml | json
         'split_files' => true,
+
+        // Root document name, without extension. Read by docs-sync to find the
+        // file it must open; the generators assume the same name.
+        'filename' => env('ANVIL_OPENAPI_FILENAME', 'openapi'),
 
         'spec_version' => '3.1.0',        // the OpenAPI spec version itself
         'api_version' => env('ANVIL_API_VERSION', 'v1'),   // which API version is being written
@@ -585,6 +598,189 @@ return [
         'servers' => [
             ['url' => env('APP_URL', 'http://localhost').'/api/v1', 'description' => 'Local'],
         ],
+
+        /*
+        |----------------------------------------------------------------------
+        | Payload Reconciliation  (anvil:docs-sync)
+        |----------------------------------------------------------------------
+        |
+        | The generators derive schemas from ModelMetadata — the database. But
+        | the payload a client actually sees is shaped by two files the pipeline
+        | never reads:
+        |
+        |   {Model}Resource::toArray()            what the API returns
+        |   Store/Update{Model}Request::rules()   what the API accepts
+        |
+        | Edit either and the spec is silently wrong; regenerating does not help,
+        | because --openapi re-derives from the database and cannot see the edit.
+        | anvil:docs-sync closes that gap by reading the CODE and merging into the
+        | spec: structure from code, prose from the spec.
+        |
+        | Nothing here needs setting to get started. Every key has a working
+        | default and the whole block can be deleted.
+        |
+        |   php artisan anvil:docs-sync                  reconcile
+        |   php artisan anvil:docs-sync --check          CI gate, never writes
+        |   php artisan anvil:docs-sync --dry-run --diff preview, per property
+        |   php artisan anvil:generate --api --openapi --docs-sync
+        |
+        */
+        'sync' => [
+
+            /*
+             |------------------------------------------------------------------
+             | Roots
+             |------------------------------------------------------------------
+             |
+             | Directories scanned for payload classes, recursively — so the
+             | versioned subdirectories the API scaffold writes (V1/, V2/) are
+             | picked up without listing them.
+             |
+             | null derives them from generators.resources.namespace and
+             | generators.form_requests.namespace above, which is why this is the
+             | default: those namespaces are already the single source of truth
+             | for where payload classes live, and duplicating the paths here
+             | would leave docs-sync scanning a directory nothing writes to any
+             | more the moment either namespace changes.
+             |
+             | Set an explicit list for a modular layout, or for resources that
+             | live outside the configured namespaces:
+             |
+             |   'roots' => [
+             |       ['path' => app_path('Http/Resources'), 'kind' => 'response'],
+             |       ['path' => app_path('Http/Requests'),  'kind' => 'request'],
+             |       ['path' => base_path('modules'),       'kind' => 'response'],
+             |   ],
+             |
+             | 'kind' is only a hint. A class ending in Request is always read as
+             | a request and one ending in Resource or Collection as a response,
+             | whichever root it was found under, so a misfiled class is still
+             | read with the correct reader.
+             */
+            'roots' => null,
+
+            /*
+             |------------------------------------------------------------------
+             | Schema name overrides
+             |------------------------------------------------------------------
+             |
+             | docs-sync works out which component a class documents by trying an
+             | ordered list of candidate names and preferring one that ALREADY
+             | EXISTS in the spec. That handles the conventions the generators
+             | use without configuration, and — more importantly — stops sync
+             | inventing a duplicate VehicleStoreRequest beside the real
+             | StoreVehicleRequest, which would leave one of them permanently
+             | stale.
+             |
+             | Add an entry when the guess is wrong. Symptoms: a "Several classes
+             | claim this component" skip, or a new schema appearing next to the
+             | one you expected to be updated. Key by FQCN or short class name;
+             | the value is the exact key in components.schemas.
+             */
+            'schema_names' => [
+                // 'App\Http\Requests\V1\StoreVehicleRequest' => 'VehicleCreatePayload',
+                // 'VehicleResource' => 'Vehicle',
+            ],
+
+            /*
+             |------------------------------------------------------------------
+             | Enum namespaces
+             |------------------------------------------------------------------
+             |
+             | Searched when resolving a bare `new Enum(FuelKind::class)` in a
+             | form request. Because enums.validation below is 'rule', generated
+             | requests reference enum classes by their imported short name.
+             |
+             | This only matters in the fallback path. docs-sync EXECUTES rules()
+             | when it can, and an executed rule object resolves its own cases
+             | exactly. It falls back to reading the source when rules() throws
+             | without a bound request — normal for update requests that touch
+             | $this->route() or $this->user() for a unique-ignore — and tokenised
+             | source has no import table, so these namespaces are the only way
+             | to find the class.
+             |
+             | null follows enums.namespace below.
+             */
+            'enum_namespaces' => null,
+
+            /*
+             |------------------------------------------------------------------
+             | Custom readers
+             |------------------------------------------------------------------
+             |
+             | Class names implementing Zuqongtech\LaravelAnvil\Contracts\ShapeReader,
+             | resolved through the container so they may take constructor
+             | dependencies. Declared the same way custom_generators are.
+             |
+             | The built-ins cover {Model}Resource::toArray() and
+             | Store/Update{Model}Request::rules(). Add a reader for anything
+             | else — a ResourceCollection subclass, a DTO layer, an inline
+             | $request->validate([...]) in a controller.
+             |
+             | Yours are tried FIRST, so a reader whose supports() claims a class
+             | takes it over the built-in while the built-ins still handle
+             | everything they otherwise would.
+             |
+             | This is config rather than a container binding on purpose. A bound
+             | DocsSynchronizer is a singleton whose spec directory is fixed at
+             | construction, so --api-version=v2 would silently reconcile v1's
+             | spec. Declaring readers keeps the version a per-run decision.
+             |
+             | A class that is missing, or does not implement the contract, throws
+             | rather than being skipped — a reader that quietly never runs looks
+             | exactly like a reader that ran and found nothing.
+             */
+            'readers' => [
+                // App\Docs\DtoShapeReader::class,
+            ],
+
+            /*
+             |------------------------------------------------------------------
+             | Pruning
+             |------------------------------------------------------------------
+             |
+             | Whether a property documented in the spec but absent from the code
+             | is removed. True is correct: deleting a field from toArray() should
+             | stop the spec promising it.
+             |
+             | Three things are never pruned regardless of this setting, because
+             | pruning them would lose documentation no one can recover:
+             |
+             |   - anything read from a partial source (a mergeWhen(), a spread, a
+             |     parent::toArray(), a computed key). Absence of evidence is not
+             |     evidence of absence.
+             |   - any property marked x-anvil: {managed: false}
+             |   - anything at all under --check or --dry-run
+             |
+             | Set false, or pass --no-prune, if you document fields that no
+             | resource produces and would rather not mark each one individually.
+             */
+            'prune' => true,
+
+            /*
+             |------------------------------------------------------------------
+             | Auto-sync in local development
+             |------------------------------------------------------------------
+             |
+             | Off by default, and worth leaving off. An implicit file write
+             | during a web request is surprising, and a spec that changes
+             | without a command having been run is hard to reason about in a
+             | team — the diff appears with no author.
+             |
+             | The reliable guards are a pre-commit hook and a CI gate:
+             |
+             |   php artisan anvil:docs-sync --install-hook
+             |   php artisan anvil:docs-sync --check          # in CI
+             |
+             | If you do enable this, note that filemtime() on a DIRECTORY only
+             | changes when entries are added or removed, so editing an existing
+             | resource in place will not trigger an mtime-based check. It has to
+             | hash the files to be correct.
+             */
+            'auto' => false,
+
+        ],
+
         /*
         |----------------------------------------------------------------------
         | Interactive Docs
@@ -619,10 +815,35 @@ return [
             'enabled' => env('ANVIL_DOCS_ENABLED', env('APP_ENV', 'production') === 'local'),
             'route' => env('ANVIL_DOCS_ROUTE', 'docs'),
             'public_path' => env('ANVIL_DOCS_PUBLIC_PATH', 'api-docs'),
-            'middleware' => ['web'],   // production: ['web', 'auth']
             'ui_version' => '5.17.14',   // swagger-ui-dist CDN version
             'remote_base' => env('ANVIL_DOCS_REMOTE_BASE', null),
             'remote_timeout' => env('ANVIL_DOCS_REMOTE_TIMEOUT', 5),
+
+            // The Blade view that renders the docs shell. Point this at your own
+            // view (e.g. 'anvil::docs.redoc', or a fully custom
+            // 'vendor.acme.api-docs') to swap renderers without touching package
+            // source. Default resolves to resources/views/docs/show.blade.php in
+            // this package, or the published override under
+            // resources/views/vendor/anvil/docs/show.blade.php once
+            // `php artisan vendor:publish --tag=anvil-views` has run.
+            'view' => env('ANVIL_DOCS_VIEW', 'anvil::docs.show'),
+
+            // Local path (relative to the app URL, e.g. '/api-docs/v1/assets') where
+            // `php artisan anvil:install:swagger-ui` placed the vendored assets.
+            // Leave null to load swagger-ui.css/js from the CDN instead — this key
+            // previously existed but was never actually read by DocsController;
+            // it now is.
+            'asset_base' => env('ANVIL_DOCS_ASSET_BASE'),
+
+            // Route middleware for the docs page and spec endpoints. Add 'auth',
+            // a Gate-checking middleware, etc. to gate the docs — this is the
+            // reason the page moved off a static public/ file: static files under
+            // public/ cannot be gated by Laravel middleware at all.
+            //
+            // NOTE: this key was previously declared twice in this block. PHP keeps
+            // the last literal, so the earlier one was dead — and the production
+            // guidance that sat on it was silently doing nothing.
+            'middleware' => ['web'],   // production: ['web', 'auth']
         ],
     ],
 
@@ -653,6 +874,23 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Enums
+    |--------------------------------------------------------------------------
+    |
+    | 'validation' decides how a generated form request constrains an enum column:
+    |
+    |   rule → new Enum(FuelKind::class)   type-safe, refactor-safe
+    |   in   → 'in:petrol,diesel,ev'       plain string rule
+    |
+    | Both are readable by anvil:docs-sync, but by different routes. 'in' is read
+    | straight from the rule string. 'rule' is resolved by executing rules() and
+    | reflecting the enum — and when rules() cannot be executed, by looking the
+    | short class name up in openapi.sync.enum_namespaces, which defaults to the
+    | namespace below.
+    |
+    */
     'enums' => [
         'enabled' => true,
         'namespace' => 'App\\Enums',

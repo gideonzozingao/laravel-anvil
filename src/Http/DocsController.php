@@ -44,6 +44,27 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
  *   … 'components'". Bundling inlines the external files into one
  *   self-contained document so every #/components/… ref resolves. In
  *   single-file mode there are no external refs and bundling is a no-op.
+ *
+ * DOCS PAGE — Blade view, not an inline HTML string.
+ *
+ *   The Swagger UI shell used to be a PHP heredoc baked into this controller.
+ *   That made three things impossible without editing package source: gating
+ *   the docs route behind auth/a Gate (nothing stopped a fully static
+ *   equivalent, but there was no *reason* to route through Laravel at all if
+ *   the page never touched the framework), inheriting the host app's own
+ *   layout/branding, and swapping the renderer (Redoc, Scalar, …) without a
+ *   parallel controller method per renderer.
+ *
+ *   render() now resolves a view name from config, defaulting to the
+ *   package's own 'anvil::docs.show'. A consumer runs
+ *   `php artisan vendor:publish --tag=anvil-views` to get an editable copy
+ *   under resources/views/vendor/anvil/docs/show.blade.php — Laravel's view
+ *   finder prefers that copy automatically, no config change required.
+ *
+ *   anvil.openapi.docs.asset_base is now actually consumed here (previously
+ *   InstallSwaggerUi told the operator to set it, but this controller ignored
+ *   it and always pointed at the unpkg CDN regardless). When set, the view
+ *   loads swagger-ui.css/js from that local path instead.
  */
 class DocsController
 {
@@ -80,7 +101,7 @@ class DocsController
         ], $available);
 
         return new Response(
-            $this->html($urls, $requested),
+            $this->render($urls, $requested),
             200,
             ['Content-Type' => 'text/html; charset=UTF-8'],
         );
@@ -467,140 +488,29 @@ class DocsController
     // -----------------------------------------------------------------------
 
     /**
+     * Render the docs shell through Blade instead of a baked-in heredoc.
+     *
+     * config('anvil.openapi.docs.view') lets a consumer swap in their own
+     * renderer (Redoc, Scalar, …) or a themed copy without touching package
+     * source — the default 'anvil::docs.show' resolves to
+     * resources/views/docs/show.blade.php in this package, and is overridden
+     * automatically once `vendor:publish --tag=anvil-views` has run.
+     *
      * @param  list<array{name: string, url: string}>  $urls
      */
-    protected function html(array $urls, string $primary): string
+    protected function render(array $urls, string $primary): string
     {
-        $title = config('anvil.openapi.title') ?: config('app.name', 'API Docs');
-        $uiVersion = (string) config('anvil.openapi.docs.ui_version', '5.17.14');
-        $urlsJson = json_encode($urls, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-        $single = count($urls) === 1;
+        $assetBase = config('anvil.openapi.docs.asset_base');
 
-        // With one version the definition selector is noise; with several it is
-        // the navigation.
-        $topbar = $single ? '#swagger-ui .topbar { display: none; }' : '#swagger-ui .topbar { background: #16213e; }';
-
-        return <<<HTML
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>{$title} — API Documentation ({$primary})</title>
-          <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@{$uiVersion}/swagger-ui.css" />
-          <style>
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-            {$topbar}
-
-            .anvil-header {
-              background: #1a1a2e;
-              color: #fff;
-              padding: 14px 28px;
-              display: flex;
-              align-items: center;
-              gap: 14px;
-            }
-            .anvil-logo { width: 46px; height: 46px; flex: 0 0 auto; display: block; }
-            .anvil-title { font-size: 20px; font-weight: 700; letter-spacing: 0.3px; line-height: 1; }
-            .anvil-divider { width: 1px; height: 26px; background: rgba(255,255,255,0.18); margin: 0 2px; }
-            .anvil-sub { font-size: 13px; font-weight: 400; opacity: 0.55; letter-spacing: 0.2px; }
-            .anvil-version {
-              margin-left: auto; font-size: 12px; font-weight: 600; letter-spacing: 0.6px;
-              background: rgba(255,255,255,0.10); padding: 5px 11px; border-radius: 999px;
-            }
-          </style>
-        </head>
-        <body>
-          <header class="anvil-header">
-            <svg class="anvil-logo" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Laravel Anvil logo">
-              <defs>
-                <linearGradient id="anvil-bg" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="#272b46"/>
-                  <stop offset="1" stop-color="#14152a"/>
-                </linearGradient>
-                <linearGradient id="anvil-steel" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="#F6F8FD"/>
-                  <stop offset="0.55" stop-color="#DDE3EF"/>
-                  <stop offset="1" stop-color="#B7C0D2"/>
-                </linearGradient>
-                <linearGradient id="anvil-head" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="#E7ECF5"/>
-                  <stop offset="1" stop-color="#9AA4B8"/>
-                </linearGradient>
-                <linearGradient id="anvil-red" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="#FF4133"/>
-                  <stop offset="1" stop-color="#D7190D"/>
-                </linearGradient>
-              </defs>
-
-              <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#anvil-bg)"/>
-              <rect x="25.5" y="25.5" width="461" height="461" rx="106.5" fill="none" stroke="#3a3f5e" stroke-width="3"/>
-
-              <g transform="translate(256 300) rotate(-45)" stroke="#15131c" stroke-linejoin="round">
-                <rect x="-15" y="-118" width="30" height="272" rx="15" fill="url(#anvil-red)" stroke-width="3"/>
-                <rect x="-16" y="118" width="32" height="8" rx="4" fill="#9e120a" stroke="none"/>
-                <rect x="-16" y="132" width="32" height="8" rx="4" fill="#9e120a" stroke="none"/>
-                <rect x="-23" y="-106" width="46" height="22" rx="6" fill="url(#anvil-head)" stroke-width="2.5"/>
-                <rect x="-66" y="-154" width="132" height="62" rx="12" fill="url(#anvil-head)" stroke-width="3"/>
-                <rect x="40" y="-150" width="22" height="54" rx="7" fill="#8B94A8" stroke="none"/>
-                <rect x="-58" y="-148" width="14" height="40" rx="6" fill="#FBFCFF" opacity="0.6" stroke="none"/>
-              </g>
-
-              <g transform="translate(256 300) rotate(45)" stroke="#15131c" stroke-linejoin="round">
-                <rect x="-15" y="-118" width="30" height="272" rx="15" fill="url(#anvil-red)" stroke-width="3"/>
-                <rect x="-16" y="118" width="32" height="8" rx="4" fill="#9e120a" stroke="none"/>
-                <rect x="-16" y="132" width="32" height="8" rx="4" fill="#9e120a" stroke="none"/>
-                <rect x="-23" y="-106" width="46" height="22" rx="6" fill="url(#anvil-head)" stroke-width="2.5"/>
-                <rect x="-66" y="-154" width="132" height="62" rx="12" fill="url(#anvil-head)" stroke-width="3"/>
-                <rect x="-62" y="-150" width="22" height="54" rx="7" fill="#8B94A8" stroke="none"/>
-                <rect x="44" y="-148" width="14" height="40" rx="6" fill="#FBFCFF" opacity="0.6" stroke="none"/>
-              </g>
-
-              <ellipse cx="256" cy="410" rx="116" ry="16" fill="#000000" opacity="0.28"/>
-
-              <g stroke="#15131c" stroke-width="4" stroke-linejoin="round">
-                <path d="M212 292 L300 292 L288 330 L320 354 L336 398 L176 398 L192 354 L224 330 Z" fill="url(#anvil-steel)"/>
-                <path d="M116 270 L162 252 L358 252 L358 276 L300 292 L164 292 L140 286 Z" fill="url(#anvil-steel)"/>
-              </g>
-
-              <rect x="172" y="255" width="180" height="9" rx="4.5" fill="#FFFFFF" opacity="0.65"/>
-              <path d="M224 330 L288 330 L283 344 L229 344 Z" fill="#0d0f1f" opacity="0.12"/>
-
-              <g fill="#FF6A4A">
-                <path d="M372 222 l5 12 12 5 -12 5 -5 12 -5 -12 -12 -5 12 -5 z"/>
-                <circle cx="392" cy="250" r="4"/>
-              </g>
-            </svg>
-            <span class="anvil-title">{$title}</span>
-            <span class="anvil-divider"></span>
-            <span class="anvil-sub">API Documentation</span>
-            <span class="anvil-version">{$primary}</span>
-          </header>
-
-          <div id="swagger-ui"></div>
-          <script src="https://unpkg.com/swagger-ui-dist@{$uiVersion}/swagger-ui-bundle.js"></script>
-          <script src="https://unpkg.com/swagger-ui-dist@{$uiVersion}/swagger-ui-standalone-preset.js"></script>
-          <script>
-            window.onload = () => {
-              SwaggerUIBundle({
-                urls: {$urlsJson},
-                "urls.primaryName": '{$primary}',
-                dom_id: '#swagger-ui',
-                presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
-                layout: 'StandaloneLayout',
-                deepLinking: true,
-                displayRequestDuration: true,
-                defaultModelsExpandDepth: 2,
-                defaultModelExpandDepth: 2,
-                tryItOutEnabled: true,
-                filter: true,
-                syntaxHighlight: { activate: true, theme: 'agate' },
-              });
-            };
-          </script>
-        </body>
-        </html>
-        HTML;
+        return view(config('anvil.openapi.docs.view', 'anvil::docs.show'), [
+            'urls' => $urls,
+            'primary' => $primary,
+            'title' => config('anvil.openapi.title') ?: config('app.name', 'API Docs'),
+            'uiVersion' => (string) config('anvil.openapi.docs.ui_version', '5.17.14'),
+            // Set by `php artisan anvil:install:swagger-ui` on success. Null
+            // means "no local assets installed" — the view falls back to the
+            // CDN rather than pointing at a path that doesn't exist.
+            'assetBase' => is_string($assetBase) && $assetBase !== '' ? rtrim($assetBase, '/') : null,
+        ])->render();
     }
 }
