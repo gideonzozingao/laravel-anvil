@@ -1,30 +1,17 @@
-<p align="center">
-  <img src="art/anvil-logo.svg" alt="Laravel Anvil" width="140" height="140">
-</p>
+# README — replacement content
 
-<h1 align="center">Laravel Anvil</h1>
+Three blocks below, each replacing an existing part of `README.md`:
 
-<p align="center">
-  <strong>Forge a complete Laravel application from your database.</strong>
-</p>
+1. **Table of contents** — replaces the current `## Table of contents` list
+2. **Quick start** — replaces the current `## Quick start` section
+3. **Commands** — replaces everything from `## Commands` down to (but not
+   including) `## Versioned API scaffold`
 
-<p align="center">
-  <a href="https://packagist.org/packages/zuqongtech/laravel-anvil"><img alt="Packagist version" src="https://img.shields.io/packagist/v/zuqongtech/laravel-anvil?style=flat-square"></a>
-  <a href="https://packagist.org/packages/zuqongtech/laravel-anvil"><img alt="PHP version" src="https://img.shields.io/packagist/dependency-v/zuqongtech/laravel-anvil/php?style=flat-square"></a>
-  <a href="https://packagist.org/packages/zuqongtech/laravel-anvil"><img alt="Downloads" src="https://img.shields.io/packagist/dt/zuqongtech/laravel-anvil?style=flat-square"></a>
-  <a href="LICENSE.md"><img alt="License" src="https://img.shields.io/packagist/l/zuqongtech/laravel-anvil?style=flat-square"></a>
-</p>
+---
 
-**Laravel Anvil** introspects a live database and hammers your raw schema into a
-full, idiomatic Laravel scaffold — models, controllers, form requests, API
-resources, services, repositories, policies, gates, observers, events, listeners,
-factories, seeders, migrations and tests — plus **versioned JSON APIs** (each
-version with its own key casing, pagination and hidden fields), an **OpenAPI 3.1**
-specification with Swagger UI, a **web CRUD front end** in pure Blade + Tailwind
-or Blade + Livewire, and a **Livewire authentication scaffold** with RBAC.
+## 1. Table of contents
 
-Point it at a database, run one command, and get working code you own.
-
+```markdown
 ## Table of contents
 
 - [Why Anvil](#why-anvil)
@@ -32,14 +19,26 @@ Point it at a database, run one command, and get working code you own.
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [Commands](#commands)
-  - [`anvil:generate`](#anvilgenerate)
-  - [`anvil:generate-api`](#anvilgenerate-api)
-  - [`anvil:generate-apidocs`](#anvilgenerate-apidocs)
-  - [`anvil:generate-web`](#anvilgenerate-web)
-  - [`anvil:generate-auth`](#anvilgenerate-auth)
+  - [Generation](#generation)
+    - [`anvil:forge:app-scaffold`](#anvilforgeapp-scaffold)
+    - [`anvil:forge-api`](#anvilforge-api)
+    - [`anvil:forge-apidocs`](#anvilforge-apidocs)
+    - [`anvil:forge-webapp`](#anvilforge-webapp)
+    - [`anvil:forge-auth`](#anvilforge-auth)
+    - [`anvil:forge-graphql`](#anvilforge-graphql)
+    - [`anvil:forge-client`](#anvilforge-client)
+  - [Inspection](#inspection)
+    - [`anvil:doctor`](#anvildoctor)
+    - [`anvil:diff`](#anvildiff)
+    - [`anvil:docs-sync`](#anvildocs-sync)
+  - [Maintenance](#maintenance)
+    - [`anvil:polish`](#anvilpolish)
+    - [`anvil:frontend`](#anvilfrontend)
+    - [`anvil:install:swagger-ui`](#anvilinstallswagger-ui)
 - [Versioned API scaffold](#versioned-api-scaffold)
 - [Per-version shape profiles](#per-version-shape-profiles)
 - [OpenAPI & Swagger UI](#openapi--swagger-ui)
+- [Response caching](#response-caching)
 - [Events & listeners](#events--listeners)
 - [Relation naming](#relation-naming)
 - [Web scaffold](#web-scaffold)
@@ -53,152 +52,182 @@ Point it at a database, run one command, and get working code you own.
 - [Security](#security)
 - [Contributing](#contributing)
 - [License](#license)
-
-## Why Anvil
-
-Most generators work from migrations or hand-written model definitions. Anvil
-works from the **database itself** — reading columns, types, primary keys, foreign
-keys, unique constraints, indexes and soft-delete markers directly from the live
-connection. That makes it equally at home on a greenfield Laravel app and on a
-pre-existing or framework-foreign database: non-`id` primary keys, tables without
-timestamps, multiple schemas, composite keys, two foreign keys from one table to
-the same parent.
-
-The output is plain Laravel code with **no runtime dependency on Anvil**. Generate
-it, commit it, edit it freely — Anvil is a build-time tool, not a framework.
-
-## Requirements
-
-| Requirement    | Version                                    |
-| -------------- | ------------------------------------------ |
-| PHP            | `^8.3`                                     |
-| Laravel        | `^11.0 \|\| ^12.0`                         |
-| `symfony/yaml` | `^6.0 \|\| ^7.0` (pulled in automatically) |
-
-Optional, depending on what you generate:
-
-- **Livewire 3** (`livewire/livewire`) — for `anvil:generate-web --stack=livewire`
-  and for `anvil:generate-auth`.
-- A supported driver: **PostgreSQL**, **MySQL/MariaDB**, or **SQLite**.
-
-The generated web scaffold styles itself with **Tailwind CSS via CDN**, so no
-front-end build step is needed to see it working.
-
-## Installation
-
-```bash
-composer require zuqongtech/laravel-anvil --dev
-php artisan vendor:publish --tag=anvil-config
 ```
 
-Anvil is a development dependency — it generates code; it does not run in
-production.
-
-> **Re-publish after upgrading.** `mergeConfigFrom()` is **shallow**: a published
-> `config/anvil.php` containing an `api` or `openapi` key _replaces_ that whole
-> subtree, so new keys do not fall back to the package defaults. After an upgrade
-> run `php artisan vendor:publish --tag=anvil-config --force` (or add the missing
-> keys by hand), then `php artisan config:clear`.
-
-For the Livewire stack:
-
-```bash
-composer require livewire/livewire
-```
-
-## Quick start
-
-```bash
-# Models for every table in the default connection
-php artisan anvil:generate
-
-# The kitchen sink for two tables
-php artisan anvil:generate --all --tables=posts --tables=comments
-
-# A versioned JSON API (v1) plus its OpenAPI spec and Swagger UI
-php artisan anvil:generate-api --api-version=1 --ui
-
-# A second version with a different wire format
-php artisan anvil:generate-api --api-version=2 --case=camel --pagination=25
-
-# Where are the docs?
-php artisan anvil:generate-apidocs --check
-
-# A web CRUD front end
-php artisan anvil:generate-web --tables=posts
-php artisan anvil:generate-web --stack=livewire --tables=posts
-
-# Login, register, 2FA, lockout and RBAC as Livewire components
-php artisan anvil:generate-auth
-```
-
-Preview anything without writing files by adding `--dry-run`.
-
-## Commands
-
-Anvil ships five Artisan commands. Each owns one slice of the output; all of them
-run the same generation pipeline through the `RunsGenerationPipeline` trait, so
-behaviour never diverges between them.
-
-| Command                  | Produces                                                            |
-| ------------------------ | ------------------------------------------------------------------- |
-| `anvil:generate`         | Models and the core per-model artifacts                             |
-| `anvil:generate-api`     | Versioned JSON API + OpenAPI spec (alias: `anvil:generate-openapi`) |
-| `anvil:generate-apidocs` | Generates and reports the docs for one or all versions              |
-| `anvil:generate-web`     | Web CRUD front end (Blade or Livewire)                              |
-| `anvil:generate-auth`    | Livewire auth + RBAC from the users table                           |
+> The `Response caching` anchor is new — see the note at the end of this file.
 
 ---
 
-### `anvil:generate`
+## 2. Quick start
 
-The core scaffold. Models are always generated (unless skipped); every other
+````markdown
+## Quick start
+
+```bash
+# 1. Check the schema before generating anything from it
+php artisan anvil:doctor
+
+# 2. Models first — everything else resolves them from the manifest
+php artisan anvil:forge:app-scaffold --models --schema=all
+
+# 3. The kitchen sink for two tables
+php artisan anvil:forge:app-scaffold --all --tables=posts --tables=comments
+
+# 4. A versioned JSON API (v1) plus its OpenAPI spec and Swagger UI
+php artisan anvil:forge-api --api-version=1 --ui
+
+# A second version with a different wire format
+php artisan anvil:forge-api --api-version=2 --case=camel --pagination=25
+
+# Where are the docs?
+php artisan anvil:forge-apidocs --check
+
+# 5. A web CRUD front end
+php artisan anvil:forge-webapp --tables=posts
+php artisan anvil:forge-webapp --stack=livewire --install-assets
+
+# Login, register, 2FA, lockout and RBAC as Livewire components
+php artisan anvil:forge-auth
+
+# 6. A typed TypeScript client for the frontend
+php artisan anvil:forge-client --api-version=1 --hooks
+
+# 7. Format, modernise and audit what was generated
+php artisan anvil:polish
+```
+````
+
+Preview anything without writing files by adding `--dry-run`.
+
+````
+
+---
+
+## 3. Commands
+
+```markdown
+## Commands
+
+Anvil ships thirteen Artisan commands. Each owns one slice of the output, and
+every generating command runs the identical pipeline through the
+`RunsGenerationPipeline` trait, so behaviour never diverges between them.
+
+### Generation
+
+| Command                    | Produces                                                              |
+| -------------------------- | --------------------------------------------------------------------- |
+| `anvil:forge:app-scaffold` | Models and the core per-model artifacts                               |
+| `anvil:forge-api`          | Versioned JSON API + OpenAPI spec (alias: `anvil:forge-openapi`)      |
+| `anvil:forge-apidocs`      | Generates and reports the docs for one or all versions                |
+| `anvil:forge-webapp`       | Web CRUD front end (Blade or Livewire)                                |
+| `anvil:forge-auth`         | Livewire authentication + RBAC from the users table                   |
+| `anvil:forge-graphql`      | Lighthouse GraphQL schema (types, inputs, queries, mutations)         |
+| `anvil:forge-client`       | Typed TypeScript client for a versioned API                           |
+
+### Inspection
+
+| Command           | Reports                                                                |
+| ----------------- | ---------------------------------------------------------------------- |
+| `anvil:doctor`    | Schema shapes that break code generation, before they break it         |
+| `anvil:diff`      | What changed in the database since the last generation                 |
+| `anvil:docs-sync` | Drift between hand-edited payloads and the OpenAPI spec                |
+
+### Maintenance
+
+| Command                    | Does                                                         |
+| -------------------------- | ------------------------------------------------------------ |
+| `anvil:polish`             | Pint, Rector, PHPStan, and a model ↔ schema audit            |
+| `anvil:frontend`           | Checks or installs Livewire and Tailwind                     |
+| `anvil:install:swagger-ui` | Vendors the Swagger UI assets so `/docs` needs no CDN        |
+
+### Model generation comes first
+
+Only `anvil:forge:app-scaffold --models` writes models. Every other command
+**resolves** them — from `storage/anvil/models.json`, or by scanning the model
+path — and imports them from whatever namespace they were actually written to.
+
+```bash
+php artisan anvil:forge:app-scaffold --models --schema=all
+php artisan anvil:forge-webapp --stack=livewire
+````
+
+That split is what stops a schema-namespaced model (`App\Models\Core\User`)
+being re-derived as `App\Models\User` by a downstream generator, and it stops a
+web or API run silently reverting hand edits to a model. A run that needs a
+model with no manifest entry and nothing on disk fails and names the table,
+rather than emitting a controller that imports a class which was never written.
+
+If the manifest is stale or missing but the models exist, rebuild it without
+generating anything:
+
+```bash
+php artisan anvil:forge:app-scaffold --refresh-models
+```
+
+---
+
+### `anvil:forge:app-scaffold`
+
+The core scaffold. Models are always generated unless skipped; every other
 artifact is opt-in via a flag, or all at once with `--all`.
 
 ```bash
-php artisan anvil:generate [options]
+php artisan anvil:forge:app-scaffold [schemas...] [options]
 ```
 
 **Artifact flags**
 
-| Flag              | Generates                                                                                                                   |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `--all`           | Every artifact type below                                                                                                   |
-| `--models`        | Eloquent models (on by default)                                                                                             |
-| `--controllers`   | Resource controllers in `App\Http\Controllers`                                                                              |
-| `--resources`     | Unversioned API resources in `App\Http\Resources`                                                                           |
-| `--observers`     | Model observers                                                                                                             |
-| `--policies`      | Authorization policies                                                                                                      |
-| `--form-requests` | Unversioned `StoreXxx` / `UpdateXxx` form requests                                                                          |
-| `--services`      | Service classes with lifecycle hooks — shared by every front end                                                            |
-| `--repositories`  | Repository interface + Eloquent implementation (auto-registers its provider)                                                |
-| `--gates`         | Gate definitions appended to your auth provider                                                                             |
-| `--api-routes`    | Plain `apiResource` routes appended to `routes/api.php` (unversioned — see `anvil:generate-api` for the versioned scaffold) |
-| `--factories`     | Model factories with Faker-inferred definitions                                                                             |
-| `--seeders`       | Database seeders                                                                                                            |
-| `--migrations`    | Reverse-engineered `Schema::create()` migrations                                                                            |
-| `--events`        | `Created` / `Updated` / `Deleted` (+ `Restored`) event classes                                                              |
-| `--listeners`     | Handlers for those events — **implies `--events`**                                                                          |
-| `--tests`         | Feature tests for the CRUD endpoints                                                                                        |
+| Flag              | Generates                                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `--all`           | Every artifact type below                                                                                                |
+| `--models`        | Eloquent models into schema-namespaced classes — **phase 1**, run before any other artifact                              |
+| `--controllers`   | Resource controllers in `App\Http\Controllers`                                                                           |
+| `--resources`     | Unversioned API resources in `App\Http\Resources`                                                                        |
+| `--observers`     | Model observers                                                                                                          |
+| `--policies`      | Authorization policies                                                                                                   |
+| `--form-requests` | Unversioned `StoreXxx` / `UpdateXxx` form requests                                                                       |
+| `--services`      | Service classes with lifecycle hooks — shared by every front end                                                         |
+| `--repositories`  | Repository interface + Eloquent implementation (auto-registers its provider)                                             |
+| `--gates`         | Gate definitions appended to your auth provider                                                                          |
+| `--api-routes`    | Plain `apiResource` routes appended to `routes/api.php` (unversioned — see `anvil:forge-api` for the versioned scaffold) |
+| `--factories`     | Model factories with Faker-inferred definitions                                                                          |
+| `--seeders`       | Database seeders                                                                                                         |
+| `--migrations`    | Reverse-engineered `Schema::create()` migrations                                                                         |
+| `--events`        | `Created` / `Updated` / `Deleted` (+ `Restored`) event classes                                                           |
+| `--listeners`     | Handlers for those events — **implies `--events`**                                                                       |
+| `--tests`         | Feature tests for the CRUD endpoints                                                                                     |
+
+**Manifest**
+
+| Flag               | Description                                                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--refresh-models` | Rebuild the model manifest from the models already on disk, generating nothing. Short-circuits the pipeline: it touches no database beyond resolving the default schema. |
 
 **Listener flags**
 
-| Flag                 | Default     | Description                                                           |
-| -------------------- | ----------- | --------------------------------------------------------------------- |
-| `--listener-style=`  | `per-event` | `per-event` → one class per event; `subscriber` → one class per model |
-| `--queued-listeners` | off         | Listeners implement `ShouldQueue` (per-event style only)              |
+| Flag                 | Default     | Description                                                                                           |
+| -------------------- | ----------- | ----------------------------------------------------------------------------------------------------- |
+| `--listener-style=`  | `per-event` | `per-event` → one class per event; `subscriber` → one class per model                                 |
+| `--queued-listeners` | off         | Listeners implement `ShouldQueue` (per-event style only; the command says so rather than ignoring it) |
 
 **Targeting**
 
-| Flag            | Default            | Description                             |
-| --------------- | ------------------ | --------------------------------------- |
-| `--tables=*`    | all                | Limit to specific tables (repeatable)   |
-| `--only=*`      | —                  | Alias for `--tables`                    |
-| `--ignore=*`    | config             | Exclude specific tables (repeatable)    |
-| `--connection=` | `database.default` | Connection to introspect                |
-| `--schema=`     | connection default | Schema(s): a name, a CSV list, or `all` |
-| `--namespace=`  | `App\Models`       | Namespace for generated models          |
-| `--path=`       | `app`              | Base path for generated models          |
+| Flag / argument | Default            | Description                                                                                                     |
+| --------------- | ------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `--tables=*`    | all                | Limit to specific tables (repeatable)                                                                           |
+| `--only=*`      | —                  | Alias for `--tables`                                                                                            |
+| `--ignore=*`    | config             | Exclude specific tables (repeatable)                                                                            |
+| `--connection=` | `database.default` | Connection to introspect                                                                                        |
+| `--schema=`     | connection default | Schema(s): a name, a CSV list, or `all`                                                                         |
+| `--namespace=`  | `App\Models`       | Namespace for generated models                                                                                  |
+| `--path=`       | `app`              | Base path for generated models                                                                                  |
+| `schemas...`    | —                  | Positional recovery slot for an unquoted `--schema` list the shell split on a space. Prefer `--schema="a,b,c"`. |
+
+> **Quote your schema list.** `--schema=core, admin_db` reaches Symfony as
+> `--schema=core,` plus a stray argument, which without the catch-all would
+> abort with _"No arguments expected"_ — a message that points nowhere near the
+> mistake. Fragments shaped like schema names are recovered and reported;
+> anything else is refused by name, so a real typo is not swallowed.
 
 **Write behaviour**
 
@@ -219,8 +248,8 @@ php artisan anvil:generate [options]
 | `--analyze-constraints`  | Print a constraint summary first                       |
 | `--show-recommendations` | Print schema optimisation suggestions                  |
 
-**Deprecated** — these forward to `anvil:generate-api` with a warning and will be
-removed in the next major: `--api`, `--api-version`, `--openapi`,
+**Deprecated** — these print a warning and forward to `anvil:forge-api`; they
+will be removed in the next major: `--api`, `--api-version`, `--openapi`,
 `--openapi-format`, `--openapi-single-file`, `--openapi-ui`.
 
 > Files that already exist are skipped unless you pass `--force`. When iterating
@@ -228,13 +257,13 @@ removed in the next major: `--api`, `--api-version`, `--openapi`,
 
 ---
 
-### `anvil:generate-api`
+### `anvil:forge-api`
 
-Everything a versioned JSON API needs, plus its OpenAPI specification. Aliased as
-`anvil:generate-openapi`, which reads better with `--spec-only`.
+Everything a versioned JSON API needs, plus its OpenAPI 3.1 specification.
+Aliased as `anvil:forge-openapi`, which reads better with `--spec-only`.
 
 ```bash
-php artisan anvil:generate-api [options]
+php artisan anvil:forge-api [options]
 ```
 
 **Version & routing**
@@ -246,10 +275,11 @@ php artisan anvil:generate-api [options]
 | `--auth=`        | `sanctum`     | `sanctum`, `passport`, `jwt`, `token`, `none`     |
 | `--guard=`       | from `--auth` | Explicit guard name                               |
 | `--middleware=*` | —             | Extra middleware for the route group (repeatable) |
-| `--throttle=`    | `60,1`        | Rate limiter, or `none`                           |
+| `--throttle=`    | `60,1`        | Rate limiter (`60` or `60,1`), or `none`          |
 
 `--auth` is the single value that decides **both** the route middleware and the
-spec's `securityScheme`, so the running API and its documentation cannot disagree.
+spec's `securityScheme`, so the running API and its documentation cannot
+disagree.
 
 **Payload shape** (see [per-version profiles](#per-version-shape-profiles))
 
@@ -259,7 +289,7 @@ spec's `securityScheme`, so the running API and its documentation cannot disagre
 | `--request-case=`      | `--case`          | Inbound casing only                                                     |
 | `--response-case=`     | `--case`          | Outbound casing only                                                    |
 | `--pagination=`        | `15`              | Default page size                                                       |
-| `--pagination-max=`    | `100`             | Maximum a client may request                                            |
+| `--pagination-max=`    | `100`             | Maximum a client may request; must be ≥ `--pagination`                  |
 | `--pagination-param=`  | `per_page`, cased | Page-size query parameter                                               |
 | `--hidden=*`           | config            | Columns omitted from every response (repeatable)                        |
 | `--flat-requests`      | off               | Don't group request classes in per-model subdirectories                 |
@@ -274,6 +304,9 @@ spec's `securityScheme`, so the running API and its documentation cannot disagre
 | `--no-tests`      | Skip feature tests                                 |
 | `--no-spec`       | Scaffold only, no OpenAPI document                 |
 | `--spec-only`     | Spec only, no scaffold (models must already exist) |
+
+`--no-spec` and `--spec-only` are mutually exclusive — together there would be
+nothing to generate, and the command says so rather than doing nothing quietly.
 
 **Specification**
 
@@ -291,24 +324,53 @@ spec's `securityScheme`, so the running API and its documentation cannot disagre
 | `--ui-version=`  | `5.17.14`     | `swagger-ui-dist` version to load from the CDN           |
 | `--route=`       | `docs`        | Route the interactive docs are served from               |
 
-Plus the same targeting and write-behaviour flags as `anvil:generate`
-(`--tables`, `--only`, `--ignore`, `--connection`, `--schema`, `--namespace`,
-`--path`, `--force`, `--backup`, `--dry-run`).
+**Response caching**
+
+Opt-in. The generated services wrap their reads in a cache layer whose
+invalidation uses generation stamps rather than tags, so it works on every cache
+driver — including `file` and `database`, which have no tag support.
+
+| Flag               | Default     | Description                                                                |
+| ------------------ | ----------- | -------------------------------------------------------------------------- |
+| `--cache`          | off         | Generate services that cache query results                                 |
+| `--no-cache`       | —           | Force caching off, overriding `anvil.cache.enabled`                        |
+| `--cache-store=`   | app default | Cache store to use                                                         |
+| `--cache-ttl=`     | config      | `300` for every profile, or per-profile: `single=300,list=60`              |
+| `--cache-stale=`   | config      | Seconds a stale value may be served while it refreshes; `0` disables       |
+| `--cache-scope=`   | `auth`      | Result isolation: `auth`, `tenant`, `none`                                 |
+| `--cache-profile=` | config      | Default volatility profile applied to every model                          |
+| `--cache-jitter=`  | config      | TTL randomisation as a fraction — `0.1` for ±10%, which spreads a stampede |
+| `--cache-bypass`   | off         | Let callers request an uncached read. **Never enable this in production**  |
+| `--cache-model=*`  | —           | Per-model override: `Category:reference`, `PriceHistory:off` (repeatable)  |
+| `--etag`           | off         | Emit `ETag` / `If-None-Match` handling and document `304` in the spec      |
+
+Versioned cached services default `$cacheVariant` to `static::class`, so a v1
+and a v2 service reading the same table cannot collide on a cache key even
+though they return different shapes.
+
+**Targeting and write behaviour**
+
+The same flags as `anvil:forge:app-scaffold`: `--tables`, `--only`, `--ignore`,
+`--connection`, `--schema`, `--namespace`, `--path`, `--force`, `--backup`,
+`--dry-run`.
 
 The summary table printed before generation shows the resolved profile — casing,
-pagination, hidden fields, namespaces — so a mistake is visible before 32 tables
-are processed.
+pagination, hidden fields, namespaces, cache settings — so a mistake is visible
+before 32 tables are processed. Free-text options are validated up front, so a
+typo in `--auth`, `--format`, `--security`, `--case` or `--throttle` fails
+before any file is written.
 
 ---
 
-### `anvil:generate-apidocs`
+### `anvil:forge-apidocs`
 
 Generates the documentation for one or every version, then reports where each
-lives. Generation is delegated to `anvil:generate-api --spec-only`, so there is
-exactly one implementation of the spec pipeline.
+lives. Generation is delegated to `anvil:forge-api --spec-only`, so there is
+exactly one implementation of the spec pipeline; this command owns version
+targeting and reporting.
 
 ```bash
-php artisan anvil:generate-apidocs [options]
+php artisan anvil:forge-apidocs [options]
 ```
 
 | Flag                                                     | Description                                               |
@@ -326,608 +388,516 @@ php artisan anvil:generate-apidocs [options]
 | `--json`                                                 | Machine-readable output (implies `--check`)               |
 | `--open`                                                 | Open the docs URL in the default browser                  |
 
+`--all-versions` and `--api-version` are mutually exclusive.
+
 ```bash
-php artisan anvil:generate-apidocs --check              # what exists?
-php artisan anvil:generate-apidocs --all-versions --force
-php artisan anvil:generate-apidocs --check --strict      # fail a build on a missing spec
+php artisan anvil:forge-apidocs --check               # what exists?
+php artisan anvil:forge-apidocs --all-versions --force
+php artisan anvil:forge-apidocs --check --strict      # fail a build on a missing spec
 ```
 
-`--check --strict` is the useful CI invocation: it asserts that the committed spec
-matches what the current schema would produce.
+`--check --strict` is the useful CI invocation: it asserts that the committed
+spec matches what the current schema would produce. A dry run legitimately
+leaves nothing on disk, so `--dry-run` never fails `--strict`.
+
+Reporting recognises a spec written in the format you did _not_ ask for, so
+switching `--format` does not make an existing spec read as missing. When a spec
+is absent, the reason given distinguishes the three cases — dry run, not
+generated yet, or generated-but-nothing-written — because telling someone to
+re-run the command they just ran is the least useful of the three.
 
 ---
 
-### `anvil:generate-web`
+### `anvil:forge-webapp`
 
 A complete web CRUD front end — resource controllers, web routes and views.
 
 ```bash
-php artisan anvil:generate-web [options]
+php artisan anvil:forge-webapp [options]
 ```
 
-| Flag                                   | Default             | Description                                                   |
-| -------------------------------------- | ------------------- | ------------------------------------------------------------- |
-| `--stack=`                             | `blade`             | `blade` (Blade + Tailwind) or `livewire` (Blade + Livewire 3) |
-| `--layout=`                            | config              | Blade layout the views `@extends`                             |
-| `--skip-models`                        | off                 | Assume models already exist                                   |
-| `--no-inverse`                         | off                 | Skip inverse-relationship detection when models are generated |
-| `--tables=*`, `--only=*`, `--ignore=*` |                     | Targeting                                                     |
-| `--connection=`, `--schema=`           |                     | Source                                                        |
-| `--namespace=`, `--path=`              | `App\Models`, `app` | Model resolution                                              |
-| `--force`, `--backup`, `--dry-run`     |                     | Write behaviour                                               |
+**This command does not generate models.** It resolves them from the manifest
+(or by scanning the model path) and imports them from wherever they were
+actually written.
 
-The web scaffold reuses the same **services** and **form requests** as the rest of
-the app, so those are generated alongside it.
+| Flag          | Default | Description                                                   |
+| ------------- | ------- | ------------------------------------------------------------- |
+| `--stack=`    | `blade` | `blade` (Blade + Tailwind) or `livewire` (Blade + Livewire 3) |
+| `--per-page=` | `15`    | Default rows per page in generated listings (ceiling: 500)    |
+
+A `--per-page` outside the built-in set (10, 15, 25, 50, 100) is inserted into
+the generated per-page `<select>`, so the dropdown never opens showing a value
+the user never chose.
+
+**Layout & navigation**
+
+| Flag          | Default | Description                                                  |
+| ------------- | ------- | ------------------------------------------------------------ |
+| `--layout=`   | config  | Blade layout the views extend (overrides `anvil.web.layout`) |
+| `--no-layout` | off     | Do not generate a base layout — you already have one         |
+| `--no-nav`    | off     | Do not generate the sidebar navigation partial               |
+
+A custom `--layout` that does not exist yet, combined with `--no-layout`,
+produces views that extend a missing view. The command warns before writing
+them rather than after.
+
+**Frontend assets**
+
+Handled by a preflight that runs **before** the pipeline. That ordering is not
+cosmetic: a Composer install cannot take effect in the process that performs it,
+because the autoloader is already built and the providers already registered —
+so an install run exits and asks you to re-run.
+
+| Flag                   | Default | Description                                                                    |
+| ---------------------- | ------- | ------------------------------------------------------------------------------ |
+| `--assets-mode=`       | config  | How views load Tailwind: `cdn`, `vite`, `none`                                 |
+| `--install-assets`     | off     | Install every frontend dependency the selected stack needs                     |
+| `--with-livewire`      | off     | Install Livewire 3 if the project does not already have it                     |
+| `--with-tailwind`      | off     | Install and wire Tailwind if the project does not already have it              |
+| `--tailwind-version=`  | `4`     | Tailwind major version to install when missing: `3` or `4`                     |
+| `--no-package-manager` | off     | Write config files but print the composer/npm commands instead of running them |
+| `--skip-asset-check`   | off     | Bypass the frontend preflight entirely                                         |
+
+`--assets-mode=cdn` uses the Tailwind Play CDN, which compiles styles in the
+browser and is not for production; the command says so every run.
+`--assets-mode=none` means the layout loads no CSS at all.
+
+**Targeting and write behaviour**
+
+| Flag                                   | Description                                                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `--tables=*`, `--only=*`, `--ignore=*` | Targeting                                                                                                     |
+| `--connection=`, `--schema=`           | Source                                                                                                        |
+| `--namespace=`, `--path=`              | Where to **locate** the models, not where to write them                                                       |
+| `--no-inverse`                         | Skip inverse-relationship detection                                                                           |
+| `--force`, `--backup`, `--dry-run`     | Write behaviour                                                                                               |
+| `--skip-models`                        | **Deprecated no-op.** This command never generated models; passing it warns rather than accepting it silently |
+
+The web scaffold reuses the same **services** and **form requests** as the rest
+of the app, so those are generated alongside it.
 
 ---
 
-### `anvil:generate-auth`
+### `anvil:forge-auth`
 
 Scaffolds authentication and authorization as Livewire 3 components, driven by
 introspection of the users table and its role/permission relationships.
 
 ```bash
-php artisan anvil:generate-auth [options]
+php artisan anvil:forge-auth [options]
 ```
 
-| Flag                               | Default                   | Description                               |
-| ---------------------------------- | ------------------------- | ----------------------------------------- |
-| `--users-table=`                   | `users`                   | The authenticatable table                 |
-| `--guard=`                         | `web`                     | Guard the components authenticate against |
-| `--namespace=`                     | `App\Livewire\Auth`       | Namespace for the generated components    |
-| `--layout=`                        | generates `layouts.guest` | Guest layout to extend                    |
-| `--default-role=`                  | —                         | Role assigned to newly registered users   |
-| `--roles-table=`                   | `roles`                   | RBAC roles table                          |
-| `--permissions-table=`             | `permissions`             | RBAC permissions table                    |
-| `--no-2fa`                         | off                       | Skip two-factor authentication            |
-| `--no-lockout`                     | off                       | Skip account lockout + login throttling   |
-| `--no-verification`                | off                       | Skip the email verification flow          |
-| `--connection=`, `--schema=`       |                           | Source                                    |
-| `--force`, `--backup`, `--dry-run` |                           | Write behaviour                           |
+| Flag                               | Default                   | Description                                                             |
+| ---------------------------------- | ------------------------- | ----------------------------------------------------------------------- |
+| `--users-table=`                   | `users`                   | The authenticatable table                                               |
+| `--guard=`                         | `web`                     | Guard the components authenticate against                               |
+| `--namespace=`                     | `App\Livewire\Auth`       | Namespace for the generated components                                  |
+| `--layout=`                        | generates `layouts.guest` | Guest layout to extend                                                  |
+| `--accent=`                        | `indigo`                  | Tailwind accent: `indigo`, `blue`, `emerald`, `violet`, `rose`, `slate` |
+| `--dark`                           | off                       | Include the dark-mode toggle in the guest layout                        |
+| `--default-role=`                  | —                         | Role assigned to newly registered users                                 |
+| `--roles-table=`                   | `roles`                   | RBAC roles table                                                        |
+| `--permissions-table=`             | `permissions`             | RBAC permissions table                                                  |
+| `--no-2fa`                         | off                       | Skip two-factor authentication                                          |
+| `--no-lockout`                     | off                       | Skip account lockout + login throttling                                 |
+| `--no-verification`                | off                       | Skip the email verification flow                                        |
+| `--connection=`, `--schema=`       |                           | Source                                                                  |
+| `--force`, `--backup`, `--dry-run` |                           | Write behaviour                                                         |
+
+Accent colours are interpolated at generation time so Tailwind's scanner sees
+literal class names, not strings assembled at runtime.
+
+**Pre-flight runs before anything is written.** Generating code that cannot
+possibly run is worse than refusing, so the command checks that Livewire is
+installed, that `--accent` is known, that the guard exists in `config/auth.php`
+and resolves to a provider whose model class exists, that the users table is
+present on the connection, and that it has `email` and `password` columns. A
+missing table offers near-miss candidates rather than just refusing.
+
+Non-fatal gaps are reported as warnings _after_ the configuration table, so the
+settings they refer to are still on screen: a missing `name` column, a missing
+`email_verified_at` with verification enabled, missing lockout columns, an
+absent `pragmarx/google2fa`, and — the one that silently breaks logins — a
+`setPasswordAttribute()` mutator on the user model, which would hash the hash
+the register form already produced.
+
+A partial scaffold exits non-zero, so CI notices.
 
 Generates login, register, logout, forgot/reset password, email verification,
 two-factor authentication, account lockout with throttling, RBAC middleware and
-gates backed by your own roles/permissions tables, a `User` authorization trait, a
-guest layout, and the auth routes. It reports whether full RBAC was detected or
-only a `role` column, and prints post-install notes.
+gates backed by your own roles/permissions tables, a `User` authorization trait,
+a guest layout, and the auth routes.
 
 ---
 
-## Versioned API scaffold
+### `anvil:forge-graphql`
 
-`anvil:generate-api --api-version=2` produces a complete, self-contained version:
+Generates a Lighthouse GraphQL schema from the database.
 
-```
-app/Http/
-  Controllers/Api/V2/
-    ApiController.php              # base: envelope helpers, never overwritten
-    UserController.php
-  Requests/Api/V2/
-    ApiFormRequest.php             # base: key mapping, error mapping, perPage()
-    User/IndexRequest.php          # validated sort/direction/page size
-    User/StoreRequest.php
-    User/UpdateRequest.php
-  Resources/Api/V2/
-    ApiResource.php                # base: output casing, hidden-field removal
-    UserResource.php
-    UserCollection.php             # pagination envelope
-routes/api/v2.php
-openapi/v2/openapi.yaml + schemas/ + paths/
+```bash
+php artisan anvil:forge-graphql [options]
 ```
 
-Also generated once: `App\Http\Middleware\ForceJsonResponse` and
-`App\Providers\ForceJsonApiServiceProvider`, which lock the group's requests and
-exception responses to JSON and load the versioned route file. The provider is
-registered in `bootstrap/providers.php` automatically.
+| Flag                                                     | Default   | Description                                                  |
+| -------------------------------------------------------- | --------- | ------------------------------------------------------------ |
+| `--output=`                                              | `graphql` | Directory for the schema files                               |
+| `--api-version=`                                         | `1`       | Version profile supplying hidden fields and pagination       |
+| `--guard=`                                               | —         | Auth guard for `@guard` (empty = none, `default` = `@guard`) |
+| `--policies`                                             | off       | Emit `@can` directives bound to the generated policies       |
+| `--no-mutations`                                         | off       | Queries only — a read-only graph                             |
+| `--single-file`                                          | off       | One `schema.graphql` instead of a file per type              |
+| `--connection=`, `--schema=`, `--tables=*`, `--ignore=*` |           | Targeting                                                    |
+| `--force`                                                | off       | Overwrite existing type files                                |
+| `--dry-run`                                              | off       | Preview without writing                                      |
 
-**Services are shared, not versioned.** `App\Services\{Model}Service` is used by
-every version and by the web scaffold, because business logic belongs in one
-place — a per-version copy drifts, and a fix applied to one is silently missing
-from the other. What legitimately differs between versions is the _shape_ of input
-and output, which is what the versioned requests and resources are for. When
-behaviour genuinely differs, `--versioned-services` emits
-`App\Services\Api\V2\{Model}Service extends App\Services\{Model}Service` — a thin
-subclass with the override points documented, never a copy, and never overwritten
-once created.
+Output:
 
-## Per-version shape profiles
+```
+graphql/schema.graphql          root — imports the rest, never overwritten
+graphql/scalars.graphql         scalar declarations
+graphql/enums.graphql           one enum per detected enum column
+graphql/types/Vehicle.graphql   type + inputs + queries + mutations
+```
 
-Each version resolves its settings from `anvil.api.defaults` deep-merged with
-`anvil.api.versions.{vN}`:
+The root file is written once and then left alone: it is where hand-written
+queries, custom mutations and subscriptions go. Everything under `types/` is
+regenerated freely.
+
+Tables with a composite primary key are skipped and reported — there is no
+single ID for `@find`, and Lighthouse cannot resolve mutations against them.
+Expose the relationship through its parents instead.
+
+Requires `nuwave/lighthouse`; the command checks and explains rather than
+emitting a schema nothing can serve. Running without `--guard` warns loudly:
+a GraphQL endpoint with no guard exposes every type and mutation to anonymous
+callers, and unlike REST there is no route list that makes that obvious.
+
+---
+
+### `anvil:forge-client`
+
+Generates a typed TypeScript client for a versioned API.
+
+```bash
+php artisan anvil:forge-client [options]
+```
+
+| Flag                                                     | Default            | Description                             |
+| -------------------------------------------------------- | ------------------ | --------------------------------------- |
+| `--api-version=`                                         | `1`                | API version to target (`1`, `v1`, `V1`) |
+| `--output=`                                              | `resources/js/api` | Output directory                        |
+| `--stack=`                                               | `ts`               | Client flavour (only `ts` today)        |
+| `--hooks`                                                | off                | Also emit React Query hooks             |
+| `--connection=`, `--schema=`, `--tables=*`, `--ignore=*` |                    | Targeting                               |
+| `--force`                                                | off                | Overwrite existing files                |
+| `--dry-run`                                              | off                | Preview without writing                 |
+
+Output:
+
+```
+resources/js/api/v2/types.ts       interfaces + payload types per model
+resources/js/api/v2/client.ts      fetch wrapper, error type, pagination
+resources/js/api/v2/vehicles.ts    list/get/create/update/remove per resource
+resources/js/api/v2/hooks.ts       React Query hooks (--hooks)
+resources/js/api/v2/index.ts       barrel
+```
+
+Everything resolves through `ApiVersionProfile` — the same object the PHP
+requests and resources read — so a camelCase v2 produces camelCase interfaces
+and a `?perPage=` query parameter. The types cannot drift from the API because
+both are projections of one schema.
+
+The generated `client.ts` has no dependencies. `--hooks` requires
+`@tanstack/react-query` v5.
+
+```ts
+import { configure, listUsers, ApiError } from "@/api/v1";
+
+configure({
+  baseUrl: import.meta.env.VITE_API_URL,
+  getToken: () => localStorage.getItem("token"),
+});
+```
+
+---
+
+### `anvil:doctor`
+
+Reports the schema shapes that break code generation, before they break it.
+
+```bash
+php artisan anvil:doctor [options]
+```
+
+| Flag            | Description                                          |
+| --------------- | ---------------------------------------------------- |
+| `--connection=` | Database connection to inspect                       |
+| `--schema=`     | Schema(s) to inspect: name, CSV list, or `all`       |
+| `--tables=*`    | Limit the check to specific tables                   |
+| `--ignore=*`    | Exclude specific tables                              |
+| `--data`        | Also run checks that read row data (password hashes) |
+| `--strict`      | Exit non-zero when any **error** is found            |
+| `--json`        | Machine-readable output                              |
+
+Findings are `error`, `warning` or `note`, each with a suggested fix:
+
+- **Primary keys** — none at all, or composite
+- **Duplicate foreign keys** — two FKs from one table to the same parent, the
+  shape that used to produce a fatal redeclaration
+- **Unindexed foreign keys** — every eager load on that relation is a sequential scan
+- **Dangling foreign keys** — a parent outside the generation set
+- **Reserved words** — as a column, a model name, or a schema name
+- **Model collisions** — a column that camelises onto an Eloquent method, or two
+  columns that camelise to the same name
+- **Authenticatable tables** — a `password` column means the model must extend
+  `Illuminate\Foundation\Auth\User`, not `Model`, or `SessionGuard` throws a
+  `TypeError`. With `--data`, samples up to 50 stored hashes and reports any
+  that are not a recognised algorithm — the cause of _"This password does not
+  use the Bcrypt algorithm"_ at login.
+- **Enum candidates** — a `status`/`type`/`role` column stored as free text
+- **Width and timestamps** — 60+ columns, or no `created_at`/`updated_at` pair
+
+`--data` is the only check that touches row data, and it is opt-in.
+
+---
+
+### `anvil:diff`
+
+What changed in the database since Anvil last ran.
+
+```bash
+php artisan anvil:diff [options]
+```
+
+| Flag            | Description                                    |
+| --------------- | ---------------------------------------------- |
+| `--connection=` | Database connection to introspect              |
+| `--schema=`     | Schema(s) to inspect: name, CSV list, or `all` |
+| `--tables=*`    | Limit the comparison to specific tables        |
+| `--ignore=*`    | Exclude specific tables                        |
+| `--accept`      | Record the current schema as the new baseline  |
+| `--strict`      | Exit non-zero if the schema has drifted        |
+| `--json`        | Machine-readable output                        |
+
+```bash
+php artisan anvil:diff              # human-readable plan
+php artisan anvil:diff --strict     # CI gate
+php artisan anvil:diff --accept     # record the baseline, generate nothing
+```
+
+On a handful of tables this is a convenience. On a few hundred it is the
+difference between regenerating everything and regenerating the four tables a
+migration actually touched.
+
+`--strict` in CI catches the case that bites teams: someone shipped a migration
+and did not regenerate, so the committed models, spec and TypeScript client all
+describe a schema that no longer exists.
+
+The report also lists **orphaned artifacts** — files belonging to tables that no
+longer exist. Regeneration never removes these: `--force` overwrites, it does
+not delete.
+
+---
+
+### `anvil:docs-sync`
+
+Reconciles the OpenAPI spec with hand-edited resources and form requests. A thin
+adapter over `DocsSynchronizer`: all merge safety rules live in the synchroniser,
+so this command, the `--docs-sync` pipeline flag and the local auto-sync hook
+cannot drift apart in behaviour.
+
+```bash
+php artisan anvil:docs-sync [model...] [options]
+```
+
+| Argument / flag   | Description                                                       |
+| ----------------- | ----------------------------------------------------------------- |
+| `model...`        | Limit to these models or tables (e.g. `Vehicle users`)            |
+| `--api-version=`  | Limit to one API version and read that version's spec (e.g. `v1`) |
+| `--only=`         | Limit to `requests` or `responses` (default: both)                |
+| `--check`         | Report drift and exit non-zero; never writes. For CI.             |
+| `--breaking-only` | With `--check`, only fail on breaking drift                       |
+| `--dry-run`       | Show what would change without writing                            |
+| `--diff`          | Print per-property drift                                          |
+| `--adopt`         | Take ownership of components sync does not manage yet             |
+| `--no-prune`      | Never remove properties from the spec                             |
+| `--install-hook`  | Install a pre-commit hook that runs `--check`                     |
+
+The safety model: hand-authored components are never touched, a partial read
+never prunes, an unresolved property defers to the spec, and `--check` never
+writes. Drift severity is direction-dependent — a change to a response schema is
+treated more seriously than the same change to a request schema, because clients
+break on what they receive.
+
+The synchroniser is built per invocation and never resolved from the container.
+A bound singleton would fix its spec directory at construction, so
+`--api-version=v2` would silently reconcile v1's spec. Custom readers go in
+`anvil.openapi.sync.readers` instead, which keeps the version a per-run decision.
+
+---
+
+### `anvil:polish`
+
+Formats, modernises and audits the code Anvil generated.
+
+```bash
+php artisan anvil:polish [options]
+```
+
+| Flag               | Description                                                   |
+| ------------------ | ------------------------------------------------------------- |
+| `--pint`           | Run Pint                                                      |
+| `--rector`         | Run Rector                                                    |
+| `--stan`           | Run PHPStan/Larastan                                          |
+| `--audit`          | Run the model/schema audit                                    |
+| `--test`           | Report only; change nothing — the CI mode                     |
+| `--all-paths`      | Check the whole app, not just generated files                 |
+| `--paths=*`        | Explicit paths to check (repeatable)                          |
+| `--connection=`    | Database connection for the audit                             |
+| `--strict`         | Exit non-zero when anything is reported                       |
+| `--publish-config` | Write a `rector.php` and `pint.json` tuned for generated code |
+| `--json`           | Machine-readable output                                       |
+
+Four passes, each optional and each skipped cleanly when its tool is absent:
+`pint` (formatting), `rector` (PHP 8.4 + Laravel 12 modernisation, dead code,
+type coverage), `phpstan` (static analysis), and `audit` (model ↔ schema drift,
+which the other three cannot see). Passing no tool flag runs everything
+available.
+
+By default only the files Anvil generated are touched, read from the manifest.
+That keeps the run fast and stops a formatting pass turning into an unrelated
+diff across the whole application. With no manifest yet, it falls back to the
+directories Anvil owns.
+
+**Formatters rewrite files, which invalidates the provenance hash.** Without
+re-stamping, every reformatted file would read as hand-edited and the next
+`--force` would refuse to regenerate it — so the command re-stamps what the
+formatters touched and reports how many.
+
+```bash
+php artisan anvil:polish                   # fix everything installed
+php artisan anvil:polish --test --strict   # CI gate
+php artisan anvil:polish --audit           # only the schema/model audit
+php artisan anvil:polish --publish-config  # write rector.php / pint.json
+```
+
+Neither published config file is overwritten if it already exists.
+
+---
+
+### `anvil:frontend`
+
+Inspects or installs the frontend dependencies the web scaffold expects.
+
+```bash
+php artisan anvil:frontend [options]
+```
+
+| Flag                   | Default | Description                                                           |
+| ---------------------- | ------- | --------------------------------------------------------------------- |
+| `--check`              | off     | Report the current state and exit; non-zero when something is missing |
+| `--install`            | off     | Install whatever is missing                                           |
+| `--stack=`             | `blade` | Which stack the project targets: `blade` or `livewire`                |
+| `--tailwind-version=`  | config  | Tailwind major version to install when missing (3 or 4)               |
+| `--no-package-manager` | off     | Write config files but only print the composer/npm commands           |
+| `--dry-run`            | off     | Show what would happen without writing or installing                  |
+
+Exists as its own command so installation never has to be entangled with a
+generation run. The recommended sequence on a fresh project:
+
+```bash
+php artisan anvil:frontend --install --stack=livewire
+php artisan anvil:forge-webapp --stack=livewire
+```
+
+`--check` is read-only and exits non-zero when something is missing, which makes
+it usable as a CI guard. A bare invocation is informational and exits zero.
+
+---
+
+### `anvil:install:swagger-ui`
+
+Vendors the Swagger UI assets into `public/` so the docs page does not depend on
+a CDN at request time.
+
+```bash
+php artisan anvil:install:swagger-ui [options]
+```
+
+| Flag              | Default | Description                                                  |
+| ----------------- | ------- | ------------------------------------------------------------ |
+| `--ui-version=`   | config  | `swagger-ui-dist` version                                    |
+| `--api-version=`  | config  | API version whose docs directory receives the assets         |
+| `--source=`       | `auto`  | Where to get the files: `auto`, `local`, `http`, `npm`       |
+| `--timeout=`      | `900`   | Seconds allowed for the npm fallback                         |
+| `--http-timeout=` | `120`   | Seconds allowed per file download                            |
+| `--check`         | off     | Report what would happen and exit                            |
+| `--skip-generate` | off     | Do not regenerate the spec first                             |
+| `--force`         | off     | Re-download even when the correct version is already present |
+| `--dry-run`       | off     | Preview without writing files                                |
+
+The assets are three static files, so `auto` tries an existing `node_modules`
+copy, then a direct download, and only then npm — the slowest and most likely to
+time out on a constrained link.
+
+Every strategy failing produces an actionable list rather than a
+`ProcessTimedOutException` naming a vendor file:
+
+```bash
+php artisan anvil:install:swagger-ui --source=http      # skip npm entirely
+php artisan anvil:install:swagger-ui --timeout=1800     # slow link
+npm install --no-save swagger-ui-dist@5.17.14 \
+  && php artisan anvil:install:swagger-ui --source=local
+```
+
+After a successful install, point the docs page at the vendored copy:
 
 ```php
-'api' => [
-    'defaults' => [
-        'pagination' => ['default' => 15, 'max' => 100, 'param' => null, 'page_param' => 'page'],
-        'case'       => ['request' => 'snake', 'response' => 'snake'],
-        'hidden'     => ['password', 'remember_token', 'two_factor_secret'],
-        'read_only'  => ['id', 'created_at', 'updated_at', 'deleted_at'],
-        'group_by_model'     => true,
-        'versioned_services' => false,
-        'namespaces' => [
-            'requests'    => 'App\\Http\\Requests\\Api',
-            'resources'   => 'App\\Http\\Resources\\Api',
-            'controllers' => 'App\\Http\\Controllers\\Api',
-            'services'    => 'App\\Services\\Api',
-        ],
-    ],
-
-    'versions' => [
-        'v1' => [],                                   // pure defaults
-        'v2' => [
-            'case'       => ['request' => 'camel', 'response' => 'camel'],
-            'pagination' => ['default' => 25, 'max' => 200],
-            'hidden'     => ['password', 'remember_token', 'internal_notes'],
-        ],
-    ],
-],
+// config/anvil.php
+'openapi' => ['docs' => ['asset_base' => '/api-docs/v1/assets']],
 ```
 
-A version states only what it changes. **List values replace rather than append**,
-so a version can also hide _less_ than the default.
-
-One object — `ApiVersionProfile` — is the authority, and the form requests, the
-resources, the controllers **and the OpenAPI schemas** all read from it. That is
-the reason the spec cannot describe an API that doesn't exist.
-
-### Key casing
-
-Set `case.request` / `case.response` and the whole surface follows:
-
-```bash
-curl '…/api/v1/users?per_page=2'   # {"data":[{"email_verified_at": …}]}
-curl '…/api/v2/users?perPage=2'    # {"data":[{"emailVerifiedAt":  …}]}
-```
-
-Internally everything stays in column names. Requests translate inbound keys
-before validation, so `rules()` is keyed by column; errors are translated _back_,
-so a camelCase client that posts `assignedAgentId` gets an error keyed
-`assignedAgentId` rather than `assigned_agent_id`.
-
-The translation uses an **explicit map generated from the real column list**, not a
-runtime `Str::snake()`. That matters: `address_line_1` camelises to `addressLine1`,
-which snakes back to `address_line1` — a different column. A runtime round-trip
-drops the field silently, with no error anywhere. Columns whose names are lossy
-that way are reported as warnings in the run summary.
-
-### Pagination
-
-`--pagination` / `--pagination-max` become constants on the version's base
-request, and `perPage()` clamps whatever the client asks for. `?per_page=999999`
-returns 100 rows, not a table scan. The parameter name defaults to `per_page`
-cased for the version, so a camelCase v2 reads `?perPage=`.
-
-### Hidden fields
-
-Hidden columns are enforced twice: excluded from the generated resource _and_
-filtered at runtime by the base class. Adding a secret column to the table cannot
-leak through a resource generated months ago, and a hand-edit that re-adds it is
-still caught. `password` remains in the _request_ schema, since it is writable but
-never returned.
-
-## OpenAPI & Swagger UI
-
-The spec is written per version:
+Unless `--skip-generate` is passed, the spec is regenerated first via
+`anvil:forge-api --spec-only`.
 
 ```
-openapi/
-  v1/openapi.yaml   +  schemas/  paths/
-  v2/openapi.yaml   +  schemas/  paths/
+
+---
+
+## Notes on what else in the README is now stale
+
+Outside the Commands section, these still use the pre-rename names:
+
+| Location                       | Stale                                                        | Should be                                                |
+| ------------------------------ | ------------------------------------------------------------ | ---------------------------------------------------------- |
+| Requirements (optional deps)   | `anvil:generate-web --stack=livewire`, `anvil:generate-auth` | `anvil:forge-webapp`, `anvil:forge-auth`                 |
+| Versioned API scaffold         | `anvil:generate-api --api-version=2`                         | `anvil:forge-api --api-version=2`                        |
+| Events & listeners (3 samples) | `anvil:generate --events --listeners` etc.                   | `anvil:forge:app-scaffold --events --listeners`          |
+| Troubleshooting                | `anvil:generate-apidocs --check`                             | `anvil:forge-apidocs --check`                            |
+| Upgrading — Command renames    | Maps `anvil:generate --api` → `anvil:generate-api`           | Whole table needs a second column; see below             |
+| Upgrading — Required steps     | `anvil:generate-api --api-version=1 --force --ui`            | `anvil:forge-api --api-version=1 --force --ui`           |
+| Upgrading — Regenerate models  | `anvil:generate --all --force --backup`                      | `anvil:forge:app-scaffold --all --force --backup`        |
+| Requirements table             | PHP `^8.3`, Laravel `^11.0 \|\| ^12.0`                       | Confirm — the code uses PHP 8.4 syntax throughout        |
+
+Suggested replacement for the Upgrading rename table:
+
+| Originally                             | Then                                 | Now                                     |
+| -------------------------------------- | ------------------------------------ | --------------------------------------- |
+| `anvil:generate`                       | —                                    | `anvil:forge:app-scaffold`              |
+| `anvil:generate --api`                 | `anvil:generate-api`                 | `anvil:forge-api`                       |
+| `anvil:generate --openapi`             | `anvil:generate-api --spec-only`     | `anvil:forge-api --spec-only`           |
+| `anvil:generate --openapi-format=json` | `anvil:generate-api --format=json`   | `anvil:forge-api --format=json`         |
+| `anvil:generate --openapi-single-file` | `anvil:generate-api --single-file`   | `anvil:forge-api --single-file`         |
+| `anvil:generate --openapi-ui`          | `anvil:generate-api --ui`            | `anvil:forge-api --ui`                  |
+| `anvil:docs`                           | `anvil:generate-apidocs`             | `anvil:forge-apidocs`                   |
+| `anvil:generate-web`                   | —                                    | `anvil:forge-webapp`                    |
+| `anvil:generate-auth`                  | —                                    | `anvil:forge-auth`                      |
+| `anvil:generate-graphql`               | —                                    | `anvil:forge-graphql`                   |
+| `anvil:generate-client`                | —                                    | `anvil:forge-client`                    |
+
+The `Response caching` section referenced in the TOC does not exist in the
+README yet — the `--cache*` and `--etag` flags are documented in the command
+reference above, but the generation-stamp invalidation model, the volatility
+profiles and `$cacheVariant` deserve prose alongside "Per-version shape
+profiles". Say the word and I'll draft it.
 ```
-
-Set `openapi.versioned_output => false` (or pass `--flat`) for the un-versioned
-layout. Per model you get `{Model}Resource`, `{Model}Request` and
-`{Model}Collection` schemas; the raw entity schema is opt-in via
-`openapi.include_entity_schema` since no path references it.
-
-**Split-file mode** (default) writes one file per schema and path, stitched
-together by a root `openapi.yaml` that `$ref`s them. **Single-file mode**
-(`--single-file`) inlines everything.
-
-### Serving the docs
-
-Two independent mechanisms:
-
-| URL                          | Served by            | Notes                                      |
-| ---------------------------- | -------------------- | ------------------------------------------ |
-| `/docs`                      | `DocsController`     | Swagger UI, default version                |
-| `/docs/v1`                   | `DocsController`     | Swagger UI for v1, with a version switcher |
-| `/docs/v1/openapi.yaml`      | `DocsController`     | The root spec, **bundled**                 |
-| `/docs/v1/schemas/User.yaml` | `DocsController`     | A raw split file                           |
-| `/api-docs/v1/index.html`    | static file (`--ui`) | No PHP involved                            |
-
-The dynamic route bundles the split `$ref` files into one self-contained document
-on the fly. That is necessary, not decorative: operations inside a path file use
-pointers like `#/components/schemas/User`, which only resolve against the document
-they live in — and a path file has no `components` section, so Swagger UI would
-throw _"JSON Pointer evaluation failed"_.
-
-`docs.public_path` (default `api-docs`) **must differ from** `docs.route`.
-Publishing the static bundle to `public/docs` makes that directory exist on disk,
-and both `php artisan serve` and an nginx `try_files` block then hand `/docs` to
-the static handler instead of PHP — the route silently stops working.
-
-Set `openapi.docs.remote_base` to serve a spec published elsewhere (a CDN, a docs
-bucket). Leave it null to read from local disk. Do **not** point it at this
-application's own URL.
-
-## Events & listeners
-
-```bash
-php artisan anvil:generate --events --listeners
-php artisan anvil:generate --listeners --queued-listeners
-php artisan anvil:generate --listeners --listener-style=subscriber
-```
-
-Events: `{Model}Created`, `{Model}Updated`, `{Model}Deleted`, plus
-`{Model}Restored` for soft-deleting models.
-
-Listeners, `per-event` style: `App\Listeners\{Model}\CreatedListener` and
-siblings. Laravel 11+ discovers listeners under `app/Listeners` by convention —
-the `handle()` parameter type _is_ the registration, so no provider mapping is
-needed. `--queued-listeners` adds `ShouldQueue`, `InteractsWithQueue`,
-`$tries`/`$backoff`/`$queue` and a `failed()` hook.
-
-`subscriber` style gives one `{Model}EventSubscriber` per model with a
-`subscribe()` map. Subscribers are **not** auto-discovered; the generated class
-documents the one-line `Event::subscribe(...)` call. `--queued-listeners` does not
-apply to this style and the command says so rather than ignoring it.
-
-`--listeners` implies `--events`: a listener whose `handle()` type-hints a missing
-event class breaks listener discovery for the entire directory.
-
-## Relation naming
-
-When a child table references the same parent more than once, the plural of the
-child model is ambiguous. Anvil qualifies from the foreign key column:
-
-```
-users ← vehicle_bookings.customer_id              →  customerVehicleBookings()
-users ← vehicle_bookings.assigned_agent_id        →  assignedAgentVehicleBookings()
-users ← vehicle_price_adjustment_logs.adjusted_by →  adjustedVehiclePriceAdjustmentLogs()
-users ← page_visits.user_id                       →  pageVisits()   (single key)
-```
-
-Set `relationships.inverse_naming => 'suffix'` for
-`vehicleBookingsCustomer()` instead.
-
-Behind the heuristic sits a claim registry: every emitted method name is recorded,
-Eloquent's own API and all column-derived accessors are pre-claimed, and a name
-that is already taken gets a deterministic fallback. A relation can therefore never
-shadow a column, override `save()`, or — the case this exists for — produce two
-methods with the same name, which is a fatal redeclaration that takes down
-`route:list` and every request touching the model.
-
-Names are decided **once**, on `ModelMetadata`, and read from there by the model
-generator (methods _and_ PHPDoc), the API resources and the OpenAPI schemas. Any
-generator computing its own would eventually disagree with the others.
-
-## Web scaffold
-
-Both stacks share a generated base layout
-(`resources/views/layouts/anvil.blade.php`) with a collapsible sidebar whose links
-are **discovered at runtime** from your registered web routes — resources appear
-automatically and the nav stays correct as you add or remove tables, with no
-regeneration. The sidebar collapses on desktop (remembered via `localStorage`) and
-slides in as an overlay on mobile.
-
-### `--stack=blade` (default)
-
-- `App\Http\Controllers\Web\{Model}Controller` — full resource controller
-  (`index`/`create`/`store`/`show`/`edit`/`update`/`destroy`, plus
-  `restore`/`forceDelete` for soft-delete models), returning Blade views and
-  redirecting with flash messages.
-- `Route::resource(...)` in `routes/web.php`, inside a managed middleware group.
-- `resources/views/{slug}/` — `index`, `create`, `edit`, `show` and a shared
-  `_form` partial, with inputs inferred from column types.
-
-### `--stack=livewire`
-
-Requests flow **controller → Blade view → Livewire component**:
-
-- The controller handles only the GET endpoints, each rendering a thin wrapper
-  that mounts a component; routes are restricted with `->only([...])`.
-- `App\Livewire\{Plural}\{Index, Form, Show}` handle listing, create/update
-  (validation + persistence via the service) and detail. All writes happen in the
-  components.
-
-Both stacks delegate persistence to the generated services, so business logic
-lives in one place regardless of front end.
-
-## Auth scaffold
-
-`anvil:generate-auth` reads the users table and its relationships, then generates
-Livewire components for the full authentication surface plus RBAC wiring. It
-detects whether you have proper roles/permissions tables or just a `role` column
-and adapts, and it validates that the target table exists before writing anything.
-
-## Configuration
-
-`config/anvil.php`. The keys most worth knowing:
-
-```php
-return [
-    'namespace'     => 'App\\Models',
-    'target_path'   => 'app',
-    'connection'    => null,                  // null = database.default
-    'ignore_tables' => ['migrations', 'sessions', 'cache', 'jobs', …],
-    'ignore_table_patterns' => ['/^temp_/', '/^backup_/'],
-
-    // Versioned API — see "Per-version shape profiles"
-    'api' => [
-        'version'    => 'v1',
-        'prefix'     => 'api',
-        'auth'       => 'sanctum',
-        'throttle'   => '60,1',
-        'force_json' => true,
-        'defaults'   => [ /* pagination, case, hidden, namespaces */ ],
-        'versions'   => [ 'v1' => [], 'v2' => [ /* overrides */ ] ],
-    ],
-
-    'relationships' => [
-        'inverse_naming' => 'prefix',         // prefix | suffix
-        'validate_foreign_keys' => false,
-    ],
-
-    'events' => [
-        'namespace'          => 'App\\Events',
-        'listeners'          => false,
-        'listener_namespace' => 'App\\Listeners',
-        'listener_style'     => 'per-event',  // per-event | subscriber
-        'queued_listeners'   => false,
-    ],
-
-    'openapi' => [
-        'title'            => null,           // null → config('app.name')
-        'output_path'      => 'openapi',
-        'versioned_output' => true,           // openapi/v1/, openapi/v2/
-        'format'           => 'yaml',         // yaml | json
-        'split_files'      => true,
-        'spec_version'     => '3.1.0',        // the OpenAPI version itself
-        'api_version'      => 'v1',           // which API version is written
-        'security'         => 'sanctum',
-        'servers'          => [],
-        'include_entity_schema' => false,
-
-        'docs' => [
-            'enabled'     => env('ANVIL_DOCS_ENABLED', env('APP_ENV') === 'local'),
-            'route'       => 'docs',          // dynamic, DocsController
-            'public_path' => 'api-docs',      // static bundle — MUST differ from route
-            'middleware'  => ['web'],         // production: ['web', 'auth']
-            'ui_version'  => '5.17.14',
-            'remote_base' => null,
-        ],
-    ],
-
-    'web' => [
-        'controller_namespace' => 'App\\Http\\Controllers\\Web',
-        'route_file'      => 'routes/web.php',
-        'middleware'      => ['web', 'auth'],
-        'layout'          => 'layouts.anvil',
-        'generate_layout' => true,
-        'generate_nav'    => true,
-        'livewire'        => ['namespace' => 'App\\Livewire'],
-    ],
-
-    'validation' => [
-        'confirm_threshold' => 50,            // prompt above this many tables
-    ],
-
-    'custom_generators' => [],
-];
-```
-
-`generators.*` holds per-generator namespaces and options (controllers, resources,
-form requests, services, repositories, gates, factories, seeders, migrations,
-events, listeners, observers, policies, tests, web).
-
-## Architecture
-
-- **`Contracts\Generator`** — every generator implements `supports()`,
-  `getName()` and `generate(ModelMetadata, GenerationOptions)`. Generators needing
-  a once-per-run step (writing the OpenAPI root spec, a version's base classes)
-  also expose `finalize()`.
-- **`GenerationOptions`** — immutable DTO carrying every flag through the pipeline,
-  built from a command, an array, or config defaults.
-- **`ApiVersionProfile`** — resolves one version's shape settings: casing,
-  pagination, hidden fields, namespaces, paths.
-- **`ModelMetadata`** — normalised schema for one table, and the authority on
-  relation method names (`relationNames()`, `belongsToName()`, `inverseName()`).
-- **`RelationNamer`** — qualified naming plus the collision registry.
-- **`OpenApiLocator`** — every spec path and docs URL, per version.
-- **`KeyCase`** — casing conversion and the explicit map building.
-- **`GenerationOrchestrator`** — runs the per-model pass, then finalization.
-- **`RunsGenerationPipeline`** — trait shared by every generating command, so they
-  cannot diverge.
-- **`DatabaseInspector`** — reads columns, keys, indexes and constraints.
-- **`LaravelAnvilServiceProvider`** — registers commands, generators and the docs
-  routes.
-
-## Extending Anvil
-
-```php
-namespace App\Anvil;
-
-use Zuqongtech\LaravelAnvil\Contracts\Generator;
-use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
-use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
-
-final class SidecarGenerator implements Generator
-{
-    public function supports(GenerationOptions $options): bool
-    {
-        return $options->services;   // or your own config flag
-    }
-
-    public function getName(): string
-    {
-        return 'Sidecar';
-    }
-
-    public function generate(ModelMetadata $meta, GenerationOptions $options): array
-    {
-        // Use $meta->belongsToName()/inverseName() for relation names so your
-        // output agrees with the generated models.
-        return [[
-            'type' => $this->getName(),
-            'name' => $meta->model,
-            'status' => 'success',
-        ]];
-    }
-}
-```
-
-Register it in `config/anvil.php`:
-
-```php
-'custom_generators' => [
-    App\Anvil\SidecarGenerator::class,
-],
-```
-
-Custom generators run after the built-ins and are resolved **through the
-container**, so constructor dependencies autowire.
-
-## Working with legacy schemas
-
-- **Non-`id` primary keys** — views, route bindings and spec path parameters
-  resolve the real key column.
-- **Composite primary keys** — `$primaryKey` array plus `$incrementing = false`.
-- **Tables without timestamps** — repositories order by an existing column instead
-  of assuming `created_at`.
-- **Multiple schemas** — `--schema=name`, a CSV list, or `all`; models get a
-  schema-qualified `$table` and a namespace segment. Reserved words are suffixed,
-  so a `public` schema becomes `App\Models\PublicSchema\…` rather than the
-  unparseable `App\Models\Public\…`.
-- **Repeated foreign keys to one parent** — see
-  [relation naming](#relation-naming).
-- **Postgres default expressions** — `'monthly'::character varying` is unwrapped
-  for the spec; `nextval(...)` and `CURRENT_TIMESTAMP` are omitted rather than
-  documented as literal string defaults.
-
-If you hit a schema shape that isn't handled well, open an issue with the DDL —
-those cases are exactly what hardens the tool.
-
-## Troubleshooting
-
-**`/docs` returns the web server's own 404 page** (plain, not Laravel's). A
-`public/docs` directory exists and is shadowing the route. `rm -rf public/docs`;
-the static bundle belongs in `docs.public_path` (`api-docs`), which must differ
-from `docs.route`.
-
-**Swagger UI reports a CORS error fetching the spec.** The static bundle resolves
-its spec URL against `window.location.origin`, so this means an older bundle is
-still on disk. Delete it and re-run with `--ui`. Also set `APP_URL` correctly —
-the spec's `servers` block derives from it, so "Try it out" fires at whatever it
-says.
-
-**The docs route doesn't exist.** `php artisan route:list --path=docs`. If it's
-empty: `docs.enabled` is false, or routes are cached (`route:cache` bypasses
-provider-registered routes entirely — run `route:clear`), or the published config
-predates the key.
-
-**A config key I added is being ignored.** `mergeConfigFrom()` is shallow — a
-published `openapi` or `api` key replaces the whole subtree. Re-publish with
-`--force` and `config:clear`.
-
-**"Cannot redeclare `App\Models\X::y()`".** Two foreign keys from one table to the
-same parent, generated before the naming fix. Regenerate that model with `--force`.
-
-**A stale schema keeps appearing in the spec.** The root spec globs the schemas
-directory, and `--force` overwrites but never deletes. `rm -rf openapi/v1` and
-regenerate.
-
-**Generation reports success but writes nothing.** Run
-`anvil:generate-apidocs --check` to see what's actually on disk. The commands warn
-explicitly when the options DTO didn't accept a flag they depend on.
-
-## Upgrading
-
-The API and documentation commands were split out of `anvil:generate`, and the
-output moved to per-version directories.
-
-### Command renames
-
-| Before                                 | Now                                  |
-| -------------------------------------- | ------------------------------------ |
-| `anvil:generate --api`                 | `anvil:generate-api`                 |
-| `anvil:generate --api --api-version=2` | `anvil:generate-api --api-version=2` |
-| `anvil:generate --openapi`             | `anvil:generate-api --spec-only`     |
-| `anvil:generate --openapi-format=json` | `anvil:generate-api --format=json`   |
-| `anvil:generate --openapi-single-file` | `anvil:generate-api --single-file`   |
-| `anvil:generate --openapi-ui`          | `anvil:generate-api --ui`            |
-| `anvil:docs`                           | `anvil:generate-apidocs`             |
-
-The old flags still work on `anvil:generate`: they print a deprecation warning and
-forward to `anvil:generate-api`. They will be removed in the next major.
-
-### Moved output
-
-| Before                                     | Now                                          |
-| ------------------------------------------ | -------------------------------------------- |
-| `openapi/openapi.yaml`                     | `openapi/v1/openapi.yaml`                    |
-| `openapi/schemas/`, `openapi/paths/`       | `openapi/v1/schemas/`, `openapi/v1/paths/`   |
-| `public/docs/index.html` (static UI)       | `public/api-docs/v1/index.html`              |
-| `App\Http\Requests\StoreUserRequest` (API) | `App\Http\Requests\Api\V1\User\StoreRequest` |
-| `App\Http\Resources\UserResource` (API)    | `App\Http\Resources\Api\V1\UserResource`     |
-
-The unversioned request and resource classes are still produced by
-`anvil:generate --form-requests --resources`; only the API scaffold moved.
-
-```bash
-# Move an existing flat spec into the v1 directory
-mkdir -p openapi/v1
-git mv openapi/openapi.yaml openapi/schemas openapi/paths openapi/v1/
-
-# Or keep the flat layout
-# config/anvil.php: 'openapi' => ['versioned_output' => false]
-```
-
-### Required steps
-
-```bash
-# 1. The static UI must not live under the docs route any more — it shadows it
-rm -rf public/docs
-
-# 2. Re-publish the config: mergeConfigFrom is shallow, so a published
-#    api/openapi key hides every new sub-key
-php artisan vendor:publish --tag=anvil-config --force
-
-# 3. Clear caches; route:cache in particular bypasses the docs routes entirely
-php artisan config:clear && php artisan route:clear
-
-# 4. Regenerate. Delete the old spec first: the root document globs the schemas
-#    directory, and --force overwrites but never deletes
-rm -rf openapi/v1
-php artisan anvil:generate-api --api-version=1 --force --ui
-```
-
-Set `APP_URL` to the address you actually serve on. The spec's `servers` block
-derives from it, so Swagger UI's "Try it out" fires requests at whatever it says.
-
-### Regenerate models
-
-Two model-level fixes need a regeneration to take effect:
-
-- **Duplicate relation methods.** A child table with two foreign keys to the same
-  parent used to emit two identically named `hasMany` methods — a fatal
-  redeclaration. Names are now qualified from the foreign key.
-- **Reserved-word schema namespaces.** A `public` schema produced
-  `App\Models\Public\…`, which is not a legal namespace. It is now
-  `App\Models\PublicSchema\…`; regenerate every model together, since the FQCN
-  changes on both sides of each relation.
-
-```bash
-php artisan anvil:generate --all --force --backup
-```
-
-## Contributing
-
-Issues and pull requests welcome. Please include the database DDL (or a minimal
-reproduction) for any generation bug, and run the test suite plus static analysis
-before submitting. Pathological schemas are especially valuable: two FKs to one
-parent, composite keys, reserved words as identifiers, 200-column tables.
-
-## License
-
-Laravel Anvil is open-source software released under the **MIT License**.
