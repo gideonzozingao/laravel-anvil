@@ -1041,3 +1041,152 @@ php artisan anvil:polish --test --strict   # formatting, modernisation, model �
 - New command flags are documented in the [command reference](#commands), with
   their default and the behaviour when omitted
 - New behaviour has a scenario in `documents/local-test.md` if it cannot be covered by the package's own tests
+
+## Roadmap
+
+Anvil is pre-1.0. The command surface settled with the `forge` rename and is not
+expected to change again before the tag, but until there is a `1.0.0` on
+Packagist, treat every version as capable of breaking.
+
+Ordering below is a statement of intent, not a delivery commitment. Items move
+between milestones as the schemas people point Anvil at teach us what actually
+matters. <!-- TODO: delete this line if you commit to dates instead -->
+
+### `1.0` — stability <!-- TODO: target quarter -->
+
+The point of 1.0 is not new features. It is the promise that the command names,
+the flags and the generated file layout stop moving, so an application built on
+Anvil can take a minor upgrade without a regeneration diff.
+
+- [ ] First tagged release on Packagist; semantic versioning applies from here
+- [ ] Remove the deprecated `--api`, `--api-version`, `--openapi*` flags from `anvil:forge:app-scaffold`
+- [ ] Freeze the command surface — names, flags and defaults are breaking changes after this
+- [ ] Freeze the generated file layout and namespace conventions
+- [ ] Document the response caching model — generation-stamp invalidation, volatility profiles, `$cacheVariant`
+- [ ] Resolve the PHP and Laravel support matrix and state it in [Support](#support)
+- [ ] Upgrade guide from the last pre-1.0 tag, with a command-rename table
+
+### `1.1` — coverage <!-- TODO: target quarter -->
+
+Filling in the schema shapes and stacks that currently produce a skip and a
+warning rather than working code.
+
+- [ ] Composite primary keys in `anvil:forge-graphql` — currently skipped, since there is no single ID for `@find`
+- [ ] Backed PHP enums generated from detected enum columns, wired into model casts, form request rules and the OpenAPI spec
+- [ ] Polymorphic relationship detection
+- [ ] Pest as a first-class target for `--tests`, selectable alongside PHPUnit
+- [ ] SQL Server introspection <!-- TODO: is this real demand, or aspiration? -->
+- [ ] Additional `anvil:doctor` checks driven by whatever real schemas turn up
+
+### `1.2` — front ends <!-- TODO: target quarter -->
+
+- [ ] Inertia stack for `anvil:forge-webapp`, React and Vue
+- [ ] Vue Query bindings for `anvil:forge-client`, alongside the existing React Query hooks
+- [ ] A `--stack` beyond `ts` for the client — the flag exists and accepts one value today
+
+### `1.3` — extensibility <!-- TODO: target quarter -->
+
+Making the [Extending Anvil](#extending-anvil) path something you can build on
+rather than read about.
+
+- [ ] A documented generator plugin API — register a generator with `GeneratorRegistry` from a third-party package
+- [ ] Distributable stub packs, so a house style can be a Composer dependency rather than a directory people copy between projects
+- [ ] Per-table configuration overrides in `config/anvil.php`, for the schema where one table needs different treatment
+
+### Under consideration
+
+Not scheduled. Interest on the tracker is how these get promoted.
+
+- Filament resource generation
+- Migration squashing from an introspected schema
+- A `anvil:sync` that applies a `anvil:diff` result rather than regenerating wholesale
+- Multi-tenant schema-per-tenant generation
+- gRPC or JSON:RPC output alongside REST and GraphQL
+
+### Not planned
+
+Saying no here so nobody builds a plan around a maybe.
+
+- **Anvil as a runtime dependency.** Anvil writes code you own and then gets out of the way. It will not grow a runtime layer your application calls into.
+- **Round-tripping generated code back into schema changes.** The database is the source of truth in one direction only.
+- **Supporting databases with no introspection API.** If the driver cannot describe its own tables, Anvil cannot generate from it.
+- **A GUI.** <!-- TODO: delete if you actually want one -->
+
+---
+
+## Support
+
+### Version support
+
+<!-- TODO: confirm this matrix against composer.json before publishing -->
+
+| Anvil | PHP    | Laravel            | Status                              |
+| ----- | ------ | ------------------ | ----------------------------------- |
+| `1.x` | `^8.3` | `^11.0 \|\| ^12.0` | Active <!-- TODO: 8.3 or 8.4? -->   |
+| `0.x` | `^8.3` | `^11.0 \|\| ^12.0` | Pre-release — no support commitment |
+
+Once 1.0 ships:
+
+- The **current minor** receives bug fixes and new features.
+- The **current major** receives security fixes for twelve months after its successor is released. <!-- TODO: confirm the window -->
+- Laravel versions are supported for as long as Laravel itself supports them. When a Laravel release reaches end of life, the next Anvil minor may drop it.
+
+### Getting help
+
+| For                                            | Use                                                                           |
+| ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| A bug, or generated code that does not work    | [GitHub Issues](https://github.com/zuqongtech/laravel-anvil/issues)           |
+| A question, or "is this the right way to do X" | [GitHub Discussions](https://github.com/zuqongtech/laravel-anvil/discussions) |
+| A feature request                              | Discussions first — issues are for things that are broken                     |
+| A security vulnerability                       | See [Security](#security). Do not open a public issue.                        |
+
+This is an open-source project maintained alongside other work. Issues are read
+and triaged; there is no response-time guarantee. Security reports are the
+exception and are prioritised. <!-- TODO: soften or harden depending on what you can sustain -->
+
+<!-- TODO: uncomment and complete if you offer commercial support
+
+### Commercial support
+
+Priority support, guaranteed response times, and help adapting Anvil to a
+specific legacy schema are available. Contact TODO@TODO for terms.
+
+-->
+
+### What makes a report actionable
+
+Anvil's output is a function of your schema, so a report without the schema is a
+report nobody can reproduce. The most useful issues include:
+
+- The exact command, with all flags
+- Anvil, PHP, Laravel and database driver versions
+- The `CREATE TABLE` statement for the table involved — reduced to the smallest
+  schema that still reproduces it
+- `php artisan anvil:doctor --json` output for that table
+- What was generated versus what you expected
+
+A minimal reproducing schema is worth more than a long description. Most reports
+that stall, stall because the schema was described in prose and the shape that
+mattered was in a detail left out.
+
+### In scope
+
+- Anvil generating incorrect, non-parsing or non-booting code
+- Generated code that does not match your schema
+- A command failing, hanging or reporting misleadingly
+- Documentation that is wrong or missing
+- A schema shape Anvil handles badly, even if it currently "works"
+
+### Out of scope
+
+- Bugs in the code after you have edited it — Anvil hands over ownership at generation
+- General Laravel, Livewire, Lighthouse or Tailwind questions
+- Application design decisions the generated scaffold does not make for you
+- Schema design advice beyond what `anvil:doctor` reports
+- Databases or drivers not in the support matrix
+
+### Contributing a fix
+
+The fastest route from a bug to a release is a pull request with a failing test.
+See [Contributing](#contributing) and
+[`documents/local-test.md`](documents/local-test.md) for the local setup.
