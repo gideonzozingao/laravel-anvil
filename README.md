@@ -869,46 +869,45 @@ After a successful install, point the docs page at the vendored copy:
 Unless `--skip-generate` is passed, the spec is regenerated first via
 `anvil:forge-api --spec-only`.
 
-```
-
----
-
 ## Notes on what else in the README is now stale
 
 Outside the Commands section, these still use the pre-rename names:
 
-| Location                       | Stale                                                        | Should be                                                |
-| ------------------------------ | ------------------------------------------------------------ | ---------------------------------------------------------- |
-| Requirements (optional deps)   | `anvil:generate-web --stack=livewire`, `anvil:generate-auth` | `anvil:forge-webapp`, `anvil:forge-auth`                 |
-| Versioned API scaffold         | `anvil:generate-api --api-version=2`                         | `anvil:forge-api --api-version=2`                        |
-| Events & listeners (3 samples) | `anvil:generate --events --listeners` etc.                   | `anvil:forge:app-scaffold --events --listeners`          |
-| Troubleshooting                | `anvil:generate-apidocs --check`                             | `anvil:forge-apidocs --check`                            |
-| Upgrading — Command renames    | Maps `anvil:generate --api` → `anvil:generate-api`           | Whole table needs a second column; see below             |
-| Upgrading — Required steps     | `anvil:generate-api --api-version=1 --force --ui`            | `anvil:forge-api --api-version=1 --force --ui`           |
-| Upgrading — Regenerate models  | `anvil:generate --all --force --backup`                      | `anvil:forge:app-scaffold --all --force --backup`        |
-| Requirements table             | PHP `^8.3`, Laravel `^11.0 \|\| ^12.0`                       | Confirm — the code uses PHP 8.4 syntax throughout        |
+| Location                       | Stale                                                        | Should be                                         |
+| ------------------------------ | ------------------------------------------------------------ | ------------------------------------------------- |
+| Requirements (optional deps)   | `anvil:generate-web --stack=livewire`, `anvil:generate-auth` | `anvil:forge-webapp`, `anvil:forge-auth`          |
+| Versioned API scaffold         | `anvil:generate-api --api-version=2`                         | `anvil:forge-api --api-version=2`                 |
+| Events & listeners (3 samples) | `anvil:generate --events --listeners` etc.                   | `anvil:forge:app-scaffold --events --listeners`   |
+| Troubleshooting                | `anvil:generate-apidocs --check`                             | `anvil:forge-apidocs --check`                     |
+| Upgrading — Command renames    | Maps `anvil:generate --api` → `anvil:generate-api`           | Whole table needs a second column; see below      |
+| Upgrading — Required steps     | `anvil:generate-api --api-version=1 --force --ui`            | `anvil:forge-api --api-version=1 --force --ui`    |
+| Upgrading — Regenerate models  | `anvil:generate --all --force --backup`                      | `anvil:forge:app-scaffold --all --force --backup` |
+| Requirements table             | PHP `^8.3`, Laravel `^11.0 \|\| ^12.0`                       | Confirm — the code uses PHP 8.4 syntax throughout |
 
 Suggested replacement for the Upgrading rename table:
 
-| Originally                             | Then                                 | Now                                     |
-| -------------------------------------- | ------------------------------------ | --------------------------------------- |
-| `anvil:generate`                       | —                                    | `anvil:forge:app-scaffold`              |
-| `anvil:generate --api`                 | `anvil:generate-api`                 | `anvil:forge-api`                       |
-| `anvil:generate --openapi`             | `anvil:generate-api --spec-only`     | `anvil:forge-api --spec-only`           |
-| `anvil:generate --openapi-format=json` | `anvil:generate-api --format=json`   | `anvil:forge-api --format=json`         |
-| `anvil:generate --openapi-single-file` | `anvil:generate-api --single-file`   | `anvil:forge-api --single-file`         |
-| `anvil:generate --openapi-ui`          | `anvil:generate-api --ui`            | `anvil:forge-api --ui`                  |
-| `anvil:docs`                           | `anvil:generate-apidocs`             | `anvil:forge-apidocs`                   |
-| `anvil:generate-web`                   | —                                    | `anvil:forge-webapp`                    |
-| `anvil:generate-auth`                  | —                                    | `anvil:forge-auth`                      |
-| `anvil:generate-graphql`               | —                                    | `anvil:forge-graphql`                   |
-| `anvil:generate-client`                | —                                    | `anvil:forge-client`                    |
+| Originally                             | Then                               | Now                             |
+| -------------------------------------- | ---------------------------------- | ------------------------------- |
+| `anvil:generate`                       | —                                  | `anvil:forge:app-scaffold`      |
+| `anvil:generate --api`                 | `anvil:generate-api`               | `anvil:forge-api`               |
+| `anvil:generate --openapi`             | `anvil:generate-api --spec-only`   | `anvil:forge-api --spec-only`   |
+| `anvil:generate --openapi-format=json` | `anvil:generate-api --format=json` | `anvil:forge-api --format=json` |
+| `anvil:generate --openapi-single-file` | `anvil:generate-api --single-file` | `anvil:forge-api --single-file` |
+| `anvil:generate --openapi-ui`          | `anvil:generate-api --ui`          | `anvil:forge-api --ui`          |
+| `anvil:docs`                           | `anvil:generate-apidocs`           | `anvil:forge-apidocs`           |
+| `anvil:generate-web`                   | —                                  | `anvil:forge-webapp`            |
+| `anvil:generate-auth`                  | —                                  | `anvil:forge-auth`              |
+| `anvil:generate-graphql`               | —                                  | `anvil:forge-graphql`           |
+| `anvil:generate-client`                | —                                  | `anvil:forge-client`            |
 
 The `Response caching` section referenced in the TOC does not exist in the
 README yet — the `--cache*` and `--etag` flags are documented in the command
 reference above, but the generation-stamp invalidation model, the volatility
 profiles and `$cacheVariant` deserve prose alongside "Per-version shape
 profiles". Say the word and I'll draft it.
+
+```
+
 ```
 
 ```
