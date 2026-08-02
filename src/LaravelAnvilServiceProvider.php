@@ -9,14 +9,14 @@ use Illuminate\Support\ServiceProvider;
 use Zuqongtech\LaravelAnvil\Console\DiffCommand;
 use Zuqongtech\LaravelAnvil\Console\DocsSyncCommand;
 use Zuqongtech\LaravelAnvil\Console\DoctorCommand;
-use Zuqongtech\LaravelAnvil\Console\FrontendCommand;
-use Zuqongtech\LaravelAnvil\Console\ForgeGraphQL;
 use Zuqongtech\LaravelAnvil\Console\ForgeAppScaffold;
 use Zuqongtech\LaravelAnvil\Console\ForgeAuth;
 use Zuqongtech\LaravelAnvil\Console\ForgeClient;
+use Zuqongtech\LaravelAnvil\Console\ForgeGraphQL;
 use Zuqongtech\LaravelAnvil\Console\ForgeOpenApi;
 use Zuqongtech\LaravelAnvil\Console\ForgeOpenApiDocs;
 use Zuqongtech\LaravelAnvil\Console\ForgeWebApp;
+use Zuqongtech\LaravelAnvil\Console\FrontendCommand;
 use Zuqongtech\LaravelAnvil\Console\InstallSwaggerUi;
 use Zuqongtech\LaravelAnvil\Console\PolishCommand;
 use Zuqongtech\LaravelAnvil\Generators\ApiControllerGenerator;
@@ -171,8 +171,8 @@ class LaravelAnvilServiceProvider extends ServiceProvider
          * SyncConfig: an install whose published config predates docs-sync has no
          * 'sync' key at all, and the shallow merge will not supply one.
          */
-        $this->mergeConfigFrom(__DIR__ . '/../config/anvil.php', 'anvil');
-        $this->mergeConfigFrom(__DIR__ . '/../config/anvil.php', 'laravel-anvil');
+        $this->mergeConfigFrom(__DIR__.'/../config/anvil.php', 'anvil');
+        $this->mergeConfigFrom(__DIR__.'/../config/anvil.php', 'laravel-anvil');
 
         $this->registerGenerators();
     }
@@ -184,7 +184,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
         // when DocsController::render() actually calls view(). Config merging
         // above already ran in register(), so anvil.openapi.docs.enabled is
         // readable here regardless of which root it came from.
-        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'anvil');
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'anvil');
 
         if (config('anvil.openapi.docs.enabled', false)) {
             $this->registerDocsRoutes();
@@ -210,13 +210,13 @@ class LaravelAnvilServiceProvider extends ServiceProvider
         // so existing deploy scripts keep working.
         foreach (['anvil-config', 'config'] as $tag) {
             $this->publishes([
-                __DIR__ . '/../config/anvil.php' => config_path('anvil.php'),
+                __DIR__.'/../config/anvil.php' => config_path('anvil.php'),
             ], $tag);
         }
 
         foreach (['anvil-stubs', 'stubs'] as $tag) {
             $this->publishes([
-                __DIR__ . '/../stubs' => base_path('stubs/anvil'),
+                __DIR__.'/../stubs' => base_path('stubs/anvil'),
             ], $tag);
         }
 
@@ -226,7 +226,7 @@ class LaravelAnvilServiceProvider extends ServiceProvider
         // own automatically, so no config change is needed after publishing —
         // config('anvil.openapi.docs.view') stays 'anvil::docs.show' either way.
         $this->publishes([
-            __DIR__ . '/../resources/views' => resource_path('views/vendor/anvil'),
+            __DIR__.'/../resources/views' => resource_path('views/vendor/anvil'),
         ], 'anvil-views');
     }
 
@@ -301,13 +301,13 @@ class LaravelAnvilServiceProvider extends ServiceProvider
             Route::get($prefix, [DocsController::class, 'ui'])
                 ->name('anvil.docs');
 
-            Route::get($prefix . '/{version}', [DocsController::class, 'ui'])
+            Route::get($prefix.'/{version}', [DocsController::class, 'ui'])
                 ->where('version', 'v?\d+')
                 ->name('anvil.docs.version');
 
             // $file arrives as "v1/openapi.yaml" or "v1/schemas/User.yaml";
             // DocsController splits the leading version segment off.
-            Route::get($prefix . '/{file}', [DocsController::class, 'spec'])
+            Route::get($prefix.'/{file}', [DocsController::class, 'spec'])
                 ->where('file', '.*')
                 ->name('anvil.docs.spec');
         });

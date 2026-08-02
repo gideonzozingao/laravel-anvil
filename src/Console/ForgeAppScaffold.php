@@ -47,7 +47,6 @@ use Zuqongtech\LaravelAnvil\Support\SchemaSelection;
  * major — but note that GenerationOptions::fromCommand() reads those option
  * names, so guard its lookups with $command->hasOption() first.
  */
-
 class ForgeAppScaffold extends Command
 {
     use RunsGenerationPipeline;
@@ -102,6 +101,7 @@ class ForgeAppScaffold extends Command
                             {--openapi-format=yaml       : [DEPRECATED] Use anvil:openapi --format}
                             {--openapi-single-file       : [DEPRECATED] Use anvil:openapi --single-file}
                             {--openapi-ui                : [DEPRECATED] Use anvil:openapi --ui}';
+
     private const DEPRECATED_API_OPTIONS = [
         'api',
         'openapi',
@@ -187,7 +187,7 @@ class ForgeAppScaffold extends Command
         $selection = SchemaSelection::fromInput($this->option('schema'), $stray);
 
         if ($selection->hasRejected()) {
-            $this->error('❌ Unexpected argument(s): ' . implode(', ', $selection->rejected()));
+            $this->error('❌ Unexpected argument(s): '.implode(', ', $selection->rejected()));
             $this->newLine();
             $this->line('   anvil:forge takes options only. If you meant a schema list, quote it:');
             $this->line('     <fg=cyan>php artisan anvil:forge --models --schema="core,admin_db,forms_db"</>');
@@ -239,7 +239,7 @@ class ForgeAppScaffold extends Command
         if ($queued && $style === ListenerGenerator::STYLE_SUBSCRIBER) {
             $this->components->warn(
                 '--queued-listeners is ignored with --listener-style=subscriber; a subscriber\'s methods are plain '
-                    . 'callbacks. Queue the work inside them, or switch to the per-event style.'
+                    .'callbacks. Queue the work inside them, or switch to the per-event style.'
             );
         }
 
@@ -304,7 +304,7 @@ class ForgeAppScaffold extends Command
         $this->newLine();
         $this->components->warn(
             'The --api / --openapi* flags on anvil:generate are deprecated and will be removed in the next major. '
-                . 'Use anvil:api (aliased anvil:openapi) instead — it also exposes --auth, --prefix, --throttle and --security.'
+                .'Use anvil:api (aliased anvil:openapi) instead — it also exposes --auth, --prefix, --throttle and --security.'
         );
 
         $wantsScaffold = (bool) $this->option('api');

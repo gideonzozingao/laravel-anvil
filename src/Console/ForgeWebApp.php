@@ -46,11 +46,11 @@ use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
  * install cannot take effect in the process that performs it, because the
  * autoloader is already built and the providers already registered.
  */
-
 class ForgeWebApp extends Command
 {
     use InstallsFrontendAssets;
     use RunsGenerationPipeline;
+
     protected $signature = 'anvil:forge-webapp
                             {--stack=blade   : Frontend stack — "blade" (Blade + Tailwind) or "livewire" (Blade + Livewire 3)}
                             {--tables=*      : Limit generation to specific tables}
@@ -77,8 +77,8 @@ class ForgeWebApp extends Command
                             {--backup        : Backup existing files before overwriting}
                             {--dry-run       : Preview without writing files}';
 
-
     protected $description = 'Generate a web scaffold (resource controllers, Blade views and web routes) from the database';
+
     /** @var list<string> */
     private const STACKS = ['blade', 'livewire'];
 
@@ -126,7 +126,7 @@ class ForgeWebApp extends Command
         if ($this->option('skip-models')) {
             $this->components->warn(
                 '--skip-models is deprecated and has no effect: this command never generates models. '
-                    . 'Generate them with `php artisan anvil:forge --models` first.'
+                    .'Generate them with `php artisan anvil:forge --models` first.'
             );
         }
 
@@ -365,13 +365,13 @@ class ForgeWebApp extends Command
     private function summarise(string $stack, int $perPage, string $assetsMode): void
     {
         $layout = (string) config('anvil.web.layout', 'layouts.anvil');
-        $layoutPath = resource_path('views/' . str_replace('.', '/', $layout) . '.blade.php');
+        $layoutPath = resource_path('views/'.str_replace('.', '/', $layout).'.blade.php');
         $generatesLayout = (bool) config('anvil.web.generate_layout', true);
 
         $layoutState = match (true) {
-            file_exists($layoutPath) => $layout . ' (exists, left alone)',
-            $generatesLayout => $layout . ' (will be generated)',
-            default => $layout . ' — MISSING and generation disabled',
+            file_exists($layoutPath) => $layout.' (exists, left alone)',
+            $generatesLayout => $layout.' (will be generated)',
+            default => $layout.' — MISSING and generation disabled',
         };
 
         $rows = [
@@ -382,7 +382,7 @@ class ForgeWebApp extends Command
             ['Layout', $layoutState],
             ['Navigation', config('anvil.web.generate_nav', true) ? 'generated (runtime-discovered links)' : 'skipped'],
             ['Assets', $this->describeAssetsMode($assetsMode)],
-            ['Rows per page', $perPage . ' (options: ' . implode(', ', $this->perPageOptions($perPage)) . ')'],
+            ['Rows per page', $perPage.' (options: '.implode(', ', $this->perPageOptions($perPage)).')'],
             // Previously "generated", which contradicted the pipeline's own
             // "Phase 1: reuse existing models" two lines later.
             ['Models', 'resolved from the model manifest (run anvil:forge --models to build them)'],
@@ -400,16 +400,16 @@ class ForgeWebApp extends Command
         if (! file_exists($layoutPath) && ! $generatesLayout) {
             $this->components->warn(sprintf(
                 'The views will extend "%s", which does not exist at %s. Create it, drop --no-layout, or pass a '
-                    . 'different --layout.',
+                    .'different --layout.',
                 $layout,
-                str_replace(base_path() . '/', '', $layoutPath),
+                str_replace(base_path().'/', '', $layoutPath),
             ));
         }
 
         if ($assetsMode === 'cdn') {
             $this->components->warn(
                 'The Tailwind Play CDN compiles styles in the browser and is not for production. '
-                    . 'Run `php artisan anvil:frontend --install`, then regenerate with --assets-mode=vite.',
+                    .'Run `php artisan anvil:frontend --install`, then regenerate with --assets-mode=vite.',
             );
         }
 

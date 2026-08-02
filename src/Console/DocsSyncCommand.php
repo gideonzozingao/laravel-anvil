@@ -18,11 +18,10 @@ use Zuqongtech\LaravelAnvil\DocsSync\SyncReport;
  * command, the `--docs-sync` pipeline flag and the local auto-sync hook cannot
  * drift apart in behaviour.
  */
-
 class DocsSyncCommand extends Command
 {
-
     protected $description = 'Sync hand-edited request/response payloads back into the OpenAPI spec';
+
     protected $signature = 'anvil:forge:docs-sync
         {model?* : Limit to these models or tables (e.g. Vehicle users)}
         {--api-version= : Limit to one API version and read that version\'s spec (e.g. v1)}
@@ -34,6 +33,7 @@ class DocsSyncCommand extends Command
         {--adopt : Take ownership of components sync does not manage yet}
         {--no-prune : Never remove properties from the spec}
         {--install-hook : Install a pre-commit hook that runs --check}';
+
     public function handle(): int
     {
         if ($this->option('install-hook')) {
@@ -91,7 +91,7 @@ class DocsSyncCommand extends Command
 
                 if ($options->diff || $options->check || $options->dryRun) {
                     foreach ($entry['changes'] as $change) {
-                        $this->line('    ' . $this->colourise($change));
+                        $this->line('    '.$this->colourise($change));
                     }
                 }
 
@@ -116,7 +116,7 @@ class DocsSyncCommand extends Command
 
         if ($written = $report->written()) {
             foreach ($written as $path) {
-                $this->line('  <fg=green>wrote</> ' . $this->relative($path));
+                $this->line('  <fg=green>wrote</> '.$this->relative($path));
             }
 
             $this->newLine();
@@ -131,7 +131,7 @@ class DocsSyncCommand extends Command
             ));
         }
 
-        $this->line('  <options=bold>' . $report->summaryLine() . '</>');
+        $this->line('  <options=bold>'.$report->summaryLine().'</>');
 
         if ($options->check && $report->hasDrift()) {
             $this->newLine();
@@ -146,11 +146,11 @@ class DocsSyncCommand extends Command
             return '';
         }
 
-        $breaking = count(array_filter($changes, static fn(SchemaChange $c): bool => $c->isBreaking()));
+        $breaking = count(array_filter($changes, static fn (SchemaChange $c): bool => $c->isBreaking()));
 
         return $breaking > 0
-            ? "<fg=red>({$breaking} breaking / " . count($changes) . ' changes)</>'
-            : '<fg=gray>(' . count($changes) . ' additive)</>';
+            ? "<fg=red>({$breaking} breaking / ".count($changes).' changes)</>'
+            : '<fg=gray>('.count($changes).' additive)</>';
     }
 
     private function colourise(SchemaChange $change): string
@@ -176,7 +176,7 @@ class DocsSyncCommand extends Command
             return $path;
         }
 
-        $base = base_path() . DIRECTORY_SEPARATOR;
+        $base = base_path().DIRECTORY_SEPARATOR;
 
         return str_starts_with($path, $base) ? substr($path, strlen($base)) : $path;
     }
@@ -195,7 +195,7 @@ class DocsSyncCommand extends Command
             return 1;
         }
 
-        $path = $directory . DIRECTORY_SEPARATOR . 'pre-commit';
+        $path = $directory.DIRECTORY_SEPARATOR.'pre-commit';
         $marker = '# >>> anvil docs-sync >>>';
 
         if (is_file($path) && str_contains((string) file_get_contents($path), $marker)) {
@@ -215,7 +215,7 @@ class DocsSyncCommand extends Command
 
         $existing = is_file($path) ? rtrim((string) file_get_contents($path)) : '#!/bin/sh';
 
-        if (@file_put_contents($path, $existing . "\n\n" . $snippet . "\n") === false) {
+        if (@file_put_contents($path, $existing."\n\n".$snippet."\n") === false) {
             $this->components->error("Unable to write {$path}");
 
             return 1;

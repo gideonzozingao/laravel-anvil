@@ -32,16 +32,15 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
  * Services are deliberately NOT versioned by default — business logic belongs in
  * one place. --versioned-services emits a thin subclass instead of a copy.
  */
-
 class ForgeOpenApi extends Command
 {
     use ConfiguresGeneratedCache;
     use RunsGenerationPipeline;
 
-
-
     protected $aliases = 'anvil:forge-openapi';
+
     protected $description = 'Generate a versioned JSON API scaffold and an OpenAPI 3.1 specification from live database introspection';
+
     protected $signature = 'anvil:forge-api
                             {--api-version=1         : Version of the API scaffold (1, 2, v2 …)}
                             {--prefix=api            : Route prefix for the versioned group}
@@ -96,6 +95,7 @@ class ForgeOpenApi extends Command
                             {--cache-model=*         : Per-model override: "Category:reference", "PriceHistory:off"}
                             {--etag                  : Emit ETag/If-None-Match handling and document 304 in the spec}
                             ';
+
     /**
      * Auth scheme => [route middleware, default OpenAPI security scheme].
      *
@@ -342,7 +342,7 @@ class ForgeOpenApi extends Command
         [$authMiddleware] = self::AUTH_SCHEMES[$this->normalisedAuth()];
 
         if ($authMiddleware !== null && ($guard = (string) $this->option('guard')) !== '') {
-            $authMiddleware = 'auth:' . $guard;
+            $authMiddleware = 'auth:'.$guard;
         }
 
         $throttle = (string) $this->option('throttle');
@@ -350,7 +350,7 @@ class ForgeOpenApi extends Command
         return array_values(array_filter([
             'api',
             $authMiddleware,
-            $throttle !== '' && $throttle !== 'none' ? 'throttle:' . $throttle : null,
+            $throttle !== '' && $throttle !== 'none' ? 'throttle:'.$throttle : null,
             ...array_map(strval(...), $this->option('middleware')),
         ]));
     }
@@ -477,13 +477,13 @@ class ForgeOpenApi extends Command
         );
 
         if (! $this->option('spec-only') && ! ($options->api ?? false)) {
-            return 'GenerationOptions did not accept the "api" flag, so the versioned API scaffold would be skipped. ' . $hint;
+            return 'GenerationOptions did not accept the "api" flag, so the versioned API scaffold would be skipped. '.$hint;
         }
 
         if ($this->generatesSpec() && ! ($options->openApi ?? false)) {
             $this->components->warn(
                 'GenerationOptions did not accept the "openApi" flag; the spec generators are falling back to '
-                    . 'anvil.openapi.enabled. ' . $hint
+                    .'anvil.openapi.enabled. '.$hint
             );
         }
 
@@ -492,7 +492,7 @@ class ForgeOpenApi extends Command
         if ($version !== '' && OpenApiLocator::normaliseVersion($version) !== $this->versionSegment()) {
             $this->components->warn(sprintf(
                 'GenerationOptions resolved apiVersion to "%s" but --api-version asked for "%s"; generated code may '
-                    . 'not match the spec directory. %s',
+                    .'not match the spec directory. %s',
                 $version,
                 $this->versionSegment(),
                 $hint,
@@ -538,10 +538,10 @@ class ForgeOpenApi extends Command
                 strtolower((string) $this->option('format')),
                 $this->option('single-file') ? 'single file' : 'split files',
             )];
-            $rows[] = ['Spec directory', $this->relativeToBase(OpenApiLocator::specDir($this->apiVersion())) . '/'];
+            $rows[] = ['Spec directory', $this->relativeToBase(OpenApiLocator::specDir($this->apiVersion())).'/'];
             $rows[] = ['Security scheme', strtolower((string) ($this->option('security') ?: $defaultSecurity))];
             $rows[] = ['Swagger UI', $this->option('ui')
-                ? $this->relativeToBase(OpenApiLocator::publicDocsDir($this->apiVersion())) . '/ (swagger-ui ' . $this->option('ui-version') . ')'
+                ? $this->relativeToBase(OpenApiLocator::publicDocsDir($this->apiVersion())).'/ (swagger-ui '.$this->option('ui-version').')'
                 : 'not published'];
         }
 
@@ -568,7 +568,7 @@ class ForgeOpenApi extends Command
         if (! OpenApiLocator::specExists($version)) {
             $this->components->warn(sprintf(
                 'The pipeline finished but no spec exists at %s. Check that the OpenAPI generators resolve their '
-                    . 'output through OpenApiLocator::specDir().',
+                    .'output through OpenApiLocator::specDir().',
                 $this->relativeToBase(OpenApiLocator::specFile($version)),
             ));
 
@@ -584,7 +584,7 @@ class ForgeOpenApi extends Command
             $counts['paths'],
         ));
 
-        $this->line('  Docs: <options=bold>' . OpenApiLocator::docsUrl($version) . '</>');
+        $this->line('  Docs: <options=bold>'.OpenApiLocator::docsUrl($version).'</>');
     }
 
     private function relativeToBase(string $path): string
@@ -612,6 +612,6 @@ class ForgeOpenApi extends Command
 
     private function versionSegment(): string
     {
-        return 'v' . $this->apiVersion();
+        return 'v'.$this->apiVersion();
     }
 }

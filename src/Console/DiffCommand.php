@@ -25,10 +25,10 @@ use Zuqongtech\LaravelAnvil\Support\SchemaManifest;
  * and did not regenerate, so the committed models, spec and TypeScript client all
  * describe a schema that no longer exists.
  */
-
 class DiffCommand extends Command
 {
     protected $description = 'Show what changed in the database since the last generation, and which artifacts are affected';
+
     protected $signature = 'anvil:diff
                             {--connection=  : Database connection to introspect}
                             {--schema=      : Schema(s) to inspect: name, csv list, or "all"}
@@ -37,6 +37,7 @@ class DiffCommand extends Command
                             {--accept       : Record the current schema as the new baseline}
                             {--strict       : Exit non-zero if the schema has drifted}
                             {--json         : Output machine-readable JSON}';
+
     public function handle(): int
     {
         $connection = (string) ($this->option('connection') ?: config('database.default'));
@@ -44,7 +45,7 @@ class DiffCommand extends Command
         try {
             $inspector = new DatabaseInspector($connection);
         } catch (\Throwable $e) {
-            $this->error('Could not connect to the database: ' . $e->getMessage());
+            $this->error('Could not connect to the database: '.$e->getMessage());
 
             return self::FAILURE;
         }
@@ -118,7 +119,7 @@ class DiffCommand extends Command
             try {
                 $metadata[$table] = ModelMetadata::fromTable($table, $inspector, $row['schema'] ?? $schema);
             } catch (\Throwable $e) {
-                $this->components->warn("Skipped {$table}: " . $e->getMessage());
+                $this->components->warn("Skipped {$table}: ".$e->getMessage());
             }
         }
 
@@ -142,7 +143,7 @@ class DiffCommand extends Command
         }
 
         if (! $manifest->save($connection)) {
-            $this->error('Could not write ' . SchemaManifest::path());
+            $this->error('Could not write '.SchemaManifest::path());
 
             return self::FAILURE;
         }
@@ -150,7 +151,7 @@ class DiffCommand extends Command
         $this->components->info(sprintf(
             'Baseline recorded for %d table(s) in %s',
             count($current),
-            str_replace(base_path() . '/', '', SchemaManifest::path()),
+            str_replace(base_path().'/', '', SchemaManifest::path()),
         ));
 
         return self::SUCCESS;
@@ -168,32 +169,32 @@ class DiffCommand extends Command
             $this->newLine();
             $this->components->warn(
                 'No baseline recorded yet, so every table reads as new. Run  php artisan anvil:diff --accept  '
-                    . 'after your next generation to start tracking drift.'
+                    .'after your next generation to start tracking drift.'
             );
         } else {
-            $this->line('  <fg=gray>Baseline: ' . $manifest->generatedAt() . '</>');
+            $this->line('  <fg=gray>Baseline: '.$manifest->generatedAt().'</>');
         }
 
         $this->newLine();
 
         if (! $drifted) {
-            $this->line('  <fg=green>✔</> Schema matches the baseline. ' . count($diff['unchanged']) . ' table(s) unchanged.');
+            $this->line('  <fg=green>✔</> Schema matches the baseline. '.count($diff['unchanged']).' table(s) unchanged.');
             $this->newLine();
 
             return;
         }
 
         foreach ($diff['added'] as $table) {
-            $this->line('  <fg=green>+ ' . $table . '</> <fg=gray>new table</>');
-            $this->line('      <fg=gray>' . $this->artifactsFor($table) . '</>');
+            $this->line('  <fg=green>+ '.$table.'</> <fg=gray>new table</>');
+            $this->line('      <fg=gray>'.$this->artifactsFor($table).'</>');
         }
 
         foreach ($diff['removed'] as $table) {
-            $this->line('  <fg=red>- ' . $table . '</> <fg=gray>dropped</>');
+            $this->line('  <fg=red>- '.$table.'</> <fg=gray>dropped</>');
         }
 
         foreach ($diff['changed'] as $table => $change) {
-            $this->line('  <fg=yellow>~ ' . $table . '</>');
+            $this->line('  <fg=yellow>~ '.$table.'</>');
 
             foreach ($change['columns'] as $column => [$before, $after]) {
                 $line = match (true) {
@@ -202,18 +203,18 @@ class DiffCommand extends Command
                     default => "column changed: {$column} <fg=gray>({$before} → {$after})</>",
                 };
 
-                $this->line('      ' . $line);
+                $this->line('      '.$line);
             }
 
             foreach ($change['keys'] as $key) {
-                $this->line('      ' . $key);
+                $this->line('      '.$key);
             }
 
             foreach ($change['flags'] as $flag) {
-                $this->line('      ' . $flag);
+                $this->line('      '.$flag);
             }
 
-            $this->line('      <fg=gray>' . $this->artifactsFor($table) . '</>');
+            $this->line('      <fg=gray>'.$this->artifactsFor($table).'</>');
         }
 
         // Files belonging to tables that no longer exist. Regeneration never
@@ -225,17 +226,17 @@ class DiffCommand extends Command
             $this->line('  <options=bold>Orphaned artifacts</> <fg=gray>(tables dropped, files remain)</>');
 
             foreach ($orphans as $table => $paths) {
-                $this->line('    ' . $table);
+                $this->line('    '.$table);
 
                 foreach ($paths as $path) {
-                    $this->line('      <fg=gray>' . $path . '</>');
+                    $this->line('      <fg=gray>'.$path.'</>');
                 }
             }
         }
 
         $this->newLine();
         $this->line('  <options=bold>Next</>');
-        $this->line('    php artisan anvil:generate --force ' . $this->tableFlags($diff));
+        $this->line('    php artisan anvil:generate --force '.$this->tableFlags($diff));
         $this->line('    php artisan anvil:generate-api --force   <fg=gray>(regenerate the spec)</>');
         $this->line('    php artisan anvil:diff --accept          <fg=gray>(record the new baseline)</>');
         $this->newLine();
@@ -261,6 +262,6 @@ class DiffCommand extends Command
             return '';
         }
 
-        return implode(' ', array_map(static fn(string $t): string => "--tables={$t}", $tables));
+        return implode(' ', array_map(static fn (string $t): string => "--tables={$t}", $tables));
     }
 }

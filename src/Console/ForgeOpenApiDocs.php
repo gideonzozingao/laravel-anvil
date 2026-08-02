@@ -25,12 +25,10 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
  * exactly one implementation of the spec pipeline; this command owns version
  * targeting and reporting.
  */
-
 class ForgeOpenApiDocs extends Command
 {
-
-
     protected $description = 'Generate and report the API documentation (OpenAPI spec + Swagger UI) per API version';
+
     protected $signature = 'anvil:forge-apidocs
                             {--api-version=   : Target a single version (1, v1); default: the configured version}
                             {--all-versions   : Target every version already present on disk}
@@ -47,6 +45,7 @@ class ForgeOpenApiDocs extends Command
                             {--dry-run        : Preview without writing files}
                             {--json           : Output machine-readable JSON (implies --check)}
                             {--open           : Attempt to open the docs URL in the default browser}';
+
     /**
      * The command this one delegates spec generation to.
      *
@@ -60,8 +59,6 @@ class ForgeOpenApiDocs extends Command
      * resolveApiCommand() still guards against this class of bug regardless
      * of what either name is renamed to next.
      */
-
-
     private const API_COMMAND = 'anvil:forge-api';
 
     /** @var list<string> */
@@ -102,11 +99,11 @@ class ForgeOpenApiDocs extends Command
         $enabled = (bool) config('anvil.openapi.docs.enabled', false);
 
         $report = array_map(
-            fn(string $version): array => $this->describe($version, $preferred, $default),
+            fn (string $version): array => $this->describe($version, $preferred, $default),
             $targets,
         );
 
-        $missing = count(array_filter($report, static fn(array $e): bool => ! $e['spec_exists']));
+        $missing = count(array_filter($report, static fn (array $e): bool => ! $e['spec_exists']));
 
         if ($this->option('json')) {
             $this->line((string) json_encode([
@@ -212,7 +209,7 @@ class ForgeOpenApiDocs extends Command
         if (! $application->has(self::API_COMMAND)) {
             return sprintf(
                 'The %s command is not registered. Register GenerateOpenApiCommand in the service provider, or pass '
-                    . '--check to report only.',
+                    .'--check to report only.',
                 self::API_COMMAND,
             );
         }
@@ -222,8 +219,8 @@ class ForgeOpenApiDocs extends Command
         if ($command === $this || $command->getName() === $this->getName()) {
             return sprintf(
                 'API_COMMAND resolves to this command (%s), which would recurse. It must name the spec generator. '
-                    . 'Note that "%s" and "%s" share a prefix — a careless rename or find-and-replace can point one '
-                    . 'back at the other.',
+                    .'Note that "%s" and "%s" share a prefix — a careless rename or find-and-replace can point one '
+                    .'back at the other.',
                 $this->getName(),
                 self::API_COMMAND,
                 (string) $this->getName(),
@@ -371,7 +368,7 @@ class ForgeOpenApiDocs extends Command
         foreach ($report as $entry) {
             $this->newLine();
 
-            $heading = '  <options=bold>' . $entry['version'] . '</>';
+            $heading = '  <options=bold>'.$entry['version'].'</>';
 
             if ($entry['is_default']) {
                 $heading .= ' <fg=gray>(default)</>';
@@ -395,7 +392,7 @@ class ForgeOpenApiDocs extends Command
             }
 
             $missing++;
-            $this->twoColumn('Spec status', '<fg=red>✗ not found</> — ' . $this->missingHint($entry, $checkOnly, $dryRun));
+            $this->twoColumn('Spec status', '<fg=red>✗ not found</> — '.$this->missingHint($entry, $checkOnly, $dryRun));
         }
 
         $this->newLine();
@@ -432,7 +429,7 @@ class ForgeOpenApiDocs extends Command
         }
 
         return 'generation reported success but wrote nothing — check that the OpenAPI generators resolve their '
-            . 'output through OpenApiLocator::specDir()';
+            .'output through OpenApiLocator::specDir()';
     }
 
     /**
@@ -449,7 +446,7 @@ class ForgeOpenApiDocs extends Command
             return;
         }
 
-        $generated = array_values(array_filter($report, static fn(array $e): bool => (bool) $e['spec_exists']));
+        $generated = array_values(array_filter($report, static fn (array $e): bool => (bool) $e['spec_exists']));
 
         if ($generated === []) {
             $this->warn('  No spec has been generated yet; not opening the browser.');
@@ -491,14 +488,14 @@ class ForgeOpenApiDocs extends Command
 
         // "start" is a cmd builtin, not an executable, so it needs a shell.
         $command = match (PHP_OS_FAMILY) {
-            'Darwin' => 'open ' . escapeshellarg($url),
-            'Windows' => 'cmd /c start "" ' . escapeshellarg($url),
-            default => 'xdg-open ' . escapeshellarg($url),
+            'Darwin' => 'open '.escapeshellarg($url),
+            'Windows' => 'cmd /c start "" '.escapeshellarg($url),
+            default => 'xdg-open '.escapeshellarg($url),
         };
 
         $redirect = PHP_OS_FAMILY === 'Windows' ? ' > NUL 2>&1' : ' > /dev/null 2>&1 &';
 
-        @exec($command . $redirect);
+        @exec($command.$redirect);
 
         $this->info("🌐 Opening {$url} …");
     }

@@ -35,7 +35,6 @@ use Zuqongtech\LaravelAnvil\Support\ScaffoldReport;
  * different tools, and the sequence is deliberate: warnings come after the table
  * so the configuration they refer to is still on screen.
  */
-
 class ForgeAuth extends Command
 {
     use RendersScaffoldOutput;
@@ -60,6 +59,7 @@ class ForgeAuth extends Command
                             {--dry-run           : Preview without writing files}';
 
     protected $description = 'Scaffold Livewire authentication (login, register, 2FA, lockout) and RBAC from the users table';
+
     /** Columns the generated components reference directly. */
     private const REQUIRED_COLUMNS = ['email', 'password'];
 
@@ -99,7 +99,7 @@ class ForgeAuth extends Command
         try {
             $inspector = new DatabaseInspector($connection);
         } catch (\Throwable $e) {
-            $this->error('Could not connect to the database: ' . $e->getMessage());
+            $this->error('Could not connect to the database: '.$e->getMessage());
 
             return self::FAILURE;
         }
@@ -226,7 +226,7 @@ class ForgeAuth extends Command
             return sprintf(
                 "Auth guard '%s' is not defined in config/auth.php.%s",
                 $guard,
-                $guards === [] ? '' : "\n   Configured guards: " . implode(', ', array_keys($guards)),
+                $guards === [] ? '' : "\n   Configured guards: ".implode(', ', array_keys($guards)),
             );
         }
 
@@ -251,7 +251,7 @@ class ForgeAuth extends Command
         if (is_string($model) && ! class_exists($model)) {
             return sprintf(
                 "Auth provider '%s' points at model %s, which does not exist.\n"
-                    . '   Generate it first (anvil:forge --models --tables=%s) or fix config/auth.php.',
+                    .'   Generate it first (anvil:forge --models --tables=%s) or fix config/auth.php.',
                 $providerName,
                 $model,
                 (string) $this->option('users-table'),
@@ -277,7 +277,7 @@ class ForgeAuth extends Command
         // the candidates rather than just refusing.
         $candidates = array_values(array_filter(
             $tables,
-            static fn(string $table): bool => str_contains(strtolower($table), 'user')
+            static fn (string $table): bool => str_contains(strtolower($table), 'user')
                 || str_contains(strtolower($table), 'account'),
         ));
 
@@ -286,7 +286,7 @@ class ForgeAuth extends Command
             $usersTable,
             $connection,
             $schema !== null ? " in schema '{$schema}'" : '',
-            $candidates === [] ? '' : "\n   Candidates: " . implode(', ', array_slice($candidates, 0, 8)),
+            $candidates === [] ? '' : "\n   Candidates: ".implode(', ', array_slice($candidates, 0, 8)),
         );
     }
 
@@ -311,8 +311,8 @@ class ForgeAuth extends Command
 
         return sprintf(
             "Table '%s' is missing the column(s) the generated components authenticate against: %s.\n"
-                . '   Anvil would emit code referencing attributes that do not exist. Add the columns, or point '
-                . '--users-table at the right table.',
+                .'   Anvil would emit code referencing attributes that do not exist. Add the columns, or point '
+                .'--users-table at the right table.',
             $usersTable,
             implode(', ', $missing),
         );
@@ -339,7 +339,7 @@ class ForgeAuth extends Command
 
         if (! $this->containsInsensitive($columns, 'email_verified_at') && ! $this->option('no-verification')) {
             $warnings[] = 'No "email_verified_at" column — email verification cannot work. '
-                . 'Add the column or pass --no-verification.';
+                .'Add the column or pass --no-verification.';
         }
 
         if (! $this->option('no-lockout')) {
@@ -352,8 +352,8 @@ class ForgeAuth extends Command
             }
 
             if ($lockoutColumns !== []) {
-                $warnings[] = 'Missing lockout column(s) ' . implode(', ', $lockoutColumns)
-                    . ' — a migration is generated for them; run it before signing in, or pass --no-lockout.';
+                $warnings[] = 'Missing lockout column(s) '.implode(', ', $lockoutColumns)
+                    .' — a migration is generated for them; run it before signing in, or pass --no-lockout.';
             }
         }
 
@@ -363,17 +363,17 @@ class ForgeAuth extends Command
 
         if (! $this->option('no-2fa') && ! class_exists(Google2FA::class)) {
             $warnings[] = 'pragmarx/google2fa is not installed; the generated TwoFactorAuthenticationService '
-                . 'will not resolve until you run: composer require pragmarx/google2fa';
+                .'will not resolve until you run: composer require pragmarx/google2fa';
         }
 
         // Silent double-hashing is the single most common auth bug in generated
         // code: a `hashed` cast is idempotent, a hand-rolled mutator is not.
-        $model = config('auth.providers.' . (config("auth.guards.{$this->option('guard')}.provider", 'users')) . '.model');
+        $model = config('auth.providers.'.(config("auth.guards.{$this->option('guard')}.provider", 'users')).'.model');
 
         if (is_string($model) && class_exists($model) && method_exists($model, 'setPasswordAttribute')) {
             $warnings[] = sprintf(
                 '%s defines setPasswordAttribute() — the generated register form calls Hash::make(), so the '
-                    . 'mutator would hash the hash. Remove the mutator and use the "hashed" cast instead.',
+                    .'mutator would hash the hash. Remove the mutator and use the "hashed" cast instead.',
                 class_basename($model),
             );
         }
@@ -412,8 +412,8 @@ class ForgeAuth extends Command
         $skipped = $scaffolder->skippedParts();
 
         $rows = [
-            ['Connection', $connection . ' (' . $inspector->getDriver() . ')'],
-            ['Users table', ($schema !== null ? $schema . '.' : '') . $usersTable],
+            ['Connection', $connection.' ('.$inspector->getDriver().')'],
+            ['Users table', ($schema !== null ? $schema.'.' : '').$usersTable],
             ['Guard', (string) $this->option('guard')],
             ['Components', trim((string) $this->option('namespace'), '\\')],
             ['Guest layout', $this->option('layout') ?: 'layouts.guest (generated)'],
@@ -448,8 +448,8 @@ class ForgeAuth extends Command
 
         return [
             'Guard' => $guard,
-            'Users table' => ($schema !== null ? $schema . '.' : '') . $usersTable,
-            'Components' => $namespace . '\\',
+            'Users table' => ($schema !== null ? $schema.'.' : '').$usersTable,
+            'Components' => $namespace.'\\',
             'Views' => 'resources/views/auth/ (login, register, forgot-password, reset-password, verify-email)',
             'Guest layout' => $this->option('layout') ?: 'resources/views/layouts/guest.blade.php',
             'Route file' => 'routes/auth.php',
@@ -475,7 +475,7 @@ class ForgeAuth extends Command
         $this->renderSummary($report);
 
         $this->renderCompletion('🔐', sprintf('Auth scaffold complete [%s].', $guard), [
-            'Components' => trim((string) $this->option('namespace'), '\\') . '\\',
+            'Components' => trim((string) $this->option('namespace'), '\\').'\\',
             'Views' => 'resources/views/auth/',
             'Routes' => 'routes/auth.php (require it from routes/web.php)',
             'Middleware' => 'App\\Http\\Middleware\\ (role, permission)',
