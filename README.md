@@ -23,9 +23,7 @@ version with its own key casing, pagination and hidden fields), an **OpenAPI 3.1
 specification with Swagger UI, a **web CRUD front end** in pure Blade + Tailwind
 or Blade + Livewire, and a **Livewire authentication scaffold** with RBAC.
 
-## Point it at a database, run one command, and get working code you own.
-
---
+\*\*\* Point it at a database, run one command, and get working code you own .
 
 ## 1. Table of contents
 
