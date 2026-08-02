@@ -191,52 +191,53 @@ PHP;
 
         $hiddenProperty = $hidden === [] ? '' : <<<PHP
 
-    /**
-     * Never serialised — enforced here as well as omitted from \$outbound, so a
-     * hand-edit to fields() cannot leak them.
-     *
-     * @var list<string>
-     */
-    protected array \$hidden = [
-{$hiddenBlock}    ];
+        /**
+         * Never serialised — enforced here as well as omitted from \$outbound, so a
+         * hand-edit to fields() cannot leak them.
+         *
+         * @var list<string>
+         */
+        protected array \$hidden = [
+                {$hiddenBlock}   
+                 ];
 
-PHP;
+        PHP;
 
         return <<<PHP
-<?php
+            <?php
 
-namespace {$namespace};
+            namespace {$namespace};
 
-use Illuminate\Http\Request;
+            use Illuminate\Http\Request;
 
-/**
- * {$meta->model} as exposed by the {$profile->version} API.
- *
- * @mixin \\{$modelFqn}
- */
-class {$class} extends {$base}
-{
-    /**
-     * column => api key, generated for {$profile->version} ({$profile->responseCase()} case).
-     *
-     * @var array<string, string>
-     */
-    protected array \$outbound = [
-{$outboundBlock}
-    ];
-{$hiddenProperty}
-    /**
-     * @return array<string, mixed>
-     */
-    protected function fields(Request \$request): array
-    {
-        return [
-{$fieldsBlock}{$relationsBlock}
-        ];
-    }
-}
+            /**
+             * {$meta->model} as exposed by the {$profile->version} API.
+             *
+             * @mixin \\{$modelFqn}
+             */
+            class {$class} extends {$base}
+            {
+                /**
+                 * column => api key, generated for {$profile->version} ({$profile->responseCase()} case).
+                 *
+                 * @var array<string, string>
+                 */
+                protected array \$outbound = [
+                    {$outboundBlock}
+                ];
+                    {$hiddenProperty}
+                /**
+                 * @return array<string, mixed>
+                 */
+                protected function fields(Request \$request): array
+                {
+                    return [
+                        {$fieldsBlock}{$relationsBlock}
+                    ];
+                }
+            }
 
-PHP;
+        PHP;
     }
 
     /**
@@ -329,46 +330,46 @@ PHP;
         $metaKeys = $this->paginationMetaKeys($profile);
 
         return <<<PHP
-<?php
+            <?php
 
-namespace {$namespace};
+            namespace {$namespace};
 
-use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\ResourceCollection;
+            use Illuminate\Http\Request;
+            use Illuminate\Http\Resources\Json\ResourceCollection;
 
-/**
- * Paginated {$meta->model} collection for {$version}.
- *
- * The meta block is emitted in this version's key casing, matching the
- * PaginationMeta schema in the OpenAPI spec.
- */
-class {$class} extends ResourceCollection
-{
-    public \$collects = {$resource}::class;
+            /**
+             * Paginated {$meta->model} collection for {$version}.
+             *
+             * The meta block is emitted in this version's key casing, matching the
+             * PaginationMeta schema in the OpenAPI spec.
+             */
+            class {$class} extends ResourceCollection
+            {
+                public \$collects = {$resource}::class;
 
-    /**
-     * @return array<string, mixed>
-     */
-    public function toArray(Request \$request): array
-    {
-        return [
-            'data' => \$this->collection,
-            'meta' => [
-{$metaKeys}
-            ],
-        ];
-    }
+                /**
+                 * @return array<string, mixed>
+                 */
+                public function toArray(Request \$request): array
+                {
+                    return [
+                        'data' => \$this->collection,
+                        'meta' => [
+                        {$metaKeys}
+                        ],
+                    ];
+                }
 
-    /**
-     * @return array<string, mixed>
-     */
-    public function with(Request \$request): array
-    {
-        return ['success' => true, 'version' => '{$version}'];
-    }
-}
+                /**
+                 * @return array<string, mixed>
+                 */
+                public function with(Request \$request): array
+                {
+                    return ['success' => true, 'version' => '{$version}'];
+                }
+            }
 
-PHP;
+        PHP;
     }
 
     protected function paginationMetaKeys(ApiVersionProfile $profile): string

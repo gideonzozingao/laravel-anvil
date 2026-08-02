@@ -117,91 +117,91 @@ final class EnumGenerator implements Generator
         $defaultMethod = $default === null
             ? <<<'PHP'
 
-    /**
-     * The column has no database default, so there is no obvious starting value.
-     */
-    public static function default(): ?self
-    {
-        return null;
-    }
-PHP
+                    /**
+                     * The column has no database default, so there is no obvious starting value.
+                     */
+                    public static function default(): ?self
+                    {
+                        return null;
+                    }
+                PHP
             : <<<PHP
 
-    /** Mirrors the column default in the database. */
-    public static function default(): self
-    {
-        return self::{$default};
-    }
-PHP;
+                /** Mirrors the column default in the database. */
+                public static function default(): self
+                {
+                    return self::{$default};
+                }
+            PHP;
 
         return <<<PHP
-<?php
+            <?php
 
-declare(strict_types=1);
+            declare(strict_types=1);
 
-namespace {$namespace};
+            namespace {$namespace};
 
-/**
- * Values permitted in {$enum->table}.{$enum->column}.
- *
- * {$source}
- *
- * Used by the model cast, the form request rules, the OpenAPI schema and the
- * generated TypeScript union — so the allowed values are stated once and cannot
- * drift between the database and the code that reads it.
- */
-enum {$name}: {$backing}
-{
-{$cases}
+            /**
+             * Values permitted in {$enum->table}.{$enum->column}.
+             *
+             * {$source}
+             *
+             * Used by the model cast, the form request rules, the OpenAPI schema and the
+             * generated TypeScript union — so the allowed values are stated once and cannot
+             * drift between the database and the code that reads it.
+             */
+            enum {$name}: {$backing}
+            {
+                {$cases}
 
-    /**
-     * The raw values, for an `in:` rule or a select list.
-     *
-     * @return list<{$backing}>
-     */
-    public static function values(): array
-    {
-        return array_column(self::cases(), 'value');
-    }
+                /**
+                 * The raw values, for an `in:` rule or a select list.
+                 *
+                 * @return list<{$backing}>
+                 */
+                public static function values(): array
+                {
+                    return array_column(self::cases(), 'value');
+                }
 
-    /**
-     * Display label. Derived from the stored value; edit freely — this file is
-     * only regenerated with --force.
-     */
-    public function label(): string
-    {
-        return match (\$this) {
-{$labels}
-        };
-    }
+                /**
+                 * Display label. Derived from the stored value; edit freely — this file is
+                 * only regenerated with --force.
+                 */
+                public function label(): string
+                {
+                    return match (\$this) {
+                        {$labels}
+                    };
+                }
 
-    /**
-     * value => label, ready for a <select> or a filter dropdown.
-     *
-     * @return array<{$backing}, string>
-     */
-    public static function options(): array
-    {
-        return array_combine(
-            self::values(),
-            array_map(static fn (self \$case): string => \$case->label(), self::cases()),
-        );
-    }
+                /**
+                 * value => label, ready for a <select> or a filter dropdown.
+                 *
+                 * @return array<{$backing}, string>
+                 */
+                public static function options(): array
+                {
+                    return array_combine(
+                        self::values(),
+                        array_map(static fn (self \$case): string => \$case->label(), self::cases()),
+                    );
+                }
 
-    /** `\$booking->status->is(Status::Active, Status::Pending)` */
-    public function is(self ...\$cases): bool
-    {
-        return in_array(\$this, \$cases, true);
-    }
+                /** `\$booking->status->is(Status::Active, Status::Pending)` */
+                public function is(self ...\$cases): bool
+                {
+                    return in_array(\$this, \$cases, true);
+                }
 
-    public function isNot(self ...\$cases): bool
-    {
-        return ! \$this->is(...\$cases);
-    }
-{$defaultMethod}
-}
+                public function isNot(self ...\$cases): bool
+                {
+                    return ! \$this->is(...\$cases);
+                }
+                    {$defaultMethod}
+            }
 
-PHP;
+            PHP;
     }
 
     protected function sourceDescription(EnumColumn $enum): string

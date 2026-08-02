@@ -136,30 +136,30 @@ final class ResourceGenerator implements Generator
         $extraImports = $this->collectRelationshipImports($meta, $namespace);
 
         return <<<PHP
-<?php
+            <?php
 
-namespace App\Http\Resources;
+            namespace App\Http\Resources;
 
-use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\JsonResource;
-{$extraImports}
+            use Illuminate\Http\Request;
+            use Illuminate\Http\Resources\Json\JsonResource;
+            {$extraImports}
 
-class {$resourceName} extends JsonResource
-{
-    /**
-     * Transform the resource into an array.
-     *
-     * @return array<string, mixed>
-     */
-    public function toArray(Request \$request): array
-    {
-        return [
-{$arrayBody}
-        ];
-    }
-}
+            class {$resourceName} extends JsonResource
+            {
+                /**
+                 * Transform the resource into an array.
+                 *
+                 * @return array<string, mixed>
+                 */
+                public function toArray(Request \$request): array
+                {
+                    return [
+            {$arrayBody}
+                    ];
+                }
+            }
 
-PHP;
+            PHP;
     }
 
     // -----------------------------------------------------------------------

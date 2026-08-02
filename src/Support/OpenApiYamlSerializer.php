@@ -69,7 +69,6 @@ final class OpenApiYamlSerializer
     private function dumpFlags(): int
     {
         $flags = Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK;
-
         if (defined(Yaml::class.'::DUMP_EMPTY_ARRAY_AS_SEQUENCE')) {
             $flags |= Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE;
         }

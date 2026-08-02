@@ -101,28 +101,28 @@ final class MigrationGenerator implements Generator
         ]));
 
         return <<<PHP
-<?php
+                    <?php
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
+                    use Illuminate\Database\Migrations\Migration;
+                    use Illuminate\Database\Schema\Blueprint;
+                    use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('{$table}', function (Blueprint \$table) {
-{$schemaBody}
-        });
-    }
+                    return new class extends Migration
+                    {
+                        public function up(): void
+                        {
+                            Schema::create('{$table}', function (Blueprint \$table) {
+                                {$schemaBody}
+                            });
+                        }
 
-    public function down(): void
-    {
-        Schema::dropIfExists('{$table}');
-    }
-};
+                        public function down(): void
+                        {
+                            Schema::dropIfExists('{$table}');
+                        }
+                    };
 
-PHP;
+            PHP;
     }
 
     protected function buildColumnLines(ModelMetadata $meta): string

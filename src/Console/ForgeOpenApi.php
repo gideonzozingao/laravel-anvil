@@ -37,11 +37,11 @@ class ForgeOpenApi extends Command
     use ConfiguresGeneratedCache;
     use RunsGenerationPipeline;
 
-    protected $aliases = 'anvil:forge-openapi';
+    protected $aliases = 'anvil:forge:openapi';
 
     protected $description = 'Generate a versioned JSON API scaffold and an OpenAPI 3.1 specification from live database introspection';
 
-    protected $signature = 'anvil:forge-api
+    protected $signature = 'anvil:forge:api
                             {--api-version=1         : Version of the API scaffold (1, 2, v2 …)}
                             {--prefix=api            : Route prefix for the versioned group}
                             {--auth=sanctum          : Auth scheme: sanctum|passport|jwt|token|none}

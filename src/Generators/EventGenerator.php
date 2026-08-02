@@ -104,46 +104,46 @@ final class EventGenerator implements Generator
         };
 
         return <<<PHP
-<?php
+            <?php
 
-namespace App\Events;
+            namespace App\Events;
 
-use {$fullModel};
-use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Foundation\Events\Dispatchable;
-use Illuminate\Queue\SerializesModels;
-// use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+            use {$fullModel};
+            use Illuminate\Broadcasting\InteractsWithSockets;
+            use Illuminate\Foundation\Events\Dispatchable;
+            use Illuminate\Queue\SerializesModels;
+            // use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 
-/**
- * {$docComment}
- *
- * To broadcast this event over WebSockets, implement ShouldBroadcast
- * and configure the broadcastOn() method.
- */
-class {$eventName}
-{
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+            /**
+             * {$docComment}
+             *
+             * To broadcast this event over WebSockets, implement ShouldBroadcast
+             * and configure the broadcastOn() method.
+             */
+            class {$eventName}
+            {
+                use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    /**
-     * Create a new event instance.
-     */
-    public function __construct(
-        public readonly {$model} \${$variable},
-    ) {}
+                /**
+                 * Create a new event instance.
+                 */
+                public function __construct(
+                    public readonly {$model} \${$variable},
+                ) {}
 
-    // /**
-    //  * Get the channels the event should broadcast on.
-    //  *
-    //  * @return array<int, \Illuminate\Broadcasting\Channel>
-    //  */
-    // public function broadcastOn(): array
-    // {
-    //     return [
-    //         new PrivateChannel('{$meta->table}.' . \$this->{$variable}->getKey()),
-    //     ];
-    // }
-}
+                // /**
+                //  * Get the channels the event should broadcast on.
+                //  *
+                //  * @return array<int, \Illuminate\Broadcasting\Channel>
+                //  */
+                // public function broadcastOn(): array
+                // {
+                //     return [
+                //         new PrivateChannel('{$meta->table}.' . \$this->{$variable}->getKey()),
+                //     ];
+                // }
+            }
 
-PHP;
+            PHP;
     }
 }

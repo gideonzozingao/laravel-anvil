@@ -317,7 +317,7 @@ final class ViewGenerator implements Generator
         $wireNav = $wireNavigate ? ' wire:navigate.hover' : '';
 
         $tpl = <<<'BLADE'
-@php
+        @php
     /**
      * Anvil web navigation — links discovered at runtime from the registered
      * routes. Every "<resource>.index" route whose controller lives in the web
@@ -339,7 +339,7 @@ final class ViewGenerator implements Generator
         })
         ->sortBy('label')
         ->values();
-@endphp
+        @endphp
 
 {{-- Backdrop (mobile only) --}}
 <div id="anvil-backdrop" class="fixed inset-0 z-40 hidden bg-gray-900/50 backdrop-blur-sm lg:hidden"></div>
@@ -510,8 +510,7 @@ BLADE;
                                     @endif
                                 </a>
                             </th>
-
-HEAD;
+                    HEAD;
 
             $cell = $this->cellExpression($meta, $col);
             $row .= "                                <td class=\"table-td{$hide}\">{$cell}</td>\n";
@@ -528,7 +527,7 @@ HEAD;
                            placeholder="Search %TITLE_PLURAL%…"
                            class="form-input pl-9">
                 </div>
-SEARCH;
+                SEARCH;
 
         $options = '';
 
@@ -538,116 +537,116 @@ SEARCH;
         }
 
         $tpl = <<<'BLADE'
-@extends('%LAYOUT%')
+                @extends('%LAYOUT%')
 
-@section('title', '%TITLE_PLURAL%')
+                @section('title', '%TITLE_PLURAL%')
 
-@section('content')
-    {{-- Header --}}
-    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-            <h2 class="text-2xl font-bold text-gray-900">%TITLE_PLURAL%</h2>
-            <p class="mt-0.5 text-sm text-gray-500">
-                {{ $%PLURAL_VAR%->total() }} {{ \Illuminate\Support\Str::plural('record', $%PLURAL_VAR%->total()) }}
-            </p>
-        </div>
-        <a href="{{ route('%SLUG%.create') }}" class="btn-primary self-start sm:self-auto">
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-            New %TITLE%
-        </a>
-    </div>
+            @section('content')
+                {{-- Header --}}
+                <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">%TITLE_PLURAL%</h2>
+                        <p class="mt-0.5 text-sm text-gray-500">
+                            {{ $%PLURAL_VAR%->total() }} {{ \Illuminate\Support\Str::plural('record', $%PLURAL_VAR%->total()) }}
+                        </p>
+                    </div>
+                    <a href="{{ route('%SLUG%.create') }}" class="btn-primary self-start sm:self-auto">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                        New %TITLE%
+                    </a>
+                </div>
 
-    <div class="card">
-        {{-- Toolbar: search + per page, submitted as GET so the URL stays shareable --}}
-        <form method="GET" action="{{ route('%SLUG%.index') }}" class="card-header">
-            @if (request('sort'))
-                <input type="hidden" name="sort" value="{{ request('sort') }}">
-                <input type="hidden" name="direction" value="{{ request('direction') }}">
-            @endif
+                <div class="card">
+                    {{-- Toolbar: search + per page, submitted as GET so the URL stays shareable --}}
+                    <form method="GET" action="{{ route('%SLUG%.index') }}" class="card-header">
+                        @if (request('sort'))
+                            <input type="hidden" name="sort" value="{{ request('sort') }}">
+                            <input type="hidden" name="direction" value="{{ request('direction') }}">
+                        @endif
 
-%SEARCH_BOX%
-            <div class="flex items-center gap-2">
-                <label for="per_page" class="text-sm text-gray-500">Per page</label>
-                <select name="per_page" id="per_page" class="form-select w-auto py-1.5" onchange="this.form.submit()">
-%PER_PAGE_OPTIONS%                </select>
-                <button type="submit" class="btn-secondary btn-sm">Apply</button>
-                @if (request()->hasAny(['q', 'sort', 'per_page']))
-                    <a href="{{ route('%SLUG%.index') }}" class="btn-secondary btn-sm">Reset</a>
-                @endif
-            </div>
-        </form>
+            %SEARCH_BOX%
+                        <div class="flex items-center gap-2">
+                            <label for="per_page" class="text-sm text-gray-500">Per page</label>
+                            <select name="per_page" id="per_page" class="form-select w-auto py-1.5" onchange="this.form.submit()">
+            %PER_PAGE_OPTIONS%                </select>
+                            <button type="submit" class="btn-secondary btn-sm">Apply</button>
+                            @if (request()->hasAny(['q', 'sort', 'per_page']))
+                                <a href="{{ route('%SLUG%.index') }}" class="btn-secondary btn-sm">Reset</a>
+                            @endif
+                        </div>
+                    </form>
 
-        {{-- Table --}}
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-%TABLE_HEAD%                        <th class="table-th text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                    @forelse ($%PLURAL_VAR% as $%VAR%)
-                        <tr class="odd:bg-white even:bg-gray-50/50 transition hover:bg-brand-50/40">
-%TABLE_ROW%                            <td class="table-td text-right">
-                                <div class="flex items-center justify-end gap-1">
-                                    <a href="{{ route('%SLUG%.show', $%VAR%) }}" class="icon-btn" title="View {{ __('details') }}">
-                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                                        <span class="sr-only">View</span>
-                                    </a>
-                                    <a href="{{ route('%SLUG%.edit', $%VAR%) }}" class="icon-btn" title="Edit">
-                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                                        <span class="sr-only">Edit</span>
-                                    </a>
-                                    <form action="{{ route('%SLUG%.destroy', $%VAR%) }}" method="POST"
-                                          onsubmit="return confirm('Delete this %TITLE%? This cannot be undone.')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="icon-btn icon-btn-danger" title="Delete">
-                                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                            <span class="sr-only">Delete</span>
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="%COLSPAN%" class="px-4 py-16 text-center">
-                                <div class="mx-auto flex max-w-sm flex-col items-center">
-                                    <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
-                                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
-                                    </div>
-                                    <p class="font-medium text-gray-700">No %TITLE_PLURAL% found</p>
-                                    <p class="mt-1 text-sm text-gray-500">
-                                        @if (request('q'))
-                                            No results for &ldquo;{{ request('q') }}&rdquo;.
-                                            <a href="{{ route('%SLUG%.index') }}" class="link">Clear search</a>
-                                        @else
-                                            Get started by creating a new %TITLE%.
-                                        @endif
-                                    </p>
-                                </div>
-                            </td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
+                    {{-- Table --}}
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+            %TABLE_HEAD%                        <th class="table-th text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                @forelse ($%PLURAL_VAR% as $%VAR%)
+                                    <tr class="odd:bg-white even:bg-gray-50/50 transition hover:bg-brand-50/40">
+            %TABLE_ROW%                            <td class="table-td text-right">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <a href="{{ route('%SLUG%.show', $%VAR%) }}" class="icon-btn" title="View {{ __('details') }}">
+                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                                    <span class="sr-only">View</span>
+                                                </a>
+                                                <a href="{{ route('%SLUG%.edit', $%VAR%) }}" class="icon-btn" title="Edit">
+                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                                    <span class="sr-only">Edit</span>
+                                                </a>
+                                                <form action="{{ route('%SLUG%.destroy', $%VAR%) }}" method="POST"
+                                                    onsubmit="return confirm('Delete this %TITLE%? This cannot be undone.')">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="icon-btn icon-btn-danger" title="Delete">
+                                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                        <span class="sr-only">Delete</span>
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="%COLSPAN%" class="px-4 py-16 text-center">
+                                            <div class="mx-auto flex max-w-sm flex-col items-center">
+                                                <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
+                                                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+                                                </div>
+                                                <p class="font-medium text-gray-700">No %TITLE_PLURAL% found</p>
+                                                <p class="mt-1 text-sm text-gray-500">
+                                                    @if (request('q'))
+                                                        No results for &ldquo;{{ request('q') }}&rdquo;.
+                                                        <a href="{{ route('%SLUG%.index') }}" class="link">Clear search</a>
+                                                    @else
+                                                        Get started by creating a new %TITLE%.
+                                                    @endif
+                                                </p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
 
-        {{-- Footer: summary + pagination --}}
-        @if ($%PLURAL_VAR%->total() > 0)
-            <div class="card-footer">
-                <p class="text-sm text-gray-500">
-                    Showing <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->firstItem() ?? 0 }}</span>
-                    to <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->lastItem() ?? 0 }}</span>
-                    of <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->total() }}</span>
-                </p>
-                <div>{{ $%PLURAL_VAR%->onEachSide(1)->withQueryString()->links() }}</div>
-            </div>
-        @endif
-    </div>
-@endsection
-BLADE;
+                    {{-- Footer: summary + pagination --}}
+                    @if ($%PLURAL_VAR%->total() > 0)
+                        <div class="card-footer">
+                            <p class="text-sm text-gray-500">
+                                Showing <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->firstItem() ?? 0 }}</span>
+                                to <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->lastItem() ?? 0 }}</span>
+                                of <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->total() }}</span>
+                            </p>
+                            <div>{{ $%PLURAL_VAR%->onEachSide(1)->withQueryString()->links() }}</div>
+                        </div>
+                    @endif
+                </div>
+            @endsection
+            BLADE;
 
         return $this->apply($tpl, [
             '%TABLE_HEAD%' => $head,

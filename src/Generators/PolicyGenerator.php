@@ -121,75 +121,75 @@ final class PolicyGenerator implements Generator
             : '';
 
         return <<<PHP
-<?php
+                <?php
 
-namespace App\Policies;
+                namespace App\Policies;
 
-use {$fullModel};
-use App\Models\User;
-use Illuminate\Auth\Access\HandlesAuthorization;
+                use {$fullModel};
+                use App\Models\User;
+                use Illuminate\Auth\Access\HandlesAuthorization;
 
-class {$policyName}
-{
-    use HandlesAuthorization;
+                class {$policyName}
+                {
+                    use HandlesAuthorization;
 
-    /**
-     * Perform pre-authorization checks.
-     *
-     * Return true to grant all abilities regardless of specific checks.
-     * Return false to deny all. Return null to fall through to the ability method.
-     *
-     * Example super-admin bypass:
-     *   if (\$user->isAdmin()) { return true; }
-     */
-    public function before(User \$user, string \$ability): bool|null
-    {
-        return null;
-    }
+                    /**
+                     * Perform pre-authorization checks.
+                     *
+                     * Return true to grant all abilities regardless of specific checks.
+                     * Return false to deny all. Return null to fall through to the ability method.
+                     *
+                     * Example super-admin bypass:
+                     *   if (\$user->isAdmin()) { return true; }
+                     */
+                    public function before(User \$user, string \$ability): bool|null
+                    {
+                        return null;
+                    }
 
-    /**
-     * Determine whether the user can list {$model} records.
-     */
-    public function viewAny(User \$user): bool
-    {
-        return true;
-    }
+                    /**
+                     * Determine whether the user can list {$model} records.
+                     */
+                    public function viewAny(User \$user): bool
+                    {
+                        return true;
+                    }
 
-    /**
-     * Determine whether the user can view a specific {$model}.
-     */
-    public function view(User \$user, {$model} \${$variable}): bool
-    {
-        return true;
-    }
+                    /**
+                     * Determine whether the user can view a specific {$model}.
+                     */
+                    public function view(User \$user, {$model} \${$variable}): bool
+                    {
+                        return true;
+                    }
 
-    /**
-     * Determine whether the user can create {$model} records.
-     */
-    public function create(User \$user): bool
-    {
-        return true;
-    }
+                    /**
+                     * Determine whether the user can create {$model} records.
+                     */
+                    public function create(User \$user): bool
+                    {
+                        return true;
+                    }
 
-    /**
-     * Determine whether the user can update a {$model}.
-     */
-    public function update(User \$user, {$model} \${$variable}): bool
-    {
-        return {$ownerCheck};
-    }
+                    /**
+                     * Determine whether the user can update a {$model}.
+                     */
+                    public function update(User \$user, {$model} \${$variable}): bool
+                    {
+                        return {$ownerCheck};
+                    }
 
-    /**
-     * Determine whether the user can delete a {$model}.
-     */
-    public function delete(User \$user, {$model} \${$variable}): bool
-    {
-        return {$ownerCheck};
-    }
-{$softDeleteMethods}
-}
+                    /**
+                     * Determine whether the user can delete a {$model}.
+                     */
+                    public function delete(User \$user, {$model} \${$variable}): bool
+                    {
+                        return {$ownerCheck};
+                    }
+                {$softDeleteMethods}
+                }
 
-PHP;
+            PHP;
     }
 
     /**
@@ -200,22 +200,22 @@ PHP;
         return <<<PHP
 
 
-    /**
-     * Determine whether the user can restore a soft-deleted {$model}.
-     */
-    public function restore(User \$user, {$model} \${$variable}): bool
-    {
-        return {$ownerCheck};
-    }
+                    /**
+                     * Determine whether the user can restore a soft-deleted {$model}.
+                     */
+                    public function restore(User \$user, {$model} \${$variable}): bool
+                    {
+                        return {$ownerCheck};
+                    }
 
-    /**
-     * Determine whether the user can permanently delete a {$model}.
-     */
-    public function forceDelete(User \$user, {$model} \${$variable}): bool
-    {
-        return {$ownerCheck};
-    }
-PHP;
+                    /**
+                     * Determine whether the user can permanently delete a {$model}.
+                     */
+                    public function forceDelete(User \$user, {$model} \${$variable}): bool
+                    {
+                        return {$ownerCheck};
+                    }
+                PHP;
     }
 
     // -----------------------------------------------------------------------
@@ -276,16 +276,16 @@ PHP;
         // No $policies array found — inject one before boot()
         $policiesBlock = <<<PHP
 
-    /**
-     * The policy mappings for the application.
-     *
-     * @var array<class-string, class-string>
-     */
-    protected \$policies = [
-{$bindingLine}
-    ];
+                /**
+                 * The policy mappings for the application.
+                 *
+                 * @var array<class-string, class-string>
+                 */
+                protected \$policies = [
+                        {$bindingLine}
+                ];
 
-PHP;
+            PHP;
 
         $content = preg_replace(
             '/(public function boot\(\))/s',
@@ -309,36 +309,36 @@ PHP;
         $policyName = class_basename($policyFqn);
 
         $content = <<<PHP
-<?php
+            <?php
 
-namespace App\Providers;
+            namespace App\Providers;
 
-use {$modelFqn};
-use {$policyFqn};
-use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
-use Illuminate\Support\Facades\Gate;
+            use {$modelFqn};
+            use {$policyFqn};
+            use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
+            use Illuminate\Support\Facades\Gate;
 
-class AuthServiceProvider extends ServiceProvider
-{
-    /**
-     * The policy mappings for the application.
-     *
-     * @var array<class-string, class-string>
-     */
-    protected \$policies = [
-        {$model}::class => {$policyName}::class,
-    ];
+            class AuthServiceProvider extends ServiceProvider
+            {
+                /**
+                 * The policy mappings for the application.
+                 *
+                 * @var array<class-string, class-string>
+                 */
+                protected \$policies = [
+                    {$model}::class => {$policyName}::class,
+                ];
 
-    /**
-     * Register any authentication / authorization services.
-     */
-    public function boot(): void
-    {
-        \$this->registerPolicies();
-    }
-}
+                /**
+                 * Register any authentication / authorization services.
+                 */
+                public function boot(): void
+                {
+                    \$this->registerPolicies();
+                }
+            }
 
-PHP;
+        PHP;
 
         $dir = dirname($path);
         if (! is_dir($dir)) {

@@ -105,35 +105,35 @@ PHP;
         }
 
         return <<<PHP
-<?php
+                <?php
 
-namespace Database\Seeders;
+                namespace Database\Seeders;
 
-use {$fullModel};
-use Illuminate\Database\Seeder;
+                use {$fullModel};
+                use Illuminate\Database\Seeder;
 
-class {$seeder} extends Seeder
-{
-    /**
-     * Run the database seeds.
-     *
-     * Override the count values to control how many records are created.
-     * Production environments receive 0 records by default to prevent
-     * accidental data injection.
-     */
-    public function run(): void
-    {
-{$parentCallsBlock}        \$count = match (true) {
-            app()->environment('production') => 0,
-            app()->environment('staging')    => 10,
-            default                          => 50,
-        };
+                class {$seeder} extends Seeder
+                {
+                    /**
+                     * Run the database seeds.
+                     *
+                     * Override the count values to control how many records are created.
+                     * Production environments receive 0 records by default to prevent
+                     * accidental data injection.
+                     */
+                    public function run(): void
+                    {
+                {$parentCallsBlock}        \$count = match (true) {
+                            app()->environment('production') => 0,
+                            app()->environment('staging')    => 10,
+                            default                          => 50,
+                        };
 
-        {$model}::factory()->count(\$count)->create();
-    }
-}
+                        {$model}::factory()->count(\$count)->create();
+                    }
+                }
 
-PHP;
+        PHP;
     }
 
     protected function registerInDatabaseSeeder(string $seederName): void

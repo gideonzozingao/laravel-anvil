@@ -51,7 +51,7 @@ class ForgeWebApp extends Command
     use InstallsFrontendAssets;
     use RunsGenerationPipeline;
 
-    protected $signature = 'anvil:forge-webapp
+    protected $signature = 'anvil:forge:webapp
                             {--stack=blade   : Frontend stack — "blade" (Blade + Tailwind) or "livewire" (Blade + Livewire 3)}
                             {--tables=*      : Limit generation to specific tables}
                             {--only=*        : Alias for --tables}

@@ -175,29 +175,29 @@ final class FactoryGenerator implements Generator
         $strImport = $needsStrImport ? "\nuse Illuminate\\Support\\Str;" : '';
 
         return <<<PHP
-<?php
+            <?php
 
-namespace Database\Factories;
-{$strImport}
-use {$fullModel};
-use Illuminate\Database\Eloquent\Factories\Factory;
+            namespace Database\Factories;
+            {$strImport}
+            use {$fullModel};
+            use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * @extends Factory<{$model}>
- */
-class {$factory} extends Factory
-{
-    protected \$model = {$model}::class;
+            /**
+             * @extends Factory<{$model}>
+             */
+            class {$factory} extends Factory
+            {
+                protected \$model = {$model}::class;
 
-    public function definition(): array
-    {
-        return [
-{$definitionsStr}
-        ];
-    }
-}
+                public function definition(): array
+                {
+                    return [
+            {$definitionsStr}
+                    ];
+                }
+            }
 
-PHP;
+        PHP;
     }
 
     protected function resolveDefinition(string $name, array $col, array $fkMap, string $namespace): string

@@ -116,121 +116,121 @@ final class LivewireComponentGenerator implements Generator
         $sortArr = $this->phpStringList($sortable);
 
         return <<<PHP
-<?php
+                    <?php
 
-namespace {$c['lwNamespace']};
+                    namespace {$c['lwNamespace']};
 
-use {$c['modelFqn']};
-use {$c['serviceFqn']};
-use Illuminate\\Contracts\\View\\View;
-use Illuminate\\Database\\Eloquent\\Builder;
-use Livewire\\Attributes\\Url;
-use Livewire\\Component;
-use Livewire\\WithPagination;
+                    use {$c['modelFqn']};
+                    use {$c['serviceFqn']};
+                    use Illuminate\\Contracts\\View\\View;
+                    use Illuminate\\Database\\Eloquent\\Builder;
+                    use Livewire\\Attributes\\Url;
+                    use Livewire\\Component;
+                    use Livewire\\WithPagination;
 
-class Index extends Component
-{
-    use WithPagination;
+                    class Index extends Component
+                    {
+                        use WithPagination;
 
-    #[Url(history: true, keep: true)]
-    public string \$search = '';
+                        #[Url(history: true, keep: true)]
+                        public string \$search = '';
 
-    #[Url]
-    public string \$sortField = '{$c['defaultSort']}';
+                        #[Url]
+                        public string \$sortField = '{$c['defaultSort']}';
 
-    #[Url]
-    public string \$sortDirection = 'desc';
+                        #[Url]
+                        public string \$sortDirection = 'desc';
 
-    #[Url]
-    public int \$perPage = 15;
+                        #[Url]
+                        public int \$perPage = 15;
 
-    /** Columns scanned by the global search box (text columns). */
-    protected array \$searchable = {$searchArr};
+                        /** Columns scanned by the global search box (text columns). */
+                        protected array \$searchable = {$searchArr};
 
-    /** Columns the user is allowed to sort by (whitelist — prevents SQL injection via the URL). */
-    protected array \$sortable = {$sortArr};
+                        /** Columns the user is allowed to sort by (whitelist — prevents SQL injection via the URL). */
+                        protected array \$sortable = {$sortArr};
 
-    protected function service(): {$c['service']}
-    {
-        return app({$c['service']}::class);
-    }
+                        protected function service(): {$c['service']}
+                        {
+                            return app({$c['service']}::class);
+                        }
 
-    public function updatingSearch(): void
-    {
-        \$this->resetPage();
-    }
+                        public function updatingSearch(): void
+                        {
+                            \$this->resetPage();
+                        }
 
-    public function updatingPerPage(): void
-    {
-        \$this->resetPage();
-    }
+                        public function updatingPerPage(): void
+                        {
+                            \$this->resetPage();
+                        }
 
-    public function clearSearch(): void
-    {
-        \$this->search = '';
-        \$this->resetPage();
-    }
+                        public function clearSearch(): void
+                        {
+                            \$this->search = '';
+                            \$this->resetPage();
+                        }
 
-    public function sortBy(string \$field): void
-    {
-        if (! in_array(\$field, \$this->sortable, true)) {
-            return;
-        }
+                        public function sortBy(string \$field): void
+                        {
+                            if (! in_array(\$field, \$this->sortable, true)) {
+                                return;
+                            }
 
-        if (\$this->sortField === \$field) {
-            \$this->sortDirection = \$this->sortDirection === 'asc' ? 'desc' : 'asc';
-        } else {
-            \$this->sortField = \$field;
-            \$this->sortDirection = 'asc';
-        }
+                            if (\$this->sortField === \$field) {
+                                \$this->sortDirection = \$this->sortDirection === 'asc' ? 'desc' : 'asc';
+                            } else {
+                                \$this->sortField = \$field;
+                                \$this->sortDirection = 'asc';
+                            }
 
-        \$this->resetPage();
-    }
+                            \$this->resetPage();
+                        }
 
-    public function delete(int|string \$id): void
-    {
-        \$this->service()->delete(\$id);
+                        public function delete(int|string \$id): void
+                        {
+                            \$this->service()->delete(\$id);
 
-        session()->flash('success', '{$c['title']} deleted.');
+                            session()->flash('success', '{$c['title']} deleted.');
 
-        \$this->resetPage();
-    }
+                            \$this->resetPage();
+                        }
 
-    /**
-     * Build the listing query: global search across text columns + whitelisted sort.
-     * Reads go straight to the model; writes (delete) still flow through the service.
-     */
-    protected function rows(): Builder
-    {
-        \$driver = {$c['model']}::query()->getConnection()->getDriverName();
-        \$like   = \$driver === 'pgsql' ? 'ilike' : 'like';
+                        /**
+                         * Build the listing query: global search across text columns + whitelisted sort.
+                         * Reads go straight to the model; writes (delete) still flow through the service.
+                         */
+                        protected function rows(): Builder
+                        {
+                            \$driver = {$c['model']}::query()->getConnection()->getDriverName();
+                            \$like   = \$driver === 'pgsql' ? 'ilike' : 'like';
 
-        return {$c['model']}::query()
-            ->when(\$this->search !== '' && \$this->searchable !== [], function (Builder \$query) use (\$like) {
-                \$term = '%'.addcslashes(trim(\$this->search), '%_\\\\').'%';
+                            return {$c['model']}::query()
+                                ->when(\$this->search !== '' && \$this->searchable !== [], function (Builder \$query) use (\$like) {
+                                    \$term = '%'.addcslashes(trim(\$this->search), '%_\\\\').'%';
 
-                \$query->where(function (Builder \$sub) use (\$like, \$term) {
-                    foreach (\$this->searchable as \$column) {
-                        \$sub->orWhere(\$column, \$like, \$term);
+                                    \$query->where(function (Builder \$sub) use (\$like, \$term) {
+                                        foreach (\$this->searchable as \$column) {
+                                            \$sub->orWhere(\$column, \$like, \$term);
+                                        }
+                                    });
+                                })
+                                ->when(
+                                    in_array(\$this->sortField, \$this->sortable, true),
+                                    fn (Builder \$query) => \$query->orderBy(\$this->sortField, \$this->sortDirection === 'asc' ? 'asc' : 'desc'),
+                                );
+                        }
+
+                        public function render(): View
+                        {
+                            return view('livewire.{$c['slug']}.index', [
+                                '{$c['pluralVar']}' => \$this->rows()->paginate(\$this->perPage),
+                                'searchable'        => \$this->searchable,
+                            ]);
+                        }
                     }
-                });
-            })
-            ->when(
-                in_array(\$this->sortField, \$this->sortable, true),
-                fn (Builder \$query) => \$query->orderBy(\$this->sortField, \$this->sortDirection === 'asc' ? 'asc' : 'desc'),
-            );
-    }
 
-    public function render(): View
-    {
-        return view('livewire.{$c['slug']}.index', [
-            '{$c['pluralVar']}' => \$this->rows()->paginate(\$this->perPage),
-            'searchable'        => \$this->searchable,
-        ]);
-    }
-}
-
-PHP;
+                    PHP;
     }
 
     protected function indexView(array $c, array $tableCols, array $searchable): string
@@ -252,8 +252,8 @@ PHP;
                             </button>
                         </th>
 
-HEAD;
-            $row .= "                            <td class=\"table-td{$hide}\">{{ \\Illuminate\\Support\\Str::limit((string) \$%VAR%->{$col}, 60) }}</td>\n";
+                    HEAD;
+            $row .= "<td class=\"table-td{$hide}\">{{ \\Illuminate\\Support\\Str::limit((string) \$%VAR%->{$col}, 60) }}</td>\n";
         }
 
         $colspan = count($tableCols) + 1;
@@ -267,117 +267,117 @@ HEAD;
                 <input type="search" wire:model.live.debounce.300ms="search"
                        placeholder="Search %TITLE_PLURAL%…"
                        class="form-input pl-9 pr-9">
-@if($search !== '')
+                        @if($search !== '')
                     <button type="button" wire:click="clearSearch"
                             class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600" aria-label="Clear search">
                         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
-@endif
+                @endif
             </div>
-SEARCH : '';
+            SEARCH : '';
 
         $tpl = <<<'BLADE'
-<div>
-@section('title', '%TITLE_PLURAL%')
+                    <div>
+                        @section('title', '%TITLE_PLURAL%')
 
-    {{-- Header --}}
-    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-            <h2 class="text-2xl font-bold text-gray-900">%TITLE_PLURAL%</h2>
-            <p class="mt-0.5 text-sm text-gray-500">{{ $%PLURAL_VAR%->total() }} {{ \Illuminate\Support\Str::plural('record', $%PLURAL_VAR%->total()) }}</p>
-        </div>
-        <a href="{{ route('%SLUG%.create') }}" class="btn-primary self-start sm:self-auto">
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-            New %TITLE%
-        </a>
-    </div>
+                    {{-- Header --}}
+                        <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">%TITLE_PLURAL%</h2>
+                            <p class="mt-0.5 text-sm text-gray-500">{{ $%PLURAL_VAR%->total() }} {{ \Illuminate\Support\Str::plural('record', $%PLURAL_VAR%->total()) }}</p>
+                        </div>
+                        <a href="{{ route('%SLUG%.create') }}" class="btn-primary self-start sm:self-auto">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                            New %TITLE%
+                        </a>
+                    </div>
 
-    {{-- Toolbar --}}
-    <div class="card mb-4">
-        <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-%SEARCH_BOX%
-            <div class="flex items-center gap-2 text-sm text-gray-500">
-                <span>Per page</span>
-                <select wire:model.live="perPage" class="form-select w-auto py-1.5">
-                    <option value="10">10</option>
-                    <option value="15">15</option>
-                    <option value="25">25</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                </select>
-            </div>
-        </div>
+                    {{-- Toolbar --}}
+                    <div class="card mb-4">
+                        <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                %SEARCH_BOX%
+                            <div class="flex items-center gap-2 text-sm text-gray-500">
+                                <span>Per page</span>
+                                <select wire:model.live="perPage" class="form-select w-auto py-1.5">
+                                    <option value="10">10</option>
+                                    <option value="15">15</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                </select>
+                            </div>
+                        </div>
 
-        {{-- Table --}}
-        <div class="relative overflow-x-auto border-t border-gray-200">
-            {{-- Loading veil --}}
-            <div wire:loading.delay.flex wire:target="search,sortBy,perPage,nextPage,previousPage,gotoPage"
-                 class="absolute inset-0 z-10 hidden items-center justify-center bg-white/60 backdrop-blur-sm">
-                <svg class="h-6 w-6 animate-spin text-brand-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
-            </div>
+                        {{-- Table --}}
+                        <div class="relative overflow-x-auto border-t border-gray-200">
+                            {{-- Loading veil --}}
+                            <div wire:loading.delay.flex wire:target="search,sortBy,perPage,nextPage,previousPage,gotoPage"
+                                class="absolute inset-0 z-10 hidden items-center justify-center bg-white/60 backdrop-blur-sm">
+                                <svg class="h-6 w-6 animate-spin text-brand-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+                            </div>
 
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-%TABLE_HEAD%                        <th class="table-th text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-@forelse($%PLURAL_VAR% as $%VAR%)
-                        <tr wire:key="%SLUG%-{{ $%VAR%->getKey() }}" class="odd:bg-white even:bg-gray-50/50 hover:bg-brand-50/40">
-%TABLE_ROW%                            <td class="table-td text-right whitespace-nowrap">
-                                <div class="flex items-center justify-end gap-1">
-                                    <a href="{{ route('%SLUG%.show', $%VAR%) }}" class="icon-btn" title="View">
-                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                                    </a>
-                                    <a href="{{ route('%SLUG%.edit', $%VAR%) }}" class="icon-btn" title="Edit">
-                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                                    </a>
-                                    <button type="button" class="icon-btn icon-btn-danger" title="Delete"
-                                            wire:click="delete('{{ $%VAR%->getKey() }}')"
-                                            wire:confirm="Delete this %TITLE%? This cannot be undone.">
-                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-@empty
-                        <tr>
-                            <td colspan="%COLSPAN%" class="px-4 py-16 text-center">
-                                <div class="mx-auto flex max-w-sm flex-col items-center">
-                                    <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
-                                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
-                                    </div>
-                                    <p class="font-medium text-gray-700">No %TITLE_PLURAL% found</p>
-                                    <p class="mt-1 text-sm text-gray-500">
-@if($search !== '')
-                                            No results for &ldquo;{{ $search }}&rdquo;. <button type="button" wire:click="clearSearch" class="link">Clear search</button>
-@else
-                                            Get started by creating a new %TITLE%.
-@endif
-                                    </p>
-                                </div>
-                            </td>
-                        </tr>
-@endforelse
-                </tbody>
-            </table>
-        </div>
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                    %TABLE_HEAD%<th class="table-th text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    @forelse($%PLURAL_VAR% as $%VAR%)
+                                        <tr wire:key="%SLUG%-{{ $%VAR%->getKey() }}" class="odd:bg-white even:bg-gray-50/50 hover:bg-brand-50/40">
+                                            %TABLE_ROW% <td class="table-td text-right whitespace-nowrap">
+                                                <div class="flex items-center justify-end gap-1">
+                                                    <a href="{{ route('%SLUG%.show', $%VAR%) }}" class="icon-btn" title="View">
+                                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                                    </a>
+                                                    <a href="{{ route('%SLUG%.edit', $%VAR%) }}" class="icon-btn" title="Edit">
+                                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                                    </a>
+                                                    <button type="button" class="icon-btn icon-btn-danger" title="Delete"
+                                                            wire:click="delete('{{ $%VAR%->getKey() }}')"
+                                                            wire:confirm="Delete this %TITLE%? This cannot be undone.">
+                                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        @empty
+                                        <tr>
+                                            <td colspan="%COLSPAN%" class="px-4 py-16 text-center">
+                                                <div class="mx-auto flex max-w-sm flex-col items-center">
+                                                    <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
+                                                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+                                                    </div>
+                                                    <p class="font-medium text-gray-700">No %TITLE_PLURAL% found</p>
+                                                    <p class="mt-1 text-sm text-gray-500">
+                                                        @if($search !== '')
+                                                            No results for &ldquo;{{ $search }}&rdquo;. <button type="button" wire:click="clearSearch" class="link">Clear search</button>
+                                                            @else
+                                                            Get started by creating a new %TITLE%.
+                                                            @endif
+                                                    </p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        @endforelse
+                                </tbody>
+                            </table>
+                        </div>
 
-        {{-- Footer: summary + pagination --}}
-@if($%PLURAL_VAR%->hasPages() || $%PLURAL_VAR%->total() > 0)
-            <div class="flex flex-col gap-3 border-t border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p class="text-sm text-gray-500">
-                    Showing <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->firstItem() ?? 0 }}</span>
-                    to <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->lastItem() ?? 0 }}</span>
-                    of <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->total() }}</span>
-                </p>
-                <div>{{ $%PLURAL_VAR%->onEachSide(1)->links() }}</div>
-            </div>
-@endif
-    </div>
-</div>
-BLADE;
+                        {{-- Footer: summary + pagination --}}
+                        @if($%PLURAL_VAR%->hasPages() || $%PLURAL_VAR%->total() > 0)
+                            <div class="flex flex-col gap-3 border-t border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                <p class="text-sm text-gray-500">
+                                    Showing <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->firstItem() ?? 0 }}</span>
+                                    to <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->lastItem() ?? 0 }}</span>
+                                    of <span class="font-medium text-gray-700">{{ $%PLURAL_VAR%->total() }}</span>
+                                </p>
+                                <div>{{ $%PLURAL_VAR%->onEachSide(1)->links() }}</div>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            BLADE;
 
         return $this->apply(
             $tpl,
@@ -413,72 +413,72 @@ BLADE;
         $rules = rtrim($rules, "\n");
 
         return <<<PHP
-<?php
+            <?php
 
-namespace {$c['lwNamespace']};
+            namespace {$c['lwNamespace']};
 
-use {$c['serviceFqn']};
-use Illuminate\\Contracts\\View\\View;
-use Livewire\\Component;
+            use {$c['serviceFqn']};
+            use Illuminate\\Contracts\\View\\View;
+            use Livewire\\Component;
 
-class Form extends Component
-{
-    public int|string|null \$recordId;
+            class Form extends Component
+            {
+                public int|string|null \$recordId;
 
-    public bool \$editing = false;
+                public bool \$editing = false;
 
-{$props}
+                    {$props}
 
-    protected function service(): {$c['service']}
-    {
-        return app({$c['service']}::class);
-    }
+                protected function service(): {$c['service']}
+                {
+                    return app({$c['service']}::class);
+                }
 
-    public function mount(int|string|null \$recordId = null): void
-    {
-        if (\$recordId === null) {
-            return;
-        }
+                public function mount(int|string|null \$recordId = null): void
+                {
+                    if (\$recordId === null) {
+                        return;
+                    }
 
-        \$record = \$this->service()->findOrFail(\$recordId);
+                    \$record = \$this->service()->findOrFail(\$recordId);
 
-        \$this->recordId = \$recordId;
-        \$this->editing = true;
+                    \$this->recordId = \$recordId;
+                    \$this->editing = true;
 
-{$fillLines}
-    }
+                        {$fillLines}
+                }
 
-    protected function rules(): array
-    {
-        return [
-{$rules}
-        ];
-    }
+                protected function rules(): array
+                {
+                    return [
+                            {$rules}
+                    ];
+                }
 
-    public function save(): void
-    {
-        \$data = \$this->validate();
+                public function save(): void
+                {
+                    \$data = \$this->validate();
 
-        if (\$this->editing) {
-            \$this->service()->update(\$this->recordId, \$data);
-            \$message = '{$c['title']} updated.';
-        } else {
-            \$this->service()->create(\$data);
-            \$message = '{$c['title']} created.';
-        }
+                    if (\$this->editing) {
+                        \$this->service()->update(\$this->recordId, \$data);
+                        \$message = '{$c['title']} updated.';
+                    } else {
+                        \$this->service()->create(\$data);
+                        \$message = '{$c['title']} created.';
+                    }
 
-        session()->flash('success', \$message);
+                    session()->flash('success', \$message);
 
-        \$this->redirectRoute('{$c['slug']}.index', navigate: true);
-    }
+                    \$this->redirectRoute('{$c['slug']}.index', navigate: true);
+                }
 
-    public function render(): View
-    {
-        return view('livewire.{$c['slug']}.form');
-    }
-}
+                public function render(): View
+                {
+                    return view('livewire.{$c['slug']}.form');
+                }
+            }
 
-PHP;
+            PHP;
     }
 
     protected function formView(array $c, array $formCols): string
@@ -489,34 +489,34 @@ PHP;
         }
 
         $tpl = <<<'BLADE'
-<div>
-@section('title', ($editing ? 'Edit ' : 'New ') . '%TITLE%')
+                    <div>
+                @section('title', ($editing ? 'Edit ' : 'New ') . '%TITLE%')
 
-    <div class="mb-6">
-        <a href="{{ route('%SLUG%.index') }}" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700" wire:navigate>
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-            Back to %TITLE_PLURAL%
-        </a>
-        <h2 class="mt-2 text-2xl font-bold text-gray-900">{{ $editing ? 'Edit %TITLE%' : 'New %TITLE%' }}</h2>
-    </div>
+                    <div class="mb-6">
+                        <a href="{{ route('%SLUG%.index') }}" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700" wire:navigate>
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                            Back to %TITLE_PLURAL%
+                        </a>
+                        <h2 class="mt-2 text-2xl font-bold text-gray-900">{{ $editing ? 'Edit %TITLE%' : 'New %TITLE%' }}</h2>
+                    </div>
 
-    <form wire:submit="save" class="card mx-auto max-w-2xl p-6">
-        <div class="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
-%FORM_FIELDS%
-        </div>
-        <div class="mt-6 flex items-center justify-end gap-3 border-t border-gray-200 pt-5">
-            <a href="{{ route('%SLUG%.index') }}" class="btn-secondary" wire:navigate>Cancel</a>
-            <button type="submit" class="btn-primary" wire:loading.attr="disabled" wire:target="save">
-                <span wire:loading.remove wire:target="save">{{ $editing ? 'Save changes' : 'Create %TITLE%' }}</span>
-                <span wire:loading.flex wire:target="save" class="items-center gap-2">
-                    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
-                    Saving…
-                </span>
-            </button>
-        </div>
-    </form>
-</div>
-BLADE;
+                    <form wire:submit="save" class="card mx-auto max-w-2xl p-6">
+                        <div class="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+                                %FORM_FIELDS%
+                        </div>
+                        <div class="mt-6 flex items-center justify-end gap-3 border-t border-gray-200 pt-5">
+                            <a href="{{ route('%SLUG%.index') }}" class="btn-secondary" wire:navigate>Cancel</a>
+                            <button type="submit" class="btn-primary" wire:loading.attr="disabled" wire:target="save">
+                                <span wire:loading.remove wire:target="save">{{ $editing ? 'Save changes' : 'Create %TITLE%' }}</span>
+                                <span wire:loading.flex wire:target="save" class="items-center gap-2">
+                                    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+                                    Saving…
+                                </span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                BLADE;
 
         return $this->apply($tpl, ['%FORM_FIELDS%' => rtrim($fields, "\n")] + $this->tokens($c));
     }
@@ -528,37 +528,37 @@ BLADE;
     protected function showComponent(array $c): string
     {
         return <<<PHP
-<?php
+                    <?php
 
-namespace {$c['lwNamespace']};
+                    namespace {$c['lwNamespace']};
 
-use {$c['serviceFqn']};
-use Illuminate\\Contracts\\View\\View;
-use Livewire\\Component;
+                    use {$c['serviceFqn']};
+                    use Illuminate\\Contracts\\View\\View;
+                    use Livewire\\Component;
 
-class Show extends Component
-{
-    public int|string \$recordId;
+                    class Show extends Component
+                    {
+                        public int|string \$recordId;
 
-    public function mount(int|string \$recordId): void
-    {
-        \$this->recordId = \$recordId;
-    }
+                        public function mount(int|string \$recordId): void
+                        {
+                            \$this->recordId = \$recordId;
+                        }
 
-    protected function service(): {$c['service']}
-    {
-        return app({$c['service']}::class);
-    }
+                        protected function service(): {$c['service']}
+                        {
+                            return app({$c['service']}::class);
+                        }
 
-    public function render(): View
-    {
-        return view('livewire.{$c['slug']}.show', [
-            '{$c['var']}' => \$this->service()->findOrFail(\$this->recordId),
-        ]);
-    }
-}
+                        public function render(): View
+                        {
+                            return view('livewire.{$c['slug']}.show', [
+                                '{$c['var']}' => \$this->service()->findOrFail(\$this->recordId),
+                            ]);
+                        }
+                    }
 
-PHP;
+                    PHP;
     }
 
     protected function showView(array $c, array $showCols): string
@@ -566,36 +566,35 @@ PHP;
         $rows = '';
         foreach ($showCols as $col) {
             $label = $this->label($col);
-            $rows .= "            <div class=\"px-6 py-4\">\n"
-                ."                <dt class=\"text-xs font-medium uppercase tracking-wider text-gray-500\">{$label}</dt>\n"
-                ."                <dd class=\"mt-1 text-sm text-gray-900 break-words\">{{ \$%VAR%->{$col} ?? '—' }}</dd>\n"
-                ."            </div>\n";
+            $rows .= "<div class=\"px-6 py-4\">\n"
+                ."   <dt class=\"text-xs font-medium uppercase tracking-wider text-gray-500\">{$label}</dt>\n"
+                ."   <dd class=\"mt-1 text-sm text-gray-900 break-words\">{{ \$%VAR%->{$col} ?? '—' }}</dd>\n"
+                ."   </div>\n";
         }
 
         $tpl = <<<'BLADE'
-<div>
-@section('title', '%TITLE%')
-
-    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-            <a href="{{ route('%SLUG%.index') }}" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700" wire:navigate>
-                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-                Back to %TITLE_PLURAL%
-            </a>
-            <h2 class="mt-2 text-2xl font-bold text-gray-900">%TITLE% details</h2>
-        </div>
-        <a href="{{ route('%SLUG%.edit', $%VAR%) }}" class="btn-primary self-start sm:self-auto" wire:navigate>
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-            Edit
-        </a>
-    </div>
-
-    <div class="card overflow-hidden">
-        <dl class="grid grid-cols-1 divide-y divide-gray-100 sm:grid-cols-2 sm:divide-y-0 sm:[&>div]:border-b sm:[&>div]:border-gray-100">
-%SHOW_ROWS%        </dl>
-    </div>
-</div>
-BLADE;
+                    <div>
+                    @section('title', '%TITLE%')
+                        <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <a href="{{ route('%SLUG%.index') }}" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700" wire:navigate>
+                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                                    Back to %TITLE_PLURAL%
+                                </a>
+                                <h2 class="mt-2 text-2xl font-bold text-gray-900">%TITLE% details</h2>
+                            </div>
+                            <a href="{{ route('%SLUG%.edit', $%VAR%) }}" class="btn-primary self-start sm:self-auto" wire:navigate>
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                Edit
+                            </a>
+                        </div>
+                        <div class="card overflow-hidden">
+                            <dl class="grid grid-cols-1 divide-y divide-gray-100 sm:grid-cols-2 sm:divide-y-0 sm:[&>div]:border-b sm:[&>div]:border-gray-100">
+                                    %SHOW_ROWS%        
+                            </dl>
+                        </div>
+                    </div>
+                    BLADE;
 
         return $this->apply($tpl, ['%SHOW_ROWS%' => $rows] + $this->tokens($c));
     }
@@ -615,28 +614,29 @@ BLADE;
             $control = "<textarea wire:model=\"{$name}\" rows=\"4\" class=\"form-textarea\"></textarea>";
             $full = ' sm:col-span-2';
         } elseif ($type === 'checkbox') {
-            return "            <div class=\"mb-4 flex items-center gap-2 sm:col-span-2\">\n"
-                ."                <input type=\"checkbox\" wire:model=\"{$name}\" id=\"{$name}\" class=\"h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500\">\n"
-                ."                <label for=\"{$name}\" class=\"text-sm font-medium text-gray-700\">{$label}</label>\n"
-                ."                @error('{$name}') <p class=\"text-sm text-red-600\">{{ \$message }}</p> @enderror\n"
-                ."            </div>\n";
+            return " <div class=\"mb-4 flex items-center gap-2 sm:col-span-2\">\n"
+                ."  <input type=\"checkbox\" wire:model=\"{$name}\" id=\"{$name}\" class=\"h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500\">\n"
+                ."  <label for=\"{$name}\" class=\"text-sm font-medium text-gray-700\">{$label}</label>\n"
+                ."   @error('{$name}') <p class=\"text-sm text-red-600\">{{ \$message }}</p> @enderror\n"
+                ."  </div>\n";
         } elseif ($type === 'select') {
             $options = '';
             foreach ($this->enumValues($col) as $opt) {
-                $options .= "\n                    <option value=\"{$opt}\">{$opt}</option>";
+                $options .= "\n 
+                <option value=\"{$opt}\">{$opt}</option>";
             }
             $control = "<select wire:model=\"{$name}\" class=\"form-select\">\n"
-                ."                    <option value=\"\">&mdash; Select &mdash;</option>{$options}\n                </select>";
+                ."<option value=\"\">&mdash; Select &mdash;</option>{$options}\n                </select>";
         } else {
             $step = $type === 'number' && $this->isDecimal($col) ? ' step="any"' : '';
             $control = "<input type=\"{$type}\" wire:model=\"{$name}\"{$step} class=\"form-input\">";
         }
 
-        return "            <div class=\"mb-4{$full}\">\n"
-            ."                <label class=\"form-label\">{$label}</label>\n"
-            ."                {$control}\n"
-            ."                @error('{$name}') <p class=\"mt-1 text-sm text-red-600\">{{ \$message }}</p> @enderror\n"
-            ."            </div>\n";
+        return " <div class=\"mb-4{$full}\">\n"
+            ." <label class=\"form-label\">{$label}</label>\n"
+            ." {$control}\n"
+            ." @error('{$name}') <p class=\"mt-1 text-sm text-red-600\">{{ \$message }}</p> @enderror\n"
+            ." </div>\n";
     }
 
     // -----------------------------------------------------------------------

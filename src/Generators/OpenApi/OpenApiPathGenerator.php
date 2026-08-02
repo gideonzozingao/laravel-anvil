@@ -687,7 +687,8 @@ final readonly class OpenApiPathGenerator implements Generator
      */
     private function pkSchema(ModelMetadata $meta): array
     {
-        $column = collect($meta->columns)->firstWhere('name', $this->pkParamName($meta));
+        $column = collect($meta->columns)
+            ->firstWhere('name', $this->pkParamName($meta));
 
         // No column metadata at all: assume the Laravel default of an
         // auto-incrementing bigint rather than guessing string.

@@ -65,62 +65,62 @@ final class RepositoryGenerator implements Generator
 
         $softDeleteMethods = $meta->softDeletes ? <<<PHP
 
-    /**
-     * Retrieve a soft-deleted model by primary key.
-     */
-    public function findTrashed({$pkType} \${$pk}): {$model};
+                        /**
+                         * Retrieve a soft-deleted model by primary key.
+                         */
+                        public function findTrashed({$pkType} \${$pk}): {$model};
 
-    /**
-     * Return only trashed records, paginated.
-     */
-    public function paginateTrashed(int \$perPage = 15): \Illuminate\Pagination\LengthAwarePaginator;
-PHP
+                        /**
+                         * Return only trashed records, paginated.
+                         */
+                        public function paginateTrashed(int \$perPage = 15): \Illuminate\Pagination\LengthAwarePaginator;
+                    PHP
             : '';
 
         $content = <<<PHP
-<?php
+            <?php
 
-namespace App\Repositories\Contracts;
+            namespace App\Repositories\Contracts;
 
-use {$fullModel};
-use Illuminate\Pagination\LengthAwarePaginator;
+            use {$fullModel};
+            use Illuminate\Pagination\LengthAwarePaginator;
 
-interface {$name}
-{
-    /**
-     * Return paginated records, optionally filtered.
-     *
-     * @param  array<string, mixed>  \$filters
-     */
-    public function paginate(int \$perPage = 15, array \$filters = []): LengthAwarePaginator;
+            interface {$name}
+            {
+                /**
+                 * Return paginated records, optionally filtered.
+                 *
+                 * @param  array<string, mixed>  \$filters
+                 */
+                public function paginate(int \$perPage = 15, array \$filters = []): LengthAwarePaginator;
 
-    /**
-     * Find by primary key or throw ModelNotFoundException.
-     */
-    public function findOrFail({$pkType} \${$pk}): {$model};
+                /**
+                 * Find by primary key or throw ModelNotFoundException.
+                 */
+                public function findOrFail({$pkType} \${$pk}): {$model};
 
-    /**
-     * Create a new record.
-     *
-     * @param  array<string, mixed>  \$data
-     */
-    public function create(array \$data): {$model};
+                /**
+                 * Create a new record.
+                 *
+                 * @param  array<string, mixed>  \$data
+                 */
+                public function create(array \$data): {$model};
 
-    /**
-     * Update an existing record.
-     *
-     * @param  array<string, mixed>  \$data
-     */
-    public function update({$model} \$model, array \$data): {$model};
+                /**
+                 * Update an existing record.
+                 *
+                 * @param  array<string, mixed>  \$data
+                 */
+                public function update({$model} \$model, array \$data): {$model};
 
-    /**
-     * Delete a record.
-     */
-    public function delete({$model} \$model): void;
-{$softDeleteMethods}
-}
+                /**
+                 * Delete a record.
+                 */
+                public function delete({$model} \$model): void;
+            {$softDeleteMethods}
+            }
 
-PHP;
+        PHP;
 
         if (! $options->dryRun) {
             if (! is_dir($dir)) {
@@ -162,71 +162,71 @@ PHP;
         $softDeleteMethods = $meta->softDeletes ? <<<PHP
 
 
-    public function findTrashed({$pkType} \${$pk}): {$model}
-    {
-        return {$model}::onlyTrashed()->findOrFail(\${$pk});
-    }
+                public function findTrashed({$pkType} \${$pk}): {$model}
+                {
+                    return {$model}::onlyTrashed()->findOrFail(\${$pk});
+                }
 
-    public function paginateTrashed(int \$perPage = 15): LengthAwarePaginator
-    {
-        return {$model}::onlyTrashed(){$orderExpr}->paginate(\$perPage);
-    }
-PHP
+                public function paginateTrashed(int \$perPage = 15): LengthAwarePaginator
+                {
+                    return {$model}::onlyTrashed(){$orderExpr}->paginate(\$perPage);
+                }
+            PHP
             : '';
 
         $content = <<<PHP
-<?php
+                <?php
 
-namespace App\Repositories;
+                namespace App\Repositories;
 
-use {$fullModel};
-use App\Repositories\Contracts\\{$iface};
-use Illuminate\Pagination\LengthAwarePaginator;
+                use {$fullModel};
+                use App\Repositories\Contracts\\{$iface};
+                use Illuminate\Pagination\LengthAwarePaginator;
 
-class {$name} implements {$iface}
-{
-    public function __construct(
-        protected readonly {$model} \$model,
-    ) {}
+                class {$name} implements {$iface}
+                {
+                    public function __construct(
+                        protected readonly {$model} \$model,
+                    ) {}
 
-    public function paginate(int \$perPage = 15, array \$filters = []): LengthAwarePaginator
-    {
-        \$query = \$this->model->newQuery();
+                    public function paginate(int \$perPage = 15, array \$filters = []): LengthAwarePaginator
+                    {
+                        \$query = \$this->model->newQuery();
 
-        foreach (\$filters as \$column => \$value) {
-            if (\$value !== null && \$value !== '') {
-                \$query->where(\$column, \$value);
-            }
-        }
+                        foreach (\$filters as \$column => \$value) {
+                            if (\$value !== null && \$value !== '') {
+                                \$query->where(\$column, \$value);
+                            }
+                        }
 
-        return \$query{$orderExpr}->paginate(\$perPage);
-    }
+                        return \$query{$orderExpr}->paginate(\$perPage);
+                    }
 
-    public function findOrFail({$pkType} \${$pk}): {$model}
-    {
-        return \$this->model->findOrFail(\${$pk});
-    }
+                    public function findOrFail({$pkType} \${$pk}): {$model}
+                    {
+                        return \$this->model->findOrFail(\${$pk});
+                    }
 
-    public function create(array \$data): {$model}
-    {
-        return \$this->model->create(\$data);
-    }
+                    public function create(array \$data): {$model}
+                    {
+                        return \$this->model->create(\$data);
+                    }
 
-    public function update({$model} \${$variable}, array \$data): {$model}
-    {
-        \${$variable}->update(\$data);
+                    public function update({$model} \${$variable}, array \$data): {$model}
+                    {
+                        \${$variable}->update(\$data);
 
-        return \${$variable};
-    }
+                        return \${$variable};
+                    }
 
-    public function delete({$model} \${$variable}): void
-    {
-        \${$variable}->delete();
-    }
-{$softDeleteMethods}
-}
+                    public function delete({$model} \${$variable}): void
+                    {
+                        \${$variable}->delete();
+                    }
+                {$softDeleteMethods}
+                }
 
-PHP;
+        PHP;
 
         if (! $options->dryRun) {
             $dir = dirname($path);
@@ -262,21 +262,21 @@ PHP;
 
         if (! file_exists($path)) {
             $content = <<<PHP
-<?php
+                    <?php
 
-namespace App\Providers;
+                    namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
+                    use Illuminate\Support\ServiceProvider;
 
-class RepositoryServiceProvider extends ServiceProvider
-{
-    public function register(): void
-    {
-{$bindingLine}
-    }
-}
+                    class RepositoryServiceProvider extends ServiceProvider
+                    {
+                        public function register(): void
+                        {
+                    {$bindingLine}
+                        }
+                    }
 
-PHP;
+                    PHP;
             $dir = dirname($path);
             if (! is_dir($dir)) {
                 mkdir($dir, 0755, true);

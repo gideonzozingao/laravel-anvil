@@ -84,7 +84,6 @@ return [
         'throttle' => env('ANVIL_API_THROTTLE', '60,1'),   // "60,1", "120", or 'none'
         'pagination' => env('ANVIL_API_PAGINATION', 15),
         'force_json' => true,   // generate ForceJsonResponse middleware + provider
-
         // Computed by anvil:generate-api from auth/guard/throttle, and read by
         // the route + controller generators. Editing it here sets the baseline.
         'middleware' => ['api', 'auth:sanctum', 'throttle:60,1'],

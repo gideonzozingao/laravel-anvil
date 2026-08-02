@@ -155,150 +155,150 @@ YAML;
         if ($meta->softDeletes) {
             $softDeletePaths = <<<YAML
 
-  /api/v1/{$resource}/{id}/restore:
-    post:
-      tags: [{$tag}]
-      summary: Restore a soft-deleted {$model}
-      operationId: restore{$model}
-      parameters:
-        - \$ref: '#/components/parameters/Id'
-      responses:
-        '200':
-          description: Restored
-          content:
-            application/json:
-              schema:
-                \$ref: '{$schemaRef}'
-        '404':
-          \$ref: '#/components/responses/NotFound'
+          /api/v1/{$resource}/{id}/restore:
+            post:
+              tags: [{$tag}]
+              summary: Restore a soft-deleted {$model}
+              operationId: restore{$model}
+              parameters:
+                - \$ref: '#/components/parameters/Id'
+              responses:
+                '200':
+                  description: Restored
+                  content:
+                    application/json:
+                      schema:
+                        \$ref: '{$schemaRef}'
+                '404':
+                  \$ref: '#/components/responses/NotFound'
 
-  /api/v1/{$resource}/{id}/force-delete:
-    delete:
-      tags: [{$tag}]
-      summary: Permanently delete a {$model}
-      operationId: forceDelete{$model}
-      parameters:
-        - \$ref: '#/components/parameters/Id'
-      responses:
-        '204':
-          description: Permanently deleted
-        '404':
-          \$ref: '#/components/responses/NotFound'
-YAML;
+          /api/v1/{$resource}/{id}/force-delete:
+            delete:
+              tags: [{$tag}]
+              summary: Permanently delete a {$model}
+              operationId: forceDelete{$model}
+              parameters:
+                - \$ref: '#/components/parameters/Id'
+              responses:
+                '204':
+                  description: Permanently deleted
+                '404':
+                  \$ref: '#/components/responses/NotFound'
+        YAML;
         }
 
         $content = <<<YAML
-/api/v1/{$resource}:
-  get:
-    tags: [{$tag}]
-    summary: List {$model} records
-    operationId: list{$model}
-    parameters:
-      - name: per_page
-        in: query
-        schema:
-          type: integer
-          default: 15
-    responses:
-      '200':
-        description: Paginated list
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                data:
-                  type: array
-                  items:
+        /api/v1/{$resource}:
+          get:
+            tags: [{$tag}]
+            summary: List {$model} records
+            operationId: list{$model}
+            parameters:
+              - name: per_page
+                in: query
+                schema:
+                  type: integer
+                  default: 15
+            responses:
+              '200':
+                description: Paginated list
+                content:
+                  application/json:
+                    schema:
+                      type: object
+                      properties:
+                        data:
+                          type: array
+                          items:
+                            \$ref: '{$schemaRef}'
+                        meta:
+                          \$ref: '#/components/schemas/PaginationMeta'
+              '401':
+                \$ref: '#/components/responses/Unauthorized'
+
+          post:
+            tags: [{$tag}]
+            summary: Create a {$model}
+            operationId: create{$model}
+            requestBody:
+              required: true
+              content:
+                application/json:
+                  schema:
                     \$ref: '{$schemaRef}'
-                meta:
-                  \$ref: '#/components/schemas/PaginationMeta'
-      '401':
-        \$ref: '#/components/responses/Unauthorized'
+            responses:
+              '201':
+                description: Created
+                content:
+                  application/json:
+                    schema:
+                      \$ref: '{$schemaRef}'
+              '422':
+                \$ref: '#/components/responses/ValidationError'
+              '401':
+                \$ref: '#/components/responses/Unauthorized'
 
-  post:
-    tags: [{$tag}]
-    summary: Create a {$model}
-    operationId: create{$model}
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            \$ref: '{$schemaRef}'
-    responses:
-      '201':
-        description: Created
-        content:
-          application/json:
-            schema:
-              \$ref: '{$schemaRef}'
-      '422':
-        \$ref: '#/components/responses/ValidationError'
-      '401':
-        \$ref: '#/components/responses/Unauthorized'
+        /api/v1/{$resource}/{id}:
+          parameters:
+            - name: id
+              in: path
+              required: true
+              schema:
+                type: {$idType}
 
-/api/v1/{$resource}/{id}:
-  parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: {$idType}
+          get:
+            tags: [{$tag}]
+            summary: Get a {$model} by ID
+            operationId: get{$model}
+            responses:
+              '200':
+                description: Found
+                content:
+                  application/json:
+                    schema:
+                      \$ref: '{$schemaRef}'
+              '404':
+                \$ref: '#/components/responses/NotFound'
+              '401':
+                \$ref: '#/components/responses/Unauthorized'
 
-  get:
-    tags: [{$tag}]
-    summary: Get a {$model} by ID
-    operationId: get{$model}
-    responses:
-      '200':
-        description: Found
-        content:
-          application/json:
-            schema:
-              \$ref: '{$schemaRef}'
-      '404':
-        \$ref: '#/components/responses/NotFound'
-      '401':
-        \$ref: '#/components/responses/Unauthorized'
+          put:
+            tags: [{$tag}]
+            summary: Update a {$model}
+            operationId: update{$model}
+            requestBody:
+              required: true
+              content:
+                application/json:
+                  schema:
+                    \$ref: '{$schemaRef}'
+            responses:
+              '200':
+                description: Updated
+                content:
+                  application/json:
+                    schema:
+                      \$ref: '{$schemaRef}'
+              '422':
+                \$ref: '#/components/responses/ValidationError'
+              '404':
+                \$ref: '#/components/responses/NotFound'
+              '401':
+                \$ref: '#/components/responses/Unauthorized'
 
-  put:
-    tags: [{$tag}]
-    summary: Update a {$model}
-    operationId: update{$model}
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            \$ref: '{$schemaRef}'
-    responses:
-      '200':
-        description: Updated
-        content:
-          application/json:
-            schema:
-              \$ref: '{$schemaRef}'
-      '422':
-        \$ref: '#/components/responses/ValidationError'
-      '404':
-        \$ref: '#/components/responses/NotFound'
-      '401':
-        \$ref: '#/components/responses/Unauthorized'
-
-  delete:
-    tags: [{$tag}]
-    summary: Delete a {$model}
-    operationId: delete{$model}
-    responses:
-      '204':
-        description: Deleted
-      '404':
-        \$ref: '#/components/responses/NotFound'
-      '401':
-        \$ref: '#/components/responses/Unauthorized'
-{$softDeletePaths}
-YAML;
+          delete:
+            tags: [{$tag}]
+            summary: Delete a {$model}
+            operationId: delete{$model}
+            responses:
+              '204':
+                description: Deleted
+              '404':
+                \$ref: '#/components/responses/NotFound'
+              '401':
+                \$ref: '#/components/responses/Unauthorized'
+                  {$softDeletePaths}
+        YAML;
 
         if (! $options->dryRun) {
             $this->ensureDir(dirname($path));
@@ -319,98 +319,98 @@ YAML;
         $appUrl = config('app.url', 'http://localhost');
 
         $content = <<<YAML
-openapi: 3.1.0
+        openapi: 3.1.0
 
-info:
-  title: {$appName} API
-  version: 1.0.0
-  description: Auto-generated by laravel-anvil
+        info:
+          title: {$appName} API
+          version: 1.0.0
+          description: Auto-generated by laravel-anvil
 
-servers:
-  - url: {$appUrl}
-    description: Local
+        servers:
+          - url: {$appUrl}
+            description: Local
 
-security:
-  - sanctum: []
+        security:
+          - sanctum: []
 
-paths:
-  # Populated via \$ref — see paths/ directory
-  # Example:
-  #   /api/v1/vehicles:
-  #     \$ref: './paths/vehicles.yaml#/~1api~1v1~1vehicles'
+        paths:
+          # Populated via \$ref — see paths/ directory
+          # Example:
+          #   /api/v1/vehicles:
+          #     \$ref: './paths/vehicles.yaml#/~1api~1v1~1vehicles'
 
-components:
-  securitySchemes:
-    sanctum:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+        components:
+          securitySchemes:
+            sanctum:
+              type: http
+              scheme: bearer
+              bearerFormat: JWT
 
-  parameters:
-    Id:
-      name: id
-      in: path
-      required: true
-      schema:
-        type: integer
+          parameters:
+            Id:
+              name: id
+              in: path
+              required: true
+              schema:
+                type: integer
 
-  responses:
-    NotFound:
-      description: Resource not found
-      content:
-        application/json:
-          schema:
-            \$ref: '#/components/schemas/ErrorResponse'
+          responses:
+            NotFound:
+              description: Resource not found
+              content:
+                application/json:
+                  schema:
+                    \$ref: '#/components/schemas/ErrorResponse'
 
-    Unauthorized:
-      description: Unauthenticated
-      content:
-        application/json:
-          schema:
-            \$ref: '#/components/schemas/ErrorResponse'
+            Unauthorized:
+              description: Unauthenticated
+              content:
+                application/json:
+                  schema:
+                    \$ref: '#/components/schemas/ErrorResponse'
 
-    ValidationError:
-      description: Validation failed
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              message:
-                type: string
-              errors:
-                type: object
-                additionalProperties:
-                  type: array
-                  items:
-                    type: string
+            ValidationError:
+              description: Validation failed
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                      errors:
+                        type: object
+                        additionalProperties:
+                          type: array
+                          items:
+                            type: string
 
-  schemas:
-    ErrorResponse:
-      type: object
-      properties:
-        message:
-          type: string
-          example: Resource not found
+          schemas:
+            ErrorResponse:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: Resource not found
 
-    PaginationMeta:
-      type: object
-      properties:
-        current_page:
-          type: integer
-        last_page:
-          type: integer
-        per_page:
-          type: integer
-        total:
-          type: integer
+            PaginationMeta:
+              type: object
+              properties:
+                current_page:
+                  type: integer
+                last_page:
+                  type: integer
+                per_page:
+                  type: integer
+                total:
+                  type: integer
 
-    # Model schemas live in schemas/ directory
-    # Import them here as needed:
-    # Vehicle:
-    #   \$ref: './schemas/Vehicle.yaml#/Vehicle'
+            # Model schemas live in schemas/ directory
+            # Import them here as needed:
+            # Vehicle:
+            #   \$ref: './schemas/Vehicle.yaml#/Vehicle'
 
-YAML;
+        YAML;
 
         if (! $options->dryRun) {
             $this->ensureDir(dirname($path));

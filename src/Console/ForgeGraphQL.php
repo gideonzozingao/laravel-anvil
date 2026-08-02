@@ -38,7 +38,7 @@ class ForgeGraphQL extends Command
 {
     protected $description = 'Generate a Lighthouse GraphQL schema (types, inputs, queries, mutations) from the database';
 
-    protected $signature = 'anvil:forge-graphql
+    protected $signature = 'anvil:forge:graphql
                             {--output=graphql   : Directory for the schema files}
                             {--api-version=1    : Version profile supplying hidden fields and pagination bounds}
                             {--guard=           : Auth guard for @guard (empty = none, "default" = @guard)}

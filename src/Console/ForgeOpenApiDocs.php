@@ -29,7 +29,7 @@ class ForgeOpenApiDocs extends Command
 {
     protected $description = 'Generate and report the API documentation (OpenAPI spec + Swagger UI) per API version';
 
-    protected $signature = 'anvil:forge-apidocs
+    protected $signature = 'anvil:forge:apidocs
                             {--api-version=   : Target a single version (1, v1); default: the configured version}
                             {--all-versions   : Target every version already present on disk}
                             {--check          : Report only — generate nothing}

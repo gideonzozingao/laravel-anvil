@@ -110,107 +110,107 @@ final class ObserverGenerator implements Generator
         );
 
         return <<<PHP
-<?php
+                <?php
 
-namespace App\Observers;
+                namespace App\Observers;
 
-use {$fullModel};
+                use {$fullModel};
 
-/**
- * Observer for the {$model} model.
- *
- * Register this observer in a service provider:
- *
- *   {$model}::observe({$observerName}::class);
- *
- * Or set config('anvil.generators.observers.auto_register') = true to let
- * Laravel Anvil append the registration to AppServiceProvider automatically.
- */
-class {$observerName}
-{
-    /**
-     * Handle the {$model} "creating" event.
-     *
-     * Fired before the model is first saved. Return false to abort.
-     */
-    public function creating({$model} \${$variable}): void
-    {
-        //
-    }
+                /**
+                 * Observer for the {$model} model.
+                 *
+                 * Register this observer in a service provider:
+                 *
+                 *   {$model}::observe({$observerName}::class);
+                 *
+                 * Or set config('anvil.generators.observers.auto_register') = true to let
+                 * Laravel Anvil append the registration to AppServiceProvider automatically.
+                 */
+                class {$observerName}
+                {
+                    /**
+                     * Handle the {$model} "creating" event.
+                     *
+                     * Fired before the model is first saved. Return false to abort.
+                     */
+                    public function creating({$model} \${$variable}): void
+                    {
+                        //
+                    }
 
-    /**
-     * Handle the {$model} "created" event.
-     *
-     * Fired after the model is first saved.
-     */
-    public function created({$model} \${$variable}): void
-    {
-        //
-    }
+                    /**
+                     * Handle the {$model} "created" event.
+                     *
+                     * Fired after the model is first saved.
+                     */
+                    public function created({$model} \${$variable}): void
+                    {
+                        //
+                    }
 
-    /**
-     * Handle the {$model} "updating" event.
-     *
-     * Fired before an existing model is saved. Return false to abort.
-     */
-    public function updating({$model} \${$variable}): void
-    {
-        //
-    }
+                    /**
+                     * Handle the {$model} "updating" event.
+                     *
+                     * Fired before an existing model is saved. Return false to abort.
+                     */
+                    public function updating({$model} \${$variable}): void
+                    {
+                        //
+                    }
 
-    /**
-     * Handle the {$model} "updated" event.
-     *
-     * Fired after an existing model is saved.
-     */
-    public function updated({$model} \${$variable}): void
-    {
-        //
-    }
+                    /**
+                     * Handle the {$model} "updated" event.
+                     *
+                     * Fired after an existing model is saved.
+                     */
+                    public function updated({$model} \${$variable}): void
+                    {
+                        //
+                    }
 
-    /**
-     * Handle the {$model} "saving" event.
-     *
-     * Fired before any save (create or update). Return false to abort.
-     */
-    public function saving({$model} \${$variable}): void
-    {
-        //
-    }
+                    /**
+                     * Handle the {$model} "saving" event.
+                     *
+                     * Fired before any save (create or update). Return false to abort.
+                     */
+                    public function saving({$model} \${$variable}): void
+                    {
+                        //
+                    }
 
-    /**
-     * Handle the {$model} "saved" event.
-     *
-     * Fired after any save (create or update).
-     */
-    public function saved({$model} \${$variable}): void
-    {
-        //
-    }
+                    /**
+                     * Handle the {$model} "saved" event.
+                     *
+                     * Fired after any save (create or update).
+                     */
+                    public function saved({$model} \${$variable}): void
+                    {
+                        //
+                    }
 
-    /**
-     * Handle the {$model} "deleting" event.
-     *
-     * Fired before the model is deleted. Return false to abort.
-     */
-    public function deleting({$model} \${$variable}): void
-    {
-        //
-    }
+                    /**
+                     * Handle the {$model} "deleting" event.
+                     *
+                     * Fired before the model is deleted. Return false to abort.
+                     */
+                    public function deleting({$model} \${$variable}): void
+                    {
+                        //
+                    }
 
-    /**
-     * Handle the {$model} "deleted" event.
-     *
-     * Fired after the model is deleted.
-     */
-    public function deleted({$model} \${$variable}): void
-    {
-        //
-    }
-{$softDeleteMethods}
-}
+                    /**
+                     * Handle the {$model} "deleted" event.
+                     *
+                     * Fired after the model is deleted.
+                     */
+                    public function deleted({$model} \${$variable}): void
+                    {
+                        //
+                    }
+                        {$softDeleteMethods}
+                }
 
-PHP;
+        PHP;
     }
 
     /**
@@ -219,48 +219,47 @@ PHP;
     protected function buildSoftDeleteMethods(string $model, string $variable): string
     {
         return <<<PHP
+        
+                    /**
+                     * Handle the {$model} "restoring" event.
+                     *
+                     * Fired before a soft-deleted model is restored. Return false to abort.
+                     */
+                    public function restoring({$model} \${$variable}): void
+                    {
+                        //
+                    }
 
+                    /**
+                     * Handle the {$model} "restored" event.
+                     *
+                     * Fired after a soft-deleted model is restored.
+                     */
+                    public function restored({$model} \${$variable}): void
+                    {
+                        //
+                    }
 
-    /**
-     * Handle the {$model} "restoring" event.
-     *
-     * Fired before a soft-deleted model is restored. Return false to abort.
-     */
-    public function restoring({$model} \${$variable}): void
-    {
-        //
-    }
+                    /**
+                     * Handle the {$model} "forceDeleting" event.
+                     *
+                     * Fired before a model is permanently deleted. Return false to abort.
+                     */
+                    public function forceDeleting({$model} \${$variable}): void
+                    {
+                        //
+                    }
 
-    /**
-     * Handle the {$model} "restored" event.
-     *
-     * Fired after a soft-deleted model is restored.
-     */
-    public function restored({$model} \${$variable}): void
-    {
-        //
-    }
-
-    /**
-     * Handle the {$model} "forceDeleting" event.
-     *
-     * Fired before a model is permanently deleted. Return false to abort.
-     */
-    public function forceDeleting({$model} \${$variable}): void
-    {
-        //
-    }
-
-    /**
-     * Handle the {$model} "forceDeleted" event.
-     *
-     * Fired after a model is permanently deleted.
-     */
-    public function forceDeleted({$model} \${$variable}): void
-    {
-        //
-    }
-PHP;
+                    /**
+                     * Handle the {$model} "forceDeleted" event.
+                     *
+                     * Fired after a model is permanently deleted.
+                     */
+                    public function forceDeleted({$model} \${$variable}): void
+                    {
+                        //
+                    }
+                PHP;
     }
 
     // -----------------------------------------------------------------------

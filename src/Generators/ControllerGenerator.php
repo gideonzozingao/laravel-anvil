@@ -80,105 +80,105 @@ final class ControllerGenerator implements Generator
 
         $softDeleteMethods = '';
         if ($meta->softDeletes) {
+
             $softDeleteMethods = <<<PHP
 
 
-    /**
-     * Restore a soft-deleted {$model}.
-     */
-    public function restore(int|string \$id): JsonResponse
-    {
-        \${$variable} = \$this->service->restore(\$id);
+        /**
+         * Restore a soft-deleted {$model}.
+         */
+        public function restore(int|string \$id): JsonResponse
+        {
+            \${$variable} = \$this->service->restore(\$id);
 
-        return response()->json(new {$resource}(\${$variable}));
-    }
+            return response()->json(new {$resource}(\${$variable}));
+        }
 
-    /**
-     * Permanently delete a {$model}.
-     */
-    public function forceDelete(int|string \$id): JsonResponse
-    {
-        \$this->service->forceDelete(\$id);
+        /**
+         * Permanently delete a {$model}.
+         */
+        public function forceDelete(int|string \$id): JsonResponse
+        {
+            \$this->service->forceDelete(\$id);
 
-        return response()->json(null, 204);
-    }
-PHP;
+            return response()->json(null, 204);
+        }
+        PHP;
         }
 
         return <<<PHP
-<?php
+            <?php
 
-namespace App\Http\Controllers;
+            namespace App\Http\Controllers;
 
-use {$fullModel};
-use App\Http\Requests\\{$storeReq};
-use App\Http\Requests\\{$updateReq};
-use App\Http\Resources\\{$resource};
-use App\Services\\{$service};
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+            use {$fullModel};
+            use App\Http\Requests\\{$storeReq};
+            use App\Http\Requests\\{$updateReq};
+            use App\Http\Resources\\{$resource};
+            use App\Services\\{$service};
+            use Illuminate\Http\JsonResponse;
+            use Illuminate\Http\Request;
+            use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
-class {$controller} extends Controller
-{
-    public function __construct(
-        protected readonly {$service} \$service,
-    ) {}
+            class {$controller} extends Controller
+            {
+                public function __construct(
+                    protected readonly {$service} \$service,
+                ) {}
 
-    /**
-     * Display a paginated listing of {$model} records.
-     */
-    public function index(Request \$request): AnonymousResourceCollection
-    {
-        \$perPage = (int) \$request->query('per_page', 15);
-        \$filters = \$request->only([]);  // add filterable fields here
+                /**
+                 * Display a paginated listing of {$model} records.
+                 */
+                public function index(Request \$request): AnonymousResourceCollection
+                {
+                    \$perPage = (int) \$request->query('per_page', 15);
+                    \$filters = \$request->only([]);  // add filterable fields here
 
-        \$paginator = \$this->service->paginate(\$perPage, \$filters);
+                    \$paginator = \$this->service->paginate(\$perPage, \$filters);
 
-        return {$resource}::collection(\$paginator);
-    }
+                    return {$resource}::collection(\$paginator);
+                }
 
-    /**
-     * Display the specified {$model}.
-     */
-    public function show(int|string \$id): JsonResponse
-    {
-        \${$variable} = \$this->service->findOrFail(\$id);
+                /**
+                 * Display the specified {$model}.
+                 */
+                public function show(int|string \$id): JsonResponse
+                {
+                    \${$variable} = \$this->service->findOrFail(\$id);
 
-        return response()->json(new {$resource}(\${$variable}));
-    }
+                    return response()->json(new {$resource}(\${$variable}));
+                }
 
-    /**
-     * Store a newly created {$model}.
-     */
-    public function store({$storeReq} \$request): JsonResponse
-    {
-        \${$variable} = \$this->service->create(\$request->validated());
+                /**
+                 * Store a newly created {$model}.
+                 */
+                public function store({$storeReq} \$request): JsonResponse
+                {
+                    \${$variable} = \$this->service->create(\$request->validated());
 
-        return response()->json(new {$resource}(\${$variable}), 201);
-    }
+                    return response()->json(new {$resource}(\${$variable}), 201);
+                }
 
-    /**
-     * Update the specified {$model}.
-     */
-    public function update({$updateReq} \$request, int|string \$id): JsonResponse
-    {
-        \${$variable} = \$this->service->update(\$id, \$request->validated());
+                /**
+                 * Update the specified {$model}.
+                 */
+                public function update({$updateReq} \$request, int|string \$id): JsonResponse
+                {
+                    \${$variable} = \$this->service->update(\$id, \$request->validated());
 
-        return response()->json(new {$resource}(\${$variable}));
-    }
+                    return response()->json(new {$resource}(\${$variable}));
+                }
 
-    /**
-     * Remove the specified {$model}.
-     */
-    public function destroy(int|string \$id): JsonResponse
-    {
-        \$this->service->delete(\$id);
+                /**
+                 * Remove the specified {$model}.
+                 */
+                public function destroy(int|string \$id): JsonResponse
+                {
+                    \$this->service->delete(\$id);
 
-        return response()->json(null, 204);
-    }{$softDeleteMethods}
-}
-
-PHP;
+                    return response()->json(null, 204);
+                }{$softDeleteMethods}
+            }
+    PHP;
     }
 }

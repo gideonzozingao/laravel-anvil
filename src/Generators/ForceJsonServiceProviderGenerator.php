@@ -109,43 +109,43 @@ final class ForceJsonServiceProviderGenerator implements Generator
     protected function buildMiddleware(): string
     {
         return <<<'PHP'
-<?php
+            <?php
 
-namespace App\Http\Middleware;
+            namespace App\Http\Middleware;
 
-use Closure;
-use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
+            use Closure;
+            use Illuminate\Http\Request;
+            use Symfony\Component\HttpFoundation\Response;
 
-/**
- * ForceJsonResponse middleware.
- *
- * Sets Accept: application/json on the incoming request, which is what makes
- * Laravel's exception handler render JSON for every error condition (401, 403,
- * 404, 405, 422, 500 …) rather than an HTML error page.
- *
- * Applied to the versioned API route group by ForceJsonApiServiceProvider.
- */
-class ForceJsonResponse
-{
-    public function handle(Request $request, Closure $next): Response
-    {
-        $request->headers->set('Accept', 'application/json');
+            /**
+             * ForceJsonResponse middleware.
+             *
+             * Sets Accept: application/json on the incoming request, which is what makes
+             * Laravel's exception handler render JSON for every error condition (401, 403,
+             * 404, 405, 422, 500 …) rather than an HTML error page.
+             *
+             * Applied to the versioned API route group by ForceJsonApiServiceProvider.
+             */
+            class ForceJsonResponse
+            {
+                public function handle(Request $request, Closure $next): Response
+                {
+                    $request->headers->set('Accept', 'application/json');
 
-        $response = $next($request);
+                    $response = $next($request);
 
-        // Only fill in a MISSING Content-Type, and never on a 204 (which has no
-        // body by definition). Setting it unconditionally would relabel file
-        // downloads, CSV exports and streamed responses as JSON.
-        if (! $response->headers->has('Content-Type') && $response->getStatusCode() !== 204) {
-            $response->headers->set('Content-Type', 'application/json');
-        }
+                    // Only fill in a MISSING Content-Type, and never on a 204 (which has no
+                    // body by definition). Setting it unconditionally would relabel file
+                    // downloads, CSV exports and streamed responses as JSON.
+                    if (! $response->headers->has('Content-Type') && $response->getStatusCode() !== 204) {
+                        $response->headers->set('Content-Type', 'application/json');
+                    }
 
-        return $response;
-    }
-}
+                    return $response;
+                }
+            }
 
-PHP;
+            PHP;
     }
 
     // -----------------------------------------------------------------------
@@ -180,178 +180,178 @@ PHP;
         $marker = self::MANAGED_MARKER;
 
         return <<<PHP
-<?php
+                <?php
 
-namespace App\Providers;
+                namespace App\Providers;
 
-use App\Http\Middleware\ForceJsonResponse;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\ServiceProvider;
-use Throwable;
+                use App\Http\Middleware\ForceJsonResponse;
+                use Illuminate\Support\Facades\Route;
+                use Illuminate\Support\ServiceProvider;
+                use Throwable;
 
-/**
- * ForceJsonApiServiceProvider
- *
- *  1. Loads every versioned API route file from routes/api/v{n}.php.
- *  2. Wraps each version in a middleware stack that guarantees JSON for every
- *     request, response and exception.
- *  3. Registers a JSON exception renderer scoped to the API prefix.
- *
- * Routes are mounted at /{$prefix}/v{n}/… — the same base path the OpenAPI spec
- * documents in its `servers` block. Change API_PREFIX and regenerate both, or
- * they will disagree and every "Try it out" in the docs will 404.
- *
- * Add a version with:
- *   php artisan anvil:generate-api --api-version=<n>
- * which appends an entry below automatically.
- */
-class ForceJsonApiServiceProvider extends ServiceProvider
-{
-    /**
-     * URL prefix shared by every version, giving /{$prefix}/v1, /{$prefix}/v2, …
-     */
-    protected string \$prefix = '{$prefix}';
+                /**
+                 * ForceJsonApiServiceProvider
+                 *
+                 *  1. Loads every versioned API route file from routes/api/v{n}.php.
+                 *  2. Wraps each version in a middleware stack that guarantees JSON for every
+                 *     request, response and exception.
+                 *  3. Registers a JSON exception renderer scoped to the API prefix.
+                 *
+                 * Routes are mounted at /{$prefix}/v{n}/… — the same base path the OpenAPI spec
+                 * documents in its `servers` block. Change API_PREFIX and regenerate both, or
+                 * they will disagree and every "Try it out" in the docs will 404.
+                 *
+                 * Add a version with:
+                 *   php artisan anvil:generate-api --api-version=<n>
+                 * which appends an entry below automatically.
+                 */
+                class ForceJsonApiServiceProvider extends ServiceProvider
+                {
+                    /**
+                     * URL prefix shared by every version, giving /{$prefix}/v1, /{$prefix}/v2, …
+                     */
+                    protected string \$prefix = '{$prefix}';
 
-    /**
-     * Registered API versions: slug => route file path.
-     *
-     * @var array<string, string>
-     */
-    protected array \$versions = [
-        {$marker}
-        '{$version}' => 'routes/api/{$version}.php',
-    ];
+                    /**
+                     * Registered API versions: slug => route file path.
+                     *
+                     * @var array<string, string>
+                     */
+                    protected array \$versions = [
+                        {$marker}
+                        '{$version}' => 'routes/api/{$version}.php',
+                    ];
 
-    /**
-     * Middleware applied to every API route regardless of version.
-     *
-     * @var array<int, string|class-string>
-     */
-    protected array \$middleware = [
-{$middleware}
-    ];
+                    /**
+                     * Middleware applied to every API route regardless of version.
+                     *
+                     * @var array<int, string|class-string>
+                     */
+                    protected array \$middleware = [
+                            {$middleware}
+                    ];
 
-    public function boot(): void
-    {
-        \$this->registerApiRoutes();
-        \$this->registerJsonExceptionHandler();
-    }
+                    public function boot(): void
+                    {
+                        \$this->registerApiRoutes();
+                        \$this->registerJsonExceptionHandler();
+                    }
 
-    protected function registerApiRoutes(): void
-    {
-        foreach (\$this->versions as \$version => \$routeFile) {
-            if (! file_exists(base_path(\$routeFile))) {
-                continue;
-            }
+                    protected function registerApiRoutes(): void
+                    {
+                        foreach (\$this->versions as \$version => \$routeFile) {
+                            if (! file_exists(base_path(\$routeFile))) {
+                                continue;
+                            }
 
-            Route::middleware(\$this->middleware)
-                ->prefix(\$this->prefix.'/'.\$version)
-                ->name("api.{\$version}.")
-                ->group(base_path(\$routeFile));
-        }
-    }
+                            Route::middleware(\$this->middleware)
+                                ->prefix(\$this->prefix.'/'.\$version)
+                                ->name("api.{\$version}.")
+                                ->group(base_path(\$routeFile));
+                        }
+                    }
 
-    /**
-     * Render unhandled exceptions on API paths as a consistent JSON envelope.
-     */
-    protected function registerJsonExceptionHandler(): void
-    {
-        \$this->app->make(\Illuminate\Contracts\Debug\ExceptionHandler::class)
-            ->renderable(fn (Throwable \$e, \$request) => \$this->isApiRequest(\$request)
-                ? \$this->renderApiException(\$e, \$request)
-                : null);
-    }
+                    /**
+                     * Render unhandled exceptions on API paths as a consistent JSON envelope.
+                     */
+                    protected function registerJsonExceptionHandler(): void
+                    {
+                        \$this->app->make(\Illuminate\Contracts\Debug\ExceptionHandler::class)
+                            ->renderable(fn (Throwable \$e, \$request) => \$this->isApiRequest(\$request)
+                                ? \$this->renderApiException(\$e, \$request)
+                                : null);
+                    }
 
-    /**
-     * Only requests inside the API prefix.
-     *
-     * Deliberately NOT \$request->wantsJson(): that is true for Livewire, for
-     * Inertia, and for any fetch() from your own front end, so it would hand
-     * every web-side error to this renderer and break those integrations in ways
-     * that are hard to trace.
-     */
-    protected function isApiRequest(\$request): bool
-    {
-        return \$request->is(\$this->prefix.'/*')
-            || \$request->is(\$this->prefix);
-    }
+                    /**
+                     * Only requests inside the API prefix.
+                     *
+                     * Deliberately NOT \$request->wantsJson(): that is true for Livewire, for
+                     * Inertia, and for any fetch() from your own front end, so it would hand
+                     * every web-side error to this renderer and break those integrations in ways
+                     * that are hard to trace.
+                     */
+                    protected function isApiRequest(\$request): bool
+                    {
+                        return \$request->is(\$this->prefix.'/*')
+                            || \$request->is(\$this->prefix);
+                    }
 
-    protected function renderApiException(Throwable \$e, \$request): \Illuminate\Http\JsonResponse
-    {
-        [\$status, \$message, \$errors] = \$this->classifyException(\$e);
+                    protected function renderApiException(Throwable \$e, \$request): \Illuminate\Http\JsonResponse
+                    {
+                        [\$status, \$message, \$errors] = \$this->classifyException(\$e);
 
-        \$payload = [
-            'success' => false,
-            'message' => \$message,
-        ];
+                        \$payload = [
+                            'success' => false,
+                            'message' => \$message,
+                        ];
 
-        if (\$errors !== []) {
-            \$payload['errors'] = \$errors;
-        }
+                        if (\$errors !== []) {
+                            \$payload['errors'] = \$errors;
+                        }
 
-        // Never in production: a stack trace names your file paths, your
-        // dependencies and often your query structure.
-        if (config('app.debug')) {
-            \$payload['debug'] = [
-                'exception' => get_class(\$e),
-                'file' => \$e->getFile(),
-                'line' => \$e->getLine(),
-                'trace' => collect(\$e->getTrace())->take(10)->map(fn (array \$frame): array => [
-                    'file' => \$frame['file'] ?? null,
-                    'line' => \$frame['line'] ?? null,
-                    'function' => \$frame['function'] ?? null,
-                ])->all(),
-            ];
-        }
+                        // Never in production: a stack trace names your file paths, your
+                        // dependencies and often your query structure.
+                        if (config('app.debug')) {
+                            \$payload['debug'] = [
+                                'exception' => get_class(\$e),
+                                'file' => \$e->getFile(),
+                                'line' => \$e->getLine(),
+                                'trace' => collect(\$e->getTrace())->take(10)->map(fn (array \$frame): array => [
+                                    'file' => \$frame['file'] ?? null,
+                                    'line' => \$frame['line'] ?? null,
+                                    'function' => \$frame['function'] ?? null,
+                                ])->all(),
+                            ];
+                        }
 
-        return response()->json(\$payload, \$status);
-    }
+                        return response()->json(\$payload, \$status);
+                    }
 
-    /**
-     * @return array{0: int, 1: string, 2: array<mixed>}
-     */
-    protected function classifyException(Throwable \$e): array
-    {
-        return match (true) {
-            \$e instanceof \Illuminate\Validation\ValidationException
-                => [\$e->status, 'The given data was invalid.', \$e->errors()],
+                    /**
+                     * @return array{0: int, 1: string, 2: array<mixed>}
+                     */
+                    protected function classifyException(Throwable \$e): array
+                    {
+                        return match (true) {
+                            \$e instanceof \Illuminate\Validation\ValidationException
+                                => [\$e->status, 'The given data was invalid.', \$e->errors()],
 
-            \$e instanceof \Illuminate\Auth\AuthenticationException
-                => [401, 'Unauthenticated.', []],
+                            \$e instanceof \Illuminate\Auth\AuthenticationException
+                                => [401, 'Unauthenticated.', []],
 
-            \$e instanceof \Illuminate\Auth\Access\AuthorizationException
-                => [403, 'This action is unauthorized.', []],
+                            \$e instanceof \Illuminate\Auth\Access\AuthorizationException
+                                => [403, 'This action is unauthorized.', []],
 
-            \$e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
-                => [404, 'Resource not found.', []],
+                            \$e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                                => [404, 'Resource not found.', []],
 
-            \$e instanceof \Symfony\Component\HttpKernel\Exception\NotFoundHttpException
-                => [404, 'The requested URL was not found.', []],
+                            \$e instanceof \Symfony\Component\HttpKernel\Exception\NotFoundHttpException
+                                => [404, 'The requested URL was not found.', []],
 
-            \$e instanceof \Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException
-                => [405, 'Method not allowed.', []],
+                            \$e instanceof \Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException
+                                => [405, 'Method not allowed.', []],
 
-            \$e instanceof \Illuminate\Routing\Exceptions\InvalidSignatureException
-                => [403, 'Invalid or expired signature.', []],
+                            \$e instanceof \Illuminate\Routing\Exceptions\InvalidSignatureException
+                                => [403, 'Invalid or expired signature.', []],
 
-            \$e instanceof \Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException
-                => [429, 'Too many requests.', []],
+                            \$e instanceof \Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException
+                                => [429, 'Too many requests.', []],
 
-            // Must come after the specific HttpExceptions above, since they all
-            // extend it.
-            \$e instanceof \Symfony\Component\HttpKernel\Exception\HttpException
-                => [\$e->getStatusCode(), \$e->getMessage() ?: 'HTTP error.', []],
+                            // Must come after the specific HttpExceptions above, since they all
+                            // extend it.
+                            \$e instanceof \Symfony\Component\HttpKernel\Exception\HttpException
+                                => [\$e->getStatusCode(), \$e->getMessage() ?: 'HTTP error.', []],
 
-            // The message can contain SQL and column names, so it is replaced.
-            \$e instanceof \Illuminate\Database\QueryException
-                => [500, 'A database error occurred.', []],
+                            // The message can contain SQL and column names, so it is replaced.
+                            \$e instanceof \Illuminate\Database\QueryException
+                                => [500, 'A database error occurred.', []],
 
-            default => [500, 'An unexpected error occurred.', []],
-        };
-    }
-}
+                            default => [500, 'An unexpected error occurred.', []],
+                        };
+                    }
+                }
 
-PHP;
+                PHP;
     }
 
     /**

@@ -150,22 +150,22 @@ final class GateGenerator implements Generator
     {
         if (! file_exists($path)) {
             $content = <<<PHP
-<?php
+                <?php
 
-namespace App\Providers;
+                namespace App\Providers;
 
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\ServiceProvider;
+                use Illuminate\Support\Facades\Gate;
+                use Illuminate\Support\ServiceProvider;
 
-class GateServiceProvider extends ServiceProvider
-{
-    public function boot(): void
-    {
-{$gateBlock}
-    }
-}
+                class GateServiceProvider extends ServiceProvider
+                {
+                    public function boot(): void
+                    {
+                {$gateBlock}
+                    }
+                }
 
-PHP;
+                PHP;
             $dir = dirname($path);
             if (! is_dir($dir)) {
                 mkdir($dir, 0755, true);

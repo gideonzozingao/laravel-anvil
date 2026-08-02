@@ -159,33 +159,33 @@ PHP;
         $useBlock = implode("\n", $uses);
 
         return <<<PHP
-<?php
+            <?php
 
-namespace {$namespace};
+            namespace {$namespace};
 
-{$useBlock}
+            {$useBlock}
 
-/**
- * {$docComment}
- *
- * Registered by convention: Laravel discovers listeners in app/Listeners and
- * binds them to the event named in the handle() signature. No provider entry
- * is required.
- */
-class {$class}{$implements}
-{
-{$body}    /**
-     * Handle the event.
-     */
-    public function handle({$event} \$event): void
-    {
-        \${$variable} = \$event->{$variable};
+            /**
+             * {$docComment}
+             *
+             * Registered by convention: Laravel discovers listeners in app/Listeners and
+             * binds them to the event named in the handle() signature. No provider entry
+             * is required.
+             */
+            class {$class}{$implements}
+            {
+            {$body}    /**
+                * Handle the event.
+                */
+                public function handle({$event} \$event): void
+                {
+                    \${$variable} = \$event->{$variable};
 
-        // TODO: implement the side effect for this transition.
-    }
-{$failed}}
+                    // TODO: implement the side effect for this transition.
+                }
+            {$failed}}
 
-PHP;
+        PHP;
     }
 
     // ── Subscriber ──────────────────────────────────────────────────────────
@@ -228,16 +228,16 @@ PHP;
             $uses[] = "use {$eventNamespace}\\{$event};";
 
             $handlers[] = <<<PHP
-    /**
-     * Handle the {$event} event.
-     */
-    public function handle{$action}({$event} \$event): void
-    {
-        \${$variable} = \$event->{$variable};
+            /**
+             * Handle the {$event} event.
+             */
+            public function handle{$action}({$event} \$event): void
+            {
+                \${$variable} = \$event->{$variable};
 
-        // TODO: implement the side effect for this transition.
-    }
-PHP;
+                // TODO: implement the side effect for this transition.
+            }
+    PHP;
 
             $map[] = "            {$event}::class => 'handle{$action}',";
         }
@@ -249,37 +249,37 @@ PHP;
         $mapBlock = implode("\n", $map);
 
         return <<<PHP
-<?php
+        <?php
 
-namespace {$namespace};
+        namespace {$namespace};
 
-{$useBlock}
+        {$useBlock}
 
-/**
- * Subscribes to every {$meta->model} lifecycle event.
- *
- * Subscribers are not auto-discovered. Register this one in a service provider:
- *
- *     use Illuminate\Support\Facades\Event;
- *
- *     Event::subscribe({$class}::class);
- */
-class {$class}
-{
-{$handlerBlock}
+        /**
+         * Subscribes to every {$meta->model} lifecycle event.
+         *
+         * Subscribers are not auto-discovered. Register this one in a service provider:
+         *
+         *     use Illuminate\Support\Facades\Event;
+         *
+         *     Event::subscribe({$class}::class);
+         */
+        class {$class}
+        {
+        {$handlerBlock}
 
-    /**
-     * Map the events this subscriber handles to its methods.
-     *
-     * @return array<class-string, string>
-     */
-    public function subscribe(Dispatcher \$events): array
-    {
-        return [
-{$mapBlock}
-        ];
-    }
-}
+            /**
+             * Map the events this subscriber handles to its methods.
+             *
+             * @return array<class-string, string>
+             */
+            public function subscribe(Dispatcher \$events): array
+            {
+                return [
+        {$mapBlock}
+                ];
+            }
+        }
 
 PHP;
     }
