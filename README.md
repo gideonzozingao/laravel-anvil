@@ -109,17 +109,13 @@ php artisan anvil:forge-client --api-version=1 --hooks
 # 7. Format, modernise and audit what was generated
 php artisan anvil:polish
 ```
-````
 
 Preview anything without writing files by adding `--dry-run`.
-
-````
 
 ---
 
 ## 3. Commands
 
-```markdown
 ## Commands
 
 Anvil ships thirteen Artisan commands. Each owns one slice of the output, and
@@ -128,31 +124,31 @@ every generating command runs the identical pipeline through the
 
 ### Generation
 
-| Command                    | Produces                                                              |
-| -------------------------- | --------------------------------------------------------------------- |
-| `anvil:forge:app-scaffold` | Models and the core per-model artifacts                               |
-| `anvil:forge-api`          | Versioned JSON API + OpenAPI spec (alias: `anvil:forge-openapi`)      |
-| `anvil:forge-apidocs`      | Generates and reports the docs for one or all versions                |
-| `anvil:forge-webapp`       | Web CRUD front end (Blade or Livewire)                                |
-| `anvil:forge-auth`         | Livewire authentication + RBAC from the users table                   |
-| `anvil:forge-graphql`      | Lighthouse GraphQL schema (types, inputs, queries, mutations)         |
-| `anvil:forge-client`       | Typed TypeScript client for a versioned API                           |
+| Command                    | Produces                                                         |
+| -------------------------- | ---------------------------------------------------------------- |
+| `anvil:forge:app-scaffold` | Models and the core per-model artifacts                          |
+| `anvil:forge-api`          | Versioned JSON API + OpenAPI spec (alias: `anvil:forge-openapi`) |
+| `anvil:forge-apidocs`      | Generates and reports the docs for one or all versions           |
+| `anvil:forge-webapp`       | Web CRUD front end (Blade or Livewire)                           |
+| `anvil:forge-auth`         | Livewire authentication + RBAC from the users table              |
+| `anvil:forge-graphql`      | Lighthouse GraphQL schema (types, inputs, queries, mutations)    |
+| `anvil:forge-client`       | Typed TypeScript client for a versioned API                      |
 
 ### Inspection
 
-| Command           | Reports                                                                |
-| ----------------- | ---------------------------------------------------------------------- |
-| `anvil:doctor`    | Schema shapes that break code generation, before they break it         |
-| `anvil:diff`      | What changed in the database since the last generation                 |
-| `anvil:docs-sync` | Drift between hand-edited payloads and the OpenAPI spec                |
+| Command           | Reports                                                        |
+| ----------------- | -------------------------------------------------------------- |
+| `anvil:doctor`    | Schema shapes that break code generation, before they break it |
+| `anvil:diff`      | What changed in the database since the last generation         |
+| `anvil:docs-sync` | Drift between hand-edited payloads and the OpenAPI spec        |
 
 ### Maintenance
 
-| Command                    | Does                                                         |
-| -------------------------- | ------------------------------------------------------------ |
-| `anvil:polish`             | Pint, Rector, PHPStan, and a model ↔ schema audit            |
-| `anvil:frontend`           | Checks or installs Livewire and Tailwind                     |
-| `anvil:install:swagger-ui` | Vendors the Swagger UI assets so `/docs` needs no CDN        |
+| Command                    | Does                                                  |
+| -------------------------- | ----------------------------------------------------- |
+| `anvil:polish`             | Pint, Rector, PHPStan, and a model ↔ schema audit     |
+| `anvil:frontend`           | Checks or installs Livewire and Tailwind              |
+| `anvil:install:swagger-ui` | Vendors the Swagger UI assets so `/docs` needs no CDN |
 
 ### Model generation comes first
 
@@ -163,6 +159,7 @@ path — and imports them from whatever namespace they were actually written to.
 ```bash
 php artisan anvil:forge:app-scaffold --models --schema=all
 php artisan anvil:forge-webapp --stack=livewire
+```
 ````
 
 That split is what stops a schema-namespaced model (`App\Models\Core\User`)
