@@ -1042,7 +1042,7 @@ php artisan anvil:polish --test --strict   # formatting, modernisation, model â†
   their default and the behaviour when omitted
 - New behaviour has a scenario in `documents/local-test.md` if it cannot be covered by the package's own tests
 
-## Roadmap
+# Roadmap
 
 Anvil is pre-1.0. The command surface settled with the `forge` rename and is not
 expected to change again before the tag, but until there is a `1.0.0` on
