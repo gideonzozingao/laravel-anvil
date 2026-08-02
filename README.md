@@ -11,7 +11,6 @@ Three blocks below, each replacing an existing part of `README.md`:
 
 ## 1. Table of contents
 
-```markdown
 ## Table of contents
 
 - [Why Anvil](#why-anvil)
@@ -52,7 +51,6 @@ Three blocks below, each replacing an existing part of `README.md`:
 - [Security](#security)
 - [Contributing](#contributing)
 - [License](#license)
-```
 
 > The `Response caching` anchor is new — see the note at the end of this file.
 
