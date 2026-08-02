@@ -74,7 +74,6 @@ or Blade + Livewire, and a **Livewire authentication scaffold** with RBAC.
 
 ## 2. Quick start
 
-````markdown
 ## Quick start
 
 ```bash
@@ -160,6 +159,7 @@ path — and imports them from whatever namespace they were actually written to.
 php artisan anvil:forge:app-scaffold --models --schema=all
 php artisan anvil:forge-webapp --stack=livewire
 ```
+
 ````
 
 That split is what stops a schema-namespaced model (`App\Models\Core\User`)
@@ -912,3 +912,4 @@ reference above, but the generation-stamp invalidation model, the volatility
 profiles and `$cacheVariant` deserve prose alongside "Per-version shape
 profiles". Say the word and I'll draft it.
 ```
+````
