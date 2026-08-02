@@ -47,7 +47,7 @@ use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
  * autoloader is already built and the providers already registered.
  */
 
-class GenerateWebCommand extends Command
+class ForgeWebApp extends Command
 {
     use InstallsFrontendAssets;
     use RunsGenerationPipeline;

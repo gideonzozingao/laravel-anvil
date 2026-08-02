@@ -33,7 +33,7 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
  * one place. --versioned-services emits a thin subclass instead of a copy.
  */
 
-class GenerateOpenApiCommand extends Command
+class ForgeOpenApi extends Command
 {
     use ConfiguresGeneratedCache;
     use RunsGenerationPipeline;

@@ -35,7 +35,7 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  * emitting a schema nothing can serve.
  */
 
-class GenerateGraphQLCommand extends Command
+class ForgeGraphQL extends Command
 {
 
     protected $description = 'Generate a Lighthouse GraphQL schema (types, inputs, queries, mutations) from the database';

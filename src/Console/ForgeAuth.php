@@ -36,7 +36,7 @@ use Zuqongtech\LaravelAnvil\Support\ScaffoldReport;
  * so the configuration they refer to is still on screen.
  */
 
-class GenerateAuthCommand extends Command
+class ForgeAuth extends Command
 {
     use RendersScaffoldOutput;
 

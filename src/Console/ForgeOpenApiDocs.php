@@ -26,7 +26,7 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
  * targeting and reporting.
  */
 
-class GenerateOpenApiDocsCommand extends Command
+class ForgeOpenApiDocs extends Command
 {
 
 

@@ -35,7 +35,7 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
  * before the endpoint is finished, rather than waiting on a hand-written spec.
  */
 
-class GenerateClientCommand extends Command
+class ForgeClient extends Command
 {
 
 

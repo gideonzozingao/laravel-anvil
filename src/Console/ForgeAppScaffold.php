@@ -48,7 +48,7 @@ use Zuqongtech\LaravelAnvil\Support\SchemaSelection;
  * names, so guard its lookups with $command->hasOption() first.
  */
 
-class GenerateModelsFromDatabase extends Command
+class ForgeAppScaffold extends Command
 {
     use RunsGenerationPipeline;
 
