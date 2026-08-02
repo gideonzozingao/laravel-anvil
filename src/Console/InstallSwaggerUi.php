@@ -21,11 +21,11 @@ use Zuqongtech\LaravelAnvil\Support\SwaggerUiInstaller;
  * an existing node_modules copy, a direct download, and only then npm — see
  * SwaggerUiInstaller for why that order matters.
  */
+
 class InstallSwaggerUi extends Command
 {
-    /** @var list<string> */
-    private const SOURCES = ['auto', 'local', 'http', 'npm'];
 
+    protected $description = 'Install the Swagger UI assets locally so the docs page does not load them from a CDN';
     protected $signature = 'anvil:install:swagger-ui
                             {--ui-version=       : swagger-ui-dist version (default: anvil.openapi.docs.ui_version)}
                             {--api-version=      : API version whose docs directory receives the assets}
@@ -36,8 +36,8 @@ class InstallSwaggerUi extends Command
                             {--skip-generate     : Do not regenerate the spec first}
                             {--force             : Re-download even when the correct version is already present}
                             {--dry-run           : Preview without writing files}';
-
-    protected $description = 'Install the Swagger UI assets locally so the docs page does not load them from a CDN';
+    /** @var list<string> */
+    private const SOURCES = ['auto', 'local', 'http', 'npm'];
 
     public function handle(): int
     {
@@ -67,13 +67,13 @@ class InstallSwaggerUi extends Command
         $apiVersion = OpenApiLocator::normaliseVersion(
             $this->option('api-version') ?: OpenApiLocator::configuredVersion(),
         );
-        $targetDir = OpenApiLocator::publicDocsDir($apiVersion).'/assets';
+        $targetDir = OpenApiLocator::publicDocsDir($apiVersion) . '/assets';
 
         $this->components->info('Anvil — Swagger UI assets');
         $this->table(['', ''], [
             ['swagger-ui-dist', $version],
             ['API version', $apiVersion],
-            ['Target', ltrim(str_replace(base_path(), '', $targetDir), '/').'/'],
+            ['Target', ltrim(str_replace(base_path(), '', $targetDir), '/') . '/'],
             ['Source', $source === 'auto' ? 'auto (node_modules → download → npm)' : $source],
         ]);
         $this->newLine();
@@ -86,7 +86,7 @@ class InstallSwaggerUi extends Command
             npmTimeout: (int) ($this->option('timeout') ?: 900),
         );
 
-        $installer->onOutput(fn (string $line) => $this->line('  <fg=gray>'.$line.'</>'));
+        $installer->onOutput(fn(string $line) => $this->line('  <fg=gray>' . $line . '</>'));
 
         if ($this->option('check')) {
             return $this->reportCheck($installer, $version, $targetDir);
@@ -147,7 +147,7 @@ class InstallSwaggerUi extends Command
         if (! $this->getApplication()?->has('anvil:forge-api')) {
             $this->components->warn(
                 'anvil:forge-api is not registered, so the spec was not regenerated. Pass --skip-generate to '
-                    .'silence this.',
+                    . 'silence this.',
             );
 
             return true;
@@ -159,7 +159,7 @@ class InstallSwaggerUi extends Command
                 '--api-version' => ltrim($apiVersion, 'v'),
             ]);
         } catch (\Throwable $e) {
-            $this->components->error('Spec generation failed: '.$e->getMessage());
+            $this->components->error('Spec generation failed: ' . $e->getMessage());
             $this->line('  Pass <fg=yellow>--skip-generate</> to install the assets without regenerating.');
 
             return false;
@@ -191,11 +191,11 @@ class InstallSwaggerUi extends Command
         $missing = [];
 
         foreach (SwaggerUiInstaller::REQUIRED_FILES as $file) {
-            is_file($targetDir.'/'.$file) ? $present[] = $file : $missing[] = $file;
+            is_file($targetDir . '/' . $file) ? $present[] = $file : $missing[] = $file;
         }
 
         if ($present !== []) {
-            $this->line('  <fg=gray>present:</> '.implode(', ', $present));
+            $this->line('  <fg=gray>present:</> ' . implode(', ', $present));
         }
 
         $this->components->warn(sprintf(
@@ -239,7 +239,7 @@ class InstallSwaggerUi extends Command
         $this->line('  Point the docs page at these assets by setting:');
         $this->line("    <fg=yellow>anvil.openapi.docs.asset_base</fg=yellow> = '/{$relative}'");
         $this->newLine();
-        $this->line('  Docs: <options=bold>'.OpenApiLocator::docsUrl($apiVersion).'</>');
+        $this->line('  Docs: <options=bold>' . OpenApiLocator::docsUrl($apiVersion) . '</>');
         $this->newLine();
 
         return self::SUCCESS;
@@ -272,12 +272,12 @@ class InstallSwaggerUi extends Command
             $version,
         );
         $suggestions[] = 'Or leave the docs page on the CDN: it works without local assets, it just needs the network '
-            .'at request time';
+            . 'at request time';
 
         $this->line('  <options=bold>Options</>');
 
         foreach ($suggestions as $suggestion) {
-            $this->line('   • '.$suggestion);
+            $this->line('   • ' . $suggestion);
         }
 
         $this->newLine();

@@ -32,40 +32,17 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
  * Services are deliberately NOT versioned by default — business logic belongs in
  * one place. --versioned-services emits a thin subclass instead of a copy.
  */
+
 class GenerateOpenApiCommand extends Command
 {
     use ConfiguresGeneratedCache;
     use RunsGenerationPipeline;
 
-    /**
-     * Auth scheme => [route middleware, default OpenAPI security scheme].
-     *
-     * The single point where the API's runtime auth and its documented auth are
-     * tied together, so the two cannot drift apart.
-     *
-     * @var array<string, array{0: ?string, 1: string}>
-     */
-    private const AUTH_SCHEMES = [
-        'sanctum' => ['auth:sanctum', 'sanctum'],
-        'passport' => ['auth:api', 'passport'],
-        'jwt' => ['auth:api', 'bearer'],
-        'token' => ['auth:sanctum', 'apikey'],
-        'none' => [null, 'none'],
-    ];
 
-    /** @var list<string> */
-    private const SECURITY_SCHEMES = ['sanctum', 'passport', 'bearer', 'apikey', 'none'];
 
-    /** @var list<string> */
-    private const SPEC_FORMATS = ['yaml', 'json'];
-
-    /**
-     * NOTE: --api-version rather than --version, because Symfony's console
-     * application already defines a global --version (-V) and merging a
-     * same-named command option throws a LogicException.
-     */
+    protected $aliases = 'anvil:forge-openapi';
+    protected $description = 'Generate a versioned JSON API scaffold and an OpenAPI 3.1 specification from live database introspection';
     protected $signature = 'anvil:forge-api
-
                             {--api-version=1         : Version of the API scaffold (1, 2, v2 …)}
                             {--prefix=api            : Route prefix for the versioned group}
                             {--auth=sanctum          : Auth scheme: sanctum|passport|jwt|token|none}
@@ -119,11 +96,27 @@ class GenerateOpenApiCommand extends Command
                             {--cache-model=*         : Per-model override: "Category:reference", "PriceHistory:off"}
                             {--etag                  : Emit ETag/If-None-Match handling and document 304 in the spec}
                             ';
+    /**
+     * Auth scheme => [route middleware, default OpenAPI security scheme].
+     *
+     * The single point where the API's runtime auth and its documented auth are
+     * tied together, so the two cannot drift apart.
+     *
+     * @var array<string, array{0: ?string, 1: string}>
+     */
+    private const AUTH_SCHEMES = [
+        'sanctum' => ['auth:sanctum', 'sanctum'],
+        'passport' => ['auth:api', 'passport'],
+        'jwt' => ['auth:api', 'bearer'],
+        'token' => ['auth:sanctum', 'apikey'],
+        'none' => [null, 'none'],
+    ];
 
-    protected $description = 'Generate a versioned JSON API scaffold and an OpenAPI 3.1 specification from live database introspection';
+    /** @var list<string> */
+    private const SECURITY_SCHEMES = ['sanctum', 'passport', 'bearer', 'apikey', 'none'];
 
-    /** @var array<int, string> */
-    protected $aliases = ['anvil:forge-openapi'];
+    /** @var list<string> */
+    private const SPEC_FORMATS = ['yaml', 'json'];
 
     public function handle(): int
     {
@@ -349,7 +342,7 @@ class GenerateOpenApiCommand extends Command
         [$authMiddleware] = self::AUTH_SCHEMES[$this->normalisedAuth()];
 
         if ($authMiddleware !== null && ($guard = (string) $this->option('guard')) !== '') {
-            $authMiddleware = 'auth:'.$guard;
+            $authMiddleware = 'auth:' . $guard;
         }
 
         $throttle = (string) $this->option('throttle');
@@ -357,7 +350,7 @@ class GenerateOpenApiCommand extends Command
         return array_values(array_filter([
             'api',
             $authMiddleware,
-            $throttle !== '' && $throttle !== 'none' ? 'throttle:'.$throttle : null,
+            $throttle !== '' && $throttle !== 'none' ? 'throttle:' . $throttle : null,
             ...array_map(strval(...), $this->option('middleware')),
         ]));
     }
@@ -484,13 +477,13 @@ class GenerateOpenApiCommand extends Command
         );
 
         if (! $this->option('spec-only') && ! ($options->api ?? false)) {
-            return 'GenerationOptions did not accept the "api" flag, so the versioned API scaffold would be skipped. '.$hint;
+            return 'GenerationOptions did not accept the "api" flag, so the versioned API scaffold would be skipped. ' . $hint;
         }
 
         if ($this->generatesSpec() && ! ($options->openApi ?? false)) {
             $this->components->warn(
                 'GenerationOptions did not accept the "openApi" flag; the spec generators are falling back to '
-                    .'anvil.openapi.enabled. '.$hint
+                    . 'anvil.openapi.enabled. ' . $hint
             );
         }
 
@@ -499,7 +492,7 @@ class GenerateOpenApiCommand extends Command
         if ($version !== '' && OpenApiLocator::normaliseVersion($version) !== $this->versionSegment()) {
             $this->components->warn(sprintf(
                 'GenerationOptions resolved apiVersion to "%s" but --api-version asked for "%s"; generated code may '
-                    .'not match the spec directory. %s',
+                    . 'not match the spec directory. %s',
                 $version,
                 $this->versionSegment(),
                 $hint,
@@ -545,10 +538,10 @@ class GenerateOpenApiCommand extends Command
                 strtolower((string) $this->option('format')),
                 $this->option('single-file') ? 'single file' : 'split files',
             )];
-            $rows[] = ['Spec directory', $this->relativeToBase(OpenApiLocator::specDir($this->apiVersion())).'/'];
+            $rows[] = ['Spec directory', $this->relativeToBase(OpenApiLocator::specDir($this->apiVersion())) . '/'];
             $rows[] = ['Security scheme', strtolower((string) ($this->option('security') ?: $defaultSecurity))];
             $rows[] = ['Swagger UI', $this->option('ui')
-                ? $this->relativeToBase(OpenApiLocator::publicDocsDir($this->apiVersion())).'/ (swagger-ui '.$this->option('ui-version').')'
+                ? $this->relativeToBase(OpenApiLocator::publicDocsDir($this->apiVersion())) . '/ (swagger-ui ' . $this->option('ui-version') . ')'
                 : 'not published'];
         }
 
@@ -575,7 +568,7 @@ class GenerateOpenApiCommand extends Command
         if (! OpenApiLocator::specExists($version)) {
             $this->components->warn(sprintf(
                 'The pipeline finished but no spec exists at %s. Check that the OpenAPI generators resolve their '
-                    .'output through OpenApiLocator::specDir().',
+                    . 'output through OpenApiLocator::specDir().',
                 $this->relativeToBase(OpenApiLocator::specFile($version)),
             ));
 
@@ -591,7 +584,7 @@ class GenerateOpenApiCommand extends Command
             $counts['paths'],
         ));
 
-        $this->line('  Docs: <options=bold>'.OpenApiLocator::docsUrl($version).'</>');
+        $this->line('  Docs: <options=bold>' . OpenApiLocator::docsUrl($version) . '</>');
     }
 
     private function relativeToBase(string $path): string
@@ -619,6 +612,6 @@ class GenerateOpenApiCommand extends Command
 
     private function versionSegment(): string
     {
-        return 'v'.$this->apiVersion();
+        return 'v' . $this->apiVersion();
     }
 }

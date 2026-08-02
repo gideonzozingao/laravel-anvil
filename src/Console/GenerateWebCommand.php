@@ -12,21 +12,33 @@ use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
 
 /**
  * Dedicated command for the web scaffold: resource controllers
- * (App\Http\Controllers\Web), Blade views (index/create/edit/show/_form plus a
- * runtime-discovered navigation), and Route::resource entries in routes/web.php.
+ * (App\Http\Controllers\Web), Blade views, and Route::resource entries in
+ * routes/web.php. With --stack=livewire it also writes Form and Table components
+ * and their views, and create/edit become wrappers around <livewire:...>.
  *
- *   php artisan anvil:generate-web --tables=posts --tables=comments
- *   php artisan anvil:generate-web                        # every non-ignored table
- *   php artisan anvil:generate-web --stack=livewire --install-assets
- *   php artisan anvil:generate-web --assets-mode=vite --tailwind-version=4
- *   php artisan anvil:generate-web --layout=layouts.app --no-layout --force
- *   php artisan anvil:generate-web --per-page=25 --skip-models
+ *   php artisan anvil:forge-webapp --tables=posts --tables=comments
+ *   php artisan anvil:forge-webapp                        # every non-ignored table
+ *   php artisan anvil:forge-webapp --stack=livewire --install-assets
+ *   php artisan anvil:forge-webapp --assets-mode=vite --tailwind-version=4
+ *   php artisan anvil:forge-webapp --layout=layouts.app --no-layout --force
+ *
+ * MODELS ARE NOT GENERATED HERE. This command resolves them from the model
+ * manifest (or by scanning app/Models) and imports them from whatever namespace
+ * they were actually written to. Generate them first:
+ *
+ *   php artisan anvil:forge --models --schema=all
+ *   php artisan anvil:forge-webapp --stack=livewire
+ *
+ * That split is what stops a schema-namespaced model being re-derived as
+ * App\Models\User by the web generators, and it also stops a web run silently
+ * reverting hand edits to a generated model. If no model exists for a target
+ * table the run fails and names the table, rather than emitting a controller that
+ * imports a class which was never written.
  *
  * The web scaffold reuses the same Services and FormRequests as the API path, so
- * those are generated alongside it. Models are generated too unless
- * --skip-models is passed, which keeps the command standalone.
+ * those are generated alongside it.
  *
- * It shares the entire generation pipeline with anvil:generate via
+ * It shares the entire generation pipeline with anvil:forge via
  * RunsGenerationPipeline — a separate command, not a separate engine.
  *
  * Frontend dependencies are handled by InstallsFrontendAssets, which runs as a
@@ -34,11 +46,39 @@ use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
  * install cannot take effect in the process that performs it, because the
  * autoloader is already built and the providers already registered.
  */
+
 class GenerateWebCommand extends Command
 {
     use InstallsFrontendAssets;
     use RunsGenerationPipeline;
+    protected $signature = 'anvil:forge-webapp
+                            {--stack=blade   : Frontend stack — "blade" (Blade + Tailwind) or "livewire" (Blade + Livewire 3)}
+                            {--tables=*      : Limit generation to specific tables}
+                            {--only=*        : Alias for --tables}
+                            {--ignore=*      : Exclude specific tables}
+                            {--connection=   : Database connection to introspect}
+                            {--schema=       : Schema(s) to generate from: name, csv list, or "all"}
+                            {--namespace=App\\Models : Namespace the generated models live in (used to locate them, not to write them)}
+                            {--path=app      : Base path the models were written to}
+                            {--layout=       : Blade layout the views extend (overrides anvil.web.layout)}
+                            {--no-layout     : Do not generate a base layout — you already have one}
+                            {--no-nav        : Do not generate the sidebar navigation partial}
+                            {--per-page=15   : Default rows per page in generated listings}
+                            {--assets-mode=  : How views load Tailwind: cdn | vite | none (overrides anvil.web.frontend.mode)}
+                            {--install-assets : Install every frontend dependency the selected stack needs}
+                            {--with-livewire : Install Livewire 3 if the project does not already have it}
+                            {--with-tailwind : Install and wire Tailwind CSS if the project does not already have it}
+                            {--tailwind-version= : Tailwind major version to install when missing (3 or 4)}
+                            {--no-package-manager : Write config files but print the composer/npm commands instead of running them}
+                            {--skip-asset-check : Bypass the frontend preflight entirely}
+                            {--skip-models   : [DEPRECATED] No-op — this command never generates models}
+                            {--no-inverse    : Skip inverse relationship detection}
+                            {--force         : Overwrite existing files without prompting}
+                            {--backup        : Backup existing files before overwriting}
+                            {--dry-run       : Preview without writing files}';
 
+
+    protected $description = 'Generate a web scaffold (resource controllers, Blade views and web routes) from the database';
     /** @var list<string> */
     private const STACKS = ['blade', 'livewire'];
 
@@ -52,39 +92,6 @@ class GenerateWebCommand extends Command
     private const PER_PAGE_OPTIONS = [10, 15, 25, 50, 100];
 
     private const PER_PAGE_CEILING = 500;
-
-    /**
-     * Frontend flags live in the signature, not in getOptions(): Laravel builds
-     * the definition from $signature via configureUsingFluentDefinition() and
-     * never consults getOptions() on a signature-based command.
-     */
-    protected $signature = 'anvil:forge-webapp
-                            {--stack=blade   : Frontend stack — "blade" (Blade + Tailwind) or "livewire" (Blade + Livewire 3)}
-                            {--tables=*      : Limit generation to specific tables}
-                            {--only=*        : Alias for --tables}
-                            {--ignore=*      : Exclude specific tables}
-                            {--connection=   : Database connection to introspect}
-                            {--schema=       : Schema(s) to generate from: name, csv list, or "all"}
-                            {--namespace=App\\Models : Namespace of the models the scaffold references}
-                            {--path=app      : Base path for generated models}
-                            {--layout=       : Blade layout the views extend (overrides anvil.web.layout)}
-                            {--no-layout     : Do not generate a base layout — you already have one}
-                            {--no-nav        : Do not generate the sidebar navigation partial}
-                            {--per-page=15   : Default rows per page in generated listings}
-                            {--assets-mode=  : How views load Tailwind: cdn | vite | none (overrides anvil.web.frontend.mode)}
-                            {--install-assets : Install every frontend dependency the selected stack needs}
-                            {--with-livewire : Install Livewire 3 if the project does not already have it}
-                            {--with-tailwind : Install and wire Tailwind CSS if the project does not already have it}
-                            {--tailwind-version= : Tailwind major version to install when missing (3 or 4)}
-                            {--no-package-manager : Write config files but print the composer/npm commands instead of running them}
-                            {--skip-asset-check : Bypass the frontend preflight entirely}
-                            {--skip-models   : Do not (re)generate models; assume they already exist}
-                            {--no-inverse    : Skip inverse relationship detection when models are generated}
-                            {--force         : Overwrite existing files without prompting}
-                            {--backup        : Backup existing files before overwriting}
-                            {--dry-run       : Preview without writing files}';
-
-    protected $description = 'Generate a web scaffold (resource controllers, Blade views and web routes) from the database';
 
     public function handle(): int
     {
@@ -113,6 +120,15 @@ class GenerateWebCommand extends Command
         }
 
         $this->info("✅ Configuration valid.\n");
+
+        // --skip-models used to mean something here. Say so rather than accepting
+        // it silently: an operator passing it believes it is changing behaviour.
+        if ($this->option('skip-models')) {
+            $this->components->warn(
+                '--skip-models is deprecated and has no effect: this command never generates models. '
+                    . 'Generate them with `php artisan anvil:forge --models` first.'
+            );
+        }
 
         // Frontend dependencies are settled before a single file is written, so
         // we never emit Livewire components into a project that cannot run them.
@@ -313,10 +329,16 @@ class GenerateWebCommand extends Command
         )));
 
         // web / form_requests / services are set explicitly: the scaffold depends
-        // on the latter two. Models are on unless skipped, so the command
-        // produces working CRUD from nothing.
+        // on the latter two.
+        //
+        // models is false, and that is not a lie about intent — the pipeline's
+        // phase 1 reuses existing models for this command regardless. Leaving it
+        // true made getEnabledGenerators() print "Models" in the generation plan
+        // while the run reported "Phase 1: reuse existing models", so the plan
+        // contradicted the run in the same output.
         return GenerationOptions::fromArray([
-            'models' => ! $this->option('skip-models'),
+            'models' => false,
+            'skip_models' => true,
             'web' => true,
             'stack' => $stack,
             'assets_mode' => $assetsMode,
@@ -343,13 +365,13 @@ class GenerateWebCommand extends Command
     private function summarise(string $stack, int $perPage, string $assetsMode): void
     {
         $layout = (string) config('anvil.web.layout', 'layouts.anvil');
-        $layoutPath = resource_path('views/'.str_replace('.', '/', $layout).'.blade.php');
+        $layoutPath = resource_path('views/' . str_replace('.', '/', $layout) . '.blade.php');
         $generatesLayout = (bool) config('anvil.web.generate_layout', true);
 
         $layoutState = match (true) {
-            file_exists($layoutPath) => $layout.' (exists, left alone)',
-            $generatesLayout => $layout.' (will be generated)',
-            default => $layout.' — MISSING and generation disabled',
+            file_exists($layoutPath) => $layout . ' (exists, left alone)',
+            $generatesLayout => $layout . ' (will be generated)',
+            default => $layout . ' — MISSING and generation disabled',
         };
 
         $rows = [
@@ -360,8 +382,10 @@ class GenerateWebCommand extends Command
             ['Layout', $layoutState],
             ['Navigation', config('anvil.web.generate_nav', true) ? 'generated (runtime-discovered links)' : 'skipped'],
             ['Assets', $this->describeAssetsMode($assetsMode)],
-            ['Rows per page', $perPage.' (options: '.implode(', ', $this->perPageOptions($perPage)).')'],
-            ['Models', $this->option('skip-models') ? 'assumed to exist' : 'generated'],
+            ['Rows per page', $perPage . ' (options: ' . implode(', ', $this->perPageOptions($perPage)) . ')'],
+            // Previously "generated", which contradicted the pipeline's own
+            // "Phase 1: reuse existing models" two lines later.
+            ['Models', 'resolved from the model manifest (run anvil:forge --models to build them)'],
         ];
 
         if ($this->option('dry-run')) {
@@ -376,16 +400,16 @@ class GenerateWebCommand extends Command
         if (! file_exists($layoutPath) && ! $generatesLayout) {
             $this->components->warn(sprintf(
                 'The views will extend "%s", which does not exist at %s. Create it, drop --no-layout, or pass a '
-                    .'different --layout.',
+                    . 'different --layout.',
                 $layout,
-                str_replace(base_path().'/', '', $layoutPath),
+                str_replace(base_path() . '/', '', $layoutPath),
             ));
         }
 
         if ($assetsMode === 'cdn') {
             $this->components->warn(
                 'The Tailwind Play CDN compiles styles in the browser and is not for production. '
-                    .'Run `php artisan anvil:frontend --install`, then regenerate with --assets-mode=vite.',
+                    . 'Run `php artisan anvil:frontend --install`, then regenerate with --assets-mode=vite.',
             );
         }
 

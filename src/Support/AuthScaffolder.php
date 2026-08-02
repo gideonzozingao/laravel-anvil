@@ -86,22 +86,65 @@ class AuthScaffolder
     }
 
     /**
+     * The parts that will actually run, as display labels.
+     *
+     * The command prints these as its generation plan, so an operator can see that
+     * --no-2fa took effect before anything is written rather than inferring it from
+     * an absence in the results afterwards.
+     *
+     * @return list<string>
+     */
+    public function plannedParts(): array
+    {
+        return array_values(array_map(
+            static fn (ScaffoldPart $part): string => ScaffoldReport::humanise($part::class),
+            $this->supportedParts(),
+        ));
+    }
+
+    /**
+     * The parts skipped by the current configuration, as display labels.
+     *
+     * @return list<string>
+     */
+    public function skippedParts(): array
+    {
+        $labels = [];
+
+        foreach ($this->parts as $part) {
+            if (! $part->supports($this->context)) {
+                $labels[] = ScaffoldReport::humanise($part::class);
+            }
+        }
+
+        return $labels;
+    }
+
+    /**
+     * @param  (callable(string $label, int $index, int $total): void)|null  $onPart
+     *                                                                                Invoked before each part is emitted, so the command can drive a
+     *                                                                                progress bar without this class knowing anything about output.
      * @return list<array{type: string, name: string, status: string, reason?: string, path?: string}>
      *
      * @throws RuntimeException when the context is not viable
      */
-    public function generate(): array
+    public function generate(?callable $onPart = null): array
     {
         // Half a scaffold is worse than none: the operator gets a login screen
         // that cannot authenticate and no signal that anything was wrong.
         throw_if(($problem = $this->validate()) !== null, RuntimeException::class, $problem);
 
-        foreach ($this->parts as $part) {
-            if (! $part->supports($this->context)) {
-                continue;
+        $supported = $this->supportedParts();
+        $total = count($supported);
+        $index = 0;
+
+        foreach ($supported as $part) {
+            if ($onPart !== null) {
+                $onPart(ScaffoldReport::humanise($part::class), $index, $total);
             }
 
             $part->emit($this->context, $this->writer);
+            $index++;
         }
 
         return $this->writer->results();
@@ -122,16 +165,68 @@ class AuthScaffolder
     {
         $notes = [];
 
-        foreach ($this->parts as $part) {
-            if (! $part->supports($this->context)) {
-                continue;
-            }
-
-            foreach ($part->notes($this->context) as $note) {
+        foreach ($this->postInstallNotesByPart() as $partNotes) {
+            foreach ($partNotes as $note) {
                 $notes[] = $note;
             }
         }
 
-        return array_values(array_unique($notes));
+        return $notes;
+    }
+
+    /**
+     * The same notes, keyed by the part that raised them.
+     *
+     * Twenty-three consecutive bullets is a wall an operator scrolls past. Grouped
+     * by feature, the two-factor steps sit together and a whole block can be
+     * skipped once its feature is configured.
+     *
+     * Deduplication is global and first-writer-wins, so a note two parts both
+     * raise (casting a timestamp column, say) appears once, under the earlier part.
+     *
+     * @return array<string, list<string>>
+     */
+    public function postInstallNotesByPart(): array
+    {
+        $grouped = [];
+        $seen = [];
+
+        foreach ($this->supportedParts() as $part) {
+            $label = ScaffoldReport::humanise($part::class);
+            $grouped[$label] ??= [];
+
+            foreach ($part->notes($this->context) as $note) {
+                $key = $this->noteKey($note);
+
+                if (isset($seen[$key])) {
+                    continue;
+                }
+
+                $seen[$key] = true;
+                $grouped[$label][] = $note;
+            }
+        }
+
+        return array_filter($grouped, static fn (array $notes): bool => $notes !== []);
+    }
+
+    /**
+     * @return list<ScaffoldPart>
+     */
+    private function supportedParts(): array
+    {
+        return array_values(array_filter(
+            $this->parts,
+            fn (ScaffoldPart $part): bool => $part->supports($this->context),
+        ));
+    }
+
+    /**
+     * Notes are prose and may differ only in whitespace between parts, so compare
+     * on collapsed whitespace rather than the raw string.
+     */
+    private function noteKey(string $note): string
+    {
+        return strtolower(trim((string) preg_replace('/\s+/', ' ', $note)));
     }
 }

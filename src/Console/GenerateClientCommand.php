@@ -34,9 +34,13 @@ use Zuqongtech\LaravelAnvil\Support\OpenApiLocator;
  * This is the part that changes how teams work: the frontend has the contract
  * before the endpoint is finished, rather than waiting on a hand-written spec.
  */
+
 class GenerateClientCommand extends Command
 {
-    protected $signature = 'anvil:forge-client
+
+
+  protected $description = 'Generate a typed TypeScript client for the versioned JSON API';
+  protected $signature = 'anvil:forge-client
                             {--api-version=1 : API version to target (1, v1, V1)}
                             {--output=       : Output directory (default: resources/js/api)}
                             {--stack=ts      : Client flavour: ts}
@@ -47,109 +51,106 @@ class GenerateClientCommand extends Command
                             {--ignore=*      : Exclude specific tables}
                             {--force         : Overwrite existing files}
                             {--dry-run       : Preview without writing files}';
+  public function handle(): int
+  {
+    if (strtolower((string) $this->option('stack')) !== 'ts') {
+      $this->error('Only --stack=ts is supported right now.');
 
-    protected $description = 'Generate a typed TypeScript client for the versioned JSON API';
-
-    public function handle(): int
-    {
-        if (strtolower((string) $this->option('stack')) !== 'ts') {
-            $this->error('Only --stack=ts is supported right now.');
-
-            return self::FAILURE;
-        }
-
-        $connection = (string) ($this->option('connection') ?: config('database.default'));
-
-        try {
-            $inspector = new DatabaseInspector($connection);
-        } catch (\Throwable $e) {
-            $this->error('Could not connect to the database: '.$e->getMessage());
-
-            return self::FAILURE;
-        }
-
-        $version = OpenApiLocator::normaliseVersion($this->option('api-version'));
-        $profile = ApiVersionProfile::for($version);
-
-        $tables = $this->introspect($inspector);
-
-        if ($tables === []) {
-            $this->components->warn('No tables matched.');
-
-            return self::SUCCESS;
-        }
-
-        $dir = rtrim((string) ($this->option('output') ?: base_path('resources/js/api')), '/').'/'.$version;
-
-        $files = [
-            'client.ts' => $this->clientFile($profile),
-            'types.ts' => $this->typesFile($tables, $profile),
-            'index.ts' => $this->indexFile($tables),
-        ];
-
-        foreach ($tables as $meta) {
-            $files[$this->moduleName($meta).'.ts'] = $this->resourceFile($meta, $profile);
-        }
-
-        if ($this->option('hooks')) {
-            $files['hooks.ts'] = $this->hooksFile($tables, $profile);
-        }
-
-        return $this->write($dir, $files, $profile, count($tables));
+      return self::FAILURE;
     }
 
-    /**
-     * @return array<string, ModelMetadata>
-     */
-    private function introspect(DatabaseInspector $inspector): array
-    {
-        $schema = $this->option('schema') ?: null;
-        $only = array_map(strval(...), $this->option('tables') ?? []);
-        $ignore = array_merge(
-            (array) config('anvil.ignore_tables', []),
-            array_map(strval(...), $this->option('ignore') ?? []),
-        );
+    $connection = (string) ($this->option('connection') ?: config('database.default'));
 
-        $tables = [];
+    try {
+      $inspector = new DatabaseInspector($connection);
+    } catch (\Throwable $e) {
+      $this->error('Could not connect to the database: ' . $e->getMessage());
 
-        foreach ($inspector->getAllSchemaTables($schema) as $row) {
-            $table = (string) ($row['table'] ?? '');
-
-            if ($table === '' || in_array($table, $ignore, true)) {
-                continue;
-            }
-
-            if ($only !== [] && ! in_array($table, $only, true)) {
-                continue;
-            }
-
-            try {
-                $tables[$table] = ModelMetadata::fromTable($table, $inspector, $row['schema'] ?? $schema);
-            } catch (\Throwable) {
-                continue;
-            }
-        }
-
-        ksort($tables);
-
-        return $tables;
+      return self::FAILURE;
     }
 
-    // -----------------------------------------------------------------------
-    // client.ts
-    // -----------------------------------------------------------------------
+    $version = OpenApiLocator::normaliseVersion($this->option('api-version'));
+    $profile = ApiVersionProfile::for($version);
 
-    private function clientFile(ApiVersionProfile $profile): string
-    {
-        $base = OpenApiLocator::apiBasePath($profile->version);
-        $perPageParam = $profile->perPageParam();
-        $pageParam = $profile->pageParam();
-        $perPage = $profile->perPageDefault();
-        $max = $profile->perPageMax();
+    $tables = $this->introspect($inspector);
 
-        $meta = $this->paginationMetaType($profile);
+    if ($tables === []) {
+      $this->components->warn('No tables matched.');
 
-        return <<<TS
+      return self::SUCCESS;
+    }
+
+    $dir = rtrim((string) ($this->option('output') ?: base_path('resources/js/api')), '/') . '/' . $version;
+
+    $files = [
+      'client.ts' => $this->clientFile($profile),
+      'types.ts' => $this->typesFile($tables, $profile),
+      'index.ts' => $this->indexFile($tables),
+    ];
+
+    foreach ($tables as $meta) {
+      $files[$this->moduleName($meta) . '.ts'] = $this->resourceFile($meta, $profile);
+    }
+
+    if ($this->option('hooks')) {
+      $files['hooks.ts'] = $this->hooksFile($tables, $profile);
+    }
+
+    return $this->write($dir, $files, $profile, count($tables));
+  }
+
+  /**
+   * @return array<string, ModelMetadata>
+   */
+  private function introspect(DatabaseInspector $inspector): array
+  {
+    $schema = $this->option('schema') ?: null;
+    $only = array_map(strval(...), $this->option('tables') ?? []);
+    $ignore = array_merge(
+      (array) config('anvil.ignore_tables', []),
+      array_map(strval(...), $this->option('ignore') ?? []),
+    );
+
+    $tables = [];
+
+    foreach ($inspector->getAllSchemaTables($schema) as $row) {
+      $table = (string) ($row['table'] ?? '');
+
+      if ($table === '' || in_array($table, $ignore, true)) {
+        continue;
+      }
+
+      if ($only !== [] && ! in_array($table, $only, true)) {
+        continue;
+      }
+
+      try {
+        $tables[$table] = ModelMetadata::fromTable($table, $inspector, $row['schema'] ?? $schema);
+      } catch (\Throwable) {
+        continue;
+      }
+    }
+
+    ksort($tables);
+
+    return $tables;
+  }
+
+  // -----------------------------------------------------------------------
+  // client.ts
+  // -----------------------------------------------------------------------
+
+  private function clientFile(ApiVersionProfile $profile): string
+  {
+    $base = OpenApiLocator::apiBasePath($profile->version);
+    $perPageParam = $profile->perPageParam();
+    $pageParam = $profile->pageParam();
+    $perPage = $profile->perPageDefault();
+    $max = $profile->perPageMax();
+
+    $meta = $this->paginationMetaType($profile);
+
+    return <<<TS
 /**
  * Generated by zuqongtech/laravel-anvil — do not edit by hand.
  *
@@ -312,43 +313,43 @@ export const http = {
 };
 
 TS;
+  }
+
+  private function paginationMetaType(ApiVersionProfile $profile): string
+  {
+    $map = $profile->outboundMap(['current_page', 'last_page', 'per_page', 'total', 'from', 'to']);
+
+    $lines = [];
+
+    foreach (['current_page', 'last_page', 'per_page', 'total'] as $column) {
+      $lines[] = '  ' . ($map[$column] ?? $column) . ': number;';
     }
 
-    private function paginationMetaType(ApiVersionProfile $profile): string
-    {
-        $map = $profile->outboundMap(['current_page', 'last_page', 'per_page', 'total', 'from', 'to']);
-
-        $lines = [];
-
-        foreach (['current_page', 'last_page', 'per_page', 'total'] as $column) {
-            $lines[] = '  '.($map[$column] ?? $column).': number;';
-        }
-
-        foreach (['from', 'to'] as $column) {
-            $lines[] = '  '.($map[$column] ?? $column).': number | null;';
-        }
-
-        return "export interface PaginationMeta {\n".implode("\n", $lines)."\n}";
+    foreach (['from', 'to'] as $column) {
+      $lines[] = '  ' . ($map[$column] ?? $column) . ': number | null;';
     }
+
+    return "export interface PaginationMeta {\n" . implode("\n", $lines) . "\n}";
+  }
 
     // -----------------------------------------------------------------------
     // types.ts
     // -----------------------------------------------------------------------
 
-    /**
-     * @param  array<string, ModelMetadata>  $tables
-     */
-    private function typesFile(array $tables, ApiVersionProfile $profile): string
-    {
-        $blocks = [];
+  /**
+   * @param  array<string, ModelMetadata>  $tables
+   */
+  private function typesFile(array $tables, ApiVersionProfile $profile): string
+  {
+    $blocks = [];
 
-        foreach ($tables as $meta) {
-            $blocks[] = $this->modelInterface($meta, $profile);
-        }
+    foreach ($tables as $meta) {
+      $blocks[] = $this->modelInterface($meta, $profile);
+    }
 
-        $body = implode("\n\n", $blocks);
+    $body = implode("\n\n", $blocks);
 
-        return <<<TS
+    return <<<TS
 /**
  * Generated by zuqongtech/laravel-anvil — do not edit by hand.
  *
@@ -363,51 +364,51 @@ TS;
 {$body}
 
 TS;
+  }
+
+  private function modelInterface(ModelMetadata $meta, ApiVersionProfile $profile): string
+  {
+    $model = $meta->model;
+    $readable = [];
+    $writable = [];
+
+    foreach ($meta->columns as $column) {
+      $name = (string) $column['name'];
+
+      if (! $profile->isHidden($name)) {
+        $key = $profile->outboundMap([$name])[$name] ?? $name;
+        $readable[] = '  ' . $key . ': ' . $this->tsType($column) . ';';
+      }
+
+      if ($profile->isReadOnly($name) || $name === $meta->primaryKey || $profile->isHidden($name)) {
+        continue;
+      }
+
+      $key = array_flip($profile->inboundMap([$name]))[$name] ?? $name;
+      $optional = ($column['nullable'] ?? false) || ($column['default'] ?? null) !== null ? '?' : '';
+      $writable[] = '  ' . $key . $optional . ': ' . $this->tsType($column) . ';';
     }
 
-    private function modelInterface(ModelMetadata $meta, ApiVersionProfile $profile): string
-    {
-        $model = $meta->model;
-        $readable = [];
-        $writable = [];
+    // Relations are only present when eager-loaded.
+    $relations = [];
 
-        foreach ($meta->columns as $column) {
-            $name = (string) $column['name'];
+    foreach ($meta->foreignKeys as $fk) {
+      $column = (string) ($fk['column'] ?? '');
+      $method = $meta->belongsToName($column);
 
-            if (! $profile->isHidden($name)) {
-                $key = $profile->outboundMap([$name])[$name] ?? $name;
-                $readable[] = '  '.$key.': '.$this->tsType($column).';';
-            }
+      if ($method === null) {
+        continue;
+      }
 
-            if ($profile->isReadOnly($name) || $name === $meta->primaryKey || $profile->isHidden($name)) {
-                continue;
-            }
+      $related = Helpers::tableToModelName((string) $fk['referenced_table']);
+      $key = $profile->outboundMap([Str::snake($method)])[Str::snake($method)] ?? $method;
+      $relations[] = '  ' . $key . '?: ' . $related . ';';
+    }
 
-            $key = array_flip($profile->inboundMap([$name]))[$name] ?? $name;
-            $optional = ($column['nullable'] ?? false) || ($column['default'] ?? null) !== null ? '?' : '';
-            $writable[] = '  '.$key.$optional.': '.$this->tsType($column).';';
-        }
+    $readableBlock = implode("\n", array_merge($readable, $relations));
+    $writableBlock = $writable === [] ? '  [key: string]: never;' : implode("\n", $writable);
 
-        // Relations are only present when eager-loaded.
-        $relations = [];
-
-        foreach ($meta->foreignKeys as $fk) {
-            $column = (string) ($fk['column'] ?? '');
-            $method = $meta->belongsToName($column);
-
-            if ($method === null) {
-                continue;
-            }
-
-            $related = Helpers::tableToModelName((string) $fk['referenced_table']);
-            $key = $profile->outboundMap([Str::snake($method)])[Str::snake($method)] ?? $method;
-            $relations[] = '  '.$key.'?: '.$related.';';
-        }
-
-        $readableBlock = implode("\n", array_merge($readable, $relations));
-        $writableBlock = $writable === [] ? '  [key: string]: never;' : implode("\n", $writable);
-
-        return <<<TS
+    return <<<TS
 export interface {$model} {
 {$readableBlock}
 }
@@ -417,44 +418,44 @@ export interface {$model}Input {
 {$writableBlock}
 }
 TS;
-    }
+  }
 
-    /**
-     * @param  array<string, mixed>  $column
-     */
-    private function tsType(array $column): string
-    {
-        $type = strtolower((string) preg_replace('/\(.*\)/', '', (string) ($column['type'] ?? 'varchar')));
-        $nullable = ($column['nullable'] ?? false) ? ' | null' : '';
+  /**
+   * @param  array<string, mixed>  $column
+   */
+  private function tsType(array $column): string
+  {
+    $type = strtolower((string) preg_replace('/\(.*\)/', '', (string) ($column['type'] ?? 'varchar')));
+    $nullable = ($column['nullable'] ?? false) ? ' | null' : '';
 
-        $base = match (true) {
-            str_contains($type, 'bool') => 'boolean',
-            $type === 'tinyint' && str_contains(strtolower((string) $column['type']), '(1)') => 'boolean',
-            (bool) preg_match('/(int|serial)/', $type) => 'number',
-            (bool) preg_match('/(decimal|numeric|float|double|real|money)/', $type) => 'number',
-            str_contains($type, 'json') => 'Record<string, unknown>',
-            (bool) preg_match('/(date|time)/', $type) => 'string',
-            default => 'string',
-        };
+    $base = match (true) {
+      str_contains($type, 'bool') => 'boolean',
+      $type === 'tinyint' && str_contains(strtolower((string) $column['type']), '(1)') => 'boolean',
+      (bool) preg_match('/(int|serial)/', $type) => 'number',
+      (bool) preg_match('/(decimal|numeric|float|double|real|money)/', $type) => 'number',
+      str_contains($type, 'json') => 'Record<string, unknown>',
+      (bool) preg_match('/(date|time)/', $type) => 'string',
+      default => 'string',
+    };
 
-        return $base.$nullable;
-    }
+    return $base . $nullable;
+  }
 
-    // -----------------------------------------------------------------------
-    // Per-resource modules
-    // -----------------------------------------------------------------------
+  // -----------------------------------------------------------------------
+  // Per-resource modules
+  // -----------------------------------------------------------------------
 
-    private function resourceFile(ModelMetadata $meta, ApiVersionProfile $profile): string
-    {
-        $model = $meta->model;
-        $slug = Str::plural(Str::kebab($model));
-        $module = $this->moduleName($meta);
-        $fn = Str::camel($module);
-        $single = Str::camel(Str::singular($module));
-        $key = $meta->primaryKey ?? 'id';
-        $keyType = $this->keyType($meta);
+  private function resourceFile(ModelMetadata $meta, ApiVersionProfile $profile): string
+  {
+    $model = $meta->model;
+    $slug = Str::plural(Str::kebab($model));
+    $module = $this->moduleName($meta);
+    $fn = Str::camel($module);
+    $single = Str::camel(Str::singular($module));
+    $key = $meta->primaryKey ?? 'id';
+    $keyType = $this->keyType($meta);
 
-        $softDeletes = $meta->softDeletes ? <<<TS
+    $softDeletes = $meta->softDeletes ? <<<TS
 
 
 /** Restore a soft-deleted {$model}. */
@@ -466,7 +467,7 @@ export const forceDelete{$model} = (id: {$keyType}) =>
   http.delete<void>(\`/{$slug}/\${id}/force\`);
 TS : '';
 
-        return <<<TS
+    return <<<TS
 /**
  * Generated by zuqongtech/laravel-anvil — do not edit by hand.
  * {$model} — /{$slug}
@@ -492,43 +493,43 @@ export const delete{$model} = (id: {$keyType}) =>
   http.delete<void>(\`/{$slug}/\${id}\`);{$softDeletes}
 
 TS;
+  }
+
+  /**
+   * @param  array<string, ModelMetadata>  $tables
+   */
+  private function indexFile(array $tables): string
+  {
+    $exports = ["export * from './client';", "export * from './types';"];
+
+    foreach ($tables as $meta) {
+      $exports[] = "export * from './" . $this->moduleName($meta) . "';";
     }
 
-    /**
-     * @param  array<string, ModelMetadata>  $tables
-     */
-    private function indexFile(array $tables): string
-    {
-        $exports = ["export * from './client';", "export * from './types';"];
-
-        foreach ($tables as $meta) {
-            $exports[] = "export * from './".$this->moduleName($meta)."';";
-        }
-
-        if ($this->option('hooks')) {
-            $exports[] = "export * from './hooks';";
-        }
-
-        $body = implode("\n", $exports);
-
-        return "/** Generated by zuqongtech/laravel-anvil — do not edit by hand. */\n\n{$body}\n";
+    if ($this->option('hooks')) {
+      $exports[] = "export * from './hooks';";
     }
 
-    /**
-     * @param  array<string, ModelMetadata>  $tables
-     */
-    private function hooksFile(array $tables, ApiVersionProfile $profile): string
-    {
-        $blocks = [];
+    $body = implode("\n", $exports);
 
-        foreach ($tables as $meta) {
-            $model = $meta->model;
-            $module = $this->moduleName($meta);
-            $fnPlural = 'list'.$model.'s';
-            $keyType = $this->keyType($meta);
-            $queryKey = Str::kebab($module);
+    return "/** Generated by zuqongtech/laravel-anvil — do not edit by hand. */\n\n{$body}\n";
+  }
 
-            $blocks[] = <<<TS
+  /**
+   * @param  array<string, ModelMetadata>  $tables
+   */
+  private function hooksFile(array $tables, ApiVersionProfile $profile): string
+  {
+    $blocks = [];
+
+    foreach ($tables as $meta) {
+      $model = $meta->model;
+      $module = $this->moduleName($meta);
+      $fnPlural = 'list' . $model . 's';
+      $keyType = $this->keyType($meta);
+      $queryKey = Str::kebab($module);
+
+      $blocks[] = <<<TS
 export const {$model}Keys = {
   all: ['{$queryKey}'] as const,
   list: (params?: ListParams) => [...{$model}Keys.all, 'list', params ?? {}] as const,
@@ -579,11 +580,11 @@ export const useDelete{$model} = () => {
   });
 };
 TS;
-        }
+    }
 
-        $body = implode("\n\n", $blocks);
+    $body = implode("\n\n", $blocks);
 
-        return <<<TS
+    return <<<TS
 /**
  * Generated by zuqongtech/laravel-anvil — do not edit by hand.
  *
@@ -598,91 +599,91 @@ import type { ListParams } from './client';
 {$body}
 
 TS;
+  }
+
+  // -----------------------------------------------------------------------
+  // Helpers
+  // -----------------------------------------------------------------------
+
+  private function moduleName(ModelMetadata $meta): string
+  {
+    return Str::plural(Str::kebab($meta->model));
+  }
+
+  private function keyType(ModelMetadata $meta): string
+  {
+    foreach ($meta->columns as $column) {
+      if ((string) $column['name'] !== ($meta->primaryKey ?? 'id')) {
+        continue;
+      }
+
+      $type = strtolower((string) ($column['type'] ?? ''));
+
+      return preg_match('/(int|serial)/', $type) === 1 ? 'number' : 'string';
     }
 
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
+    return 'number | string';
+  }
 
-    private function moduleName(ModelMetadata $meta): string
-    {
-        return Str::plural(Str::kebab($meta->model));
+  /**
+   * @param  array<string, string>  $files
+   */
+  private function write(string $dir, array $files, ApiVersionProfile $profile, int $tableCount): int
+  {
+    $this->newLine();
+    $this->line('  <fg=cyan;options=bold>⚒  Anvil — TypeScript client</>');
+    $this->table(['', ''], [
+      ['Version', $profile->version],
+      ['Response case', $profile->responseCase()],
+      ['Page parameter', '?' . $profile->perPageParam() . '='],
+      ['Resources', (string) $tableCount],
+      ['Output', str_replace(base_path() . '/', '', $dir)],
+    ]);
+    $this->newLine();
+
+    $written = $skipped = 0;
+
+    foreach ($files as $name => $contents) {
+      $path = $dir . '/' . $name;
+      $exists = is_file($path);
+
+      if ($exists && ! $this->option('force')) {
+        $this->line("    <fg=gray>–</> {$name} <fg=gray>(exists)</>");
+        $skipped++;
+
+        continue;
+      }
+
+      if ($this->option('dry-run')) {
+        $this->line("    <fg=cyan>◌</> {$name}");
+
+        continue;
+      }
+
+      if (! is_dir($dir) && ! @mkdir($dir, 0755, true) && ! is_dir($dir)) {
+        $this->error("Could not create {$dir}");
+
+        return self::FAILURE;
+      }
+
+      if (file_put_contents($path, $contents) === false) {
+        $this->line("    <fg=red>✘</> {$name}");
+
+        return self::FAILURE;
+      }
+
+      $this->line("    <fg=green>✔</> {$name}");
+      $written++;
     }
 
-    private function keyType(ModelMetadata $meta): string
-    {
-        foreach ($meta->columns as $column) {
-            if ((string) $column['name'] !== ($meta->primaryKey ?? 'id')) {
-                continue;
-            }
+    $this->newLine();
+    $this->line("  {$written} written, {$skipped} skipped");
+    $this->newLine();
+    $this->line('  <options=bold>Usage</>');
+    $this->line('    <fg=gray>import { configure, list' . 'Users, ApiError } from \'@/api/' . $profile->version . '\';</>');
+    $this->line('    <fg=gray>configure({ baseUrl: import.meta.env.VITE_API_URL, getToken: () => localStorage.getItem(\'token\') });</>');
+    $this->newLine();
 
-            $type = strtolower((string) ($column['type'] ?? ''));
-
-            return preg_match('/(int|serial)/', $type) === 1 ? 'number' : 'string';
-        }
-
-        return 'number | string';
-    }
-
-    /**
-     * @param  array<string, string>  $files
-     */
-    private function write(string $dir, array $files, ApiVersionProfile $profile, int $tableCount): int
-    {
-        $this->newLine();
-        $this->line('  <fg=cyan;options=bold>⚒  Anvil — TypeScript client</>');
-        $this->table(['', ''], [
-            ['Version', $profile->version],
-            ['Response case', $profile->responseCase()],
-            ['Page parameter', '?'.$profile->perPageParam().'='],
-            ['Resources', (string) $tableCount],
-            ['Output', str_replace(base_path().'/', '', $dir)],
-        ]);
-        $this->newLine();
-
-        $written = $skipped = 0;
-
-        foreach ($files as $name => $contents) {
-            $path = $dir.'/'.$name;
-            $exists = is_file($path);
-
-            if ($exists && ! $this->option('force')) {
-                $this->line("    <fg=gray>–</> {$name} <fg=gray>(exists)</>");
-                $skipped++;
-
-                continue;
-            }
-
-            if ($this->option('dry-run')) {
-                $this->line("    <fg=cyan>◌</> {$name}");
-
-                continue;
-            }
-
-            if (! is_dir($dir) && ! @mkdir($dir, 0755, true) && ! is_dir($dir)) {
-                $this->error("Could not create {$dir}");
-
-                return self::FAILURE;
-            }
-
-            if (file_put_contents($path, $contents) === false) {
-                $this->line("    <fg=red>✘</> {$name}");
-
-                return self::FAILURE;
-            }
-
-            $this->line("    <fg=green>✔</> {$name}");
-            $written++;
-        }
-
-        $this->newLine();
-        $this->line("  {$written} written, {$skipped} skipped");
-        $this->newLine();
-        $this->line('  <options=bold>Usage</>');
-        $this->line('    <fg=gray>import { configure, list'.'Users, ApiError } from \'@/api/'.$profile->version.'\';</>');
-        $this->line('    <fg=gray>configure({ baseUrl: import.meta.env.VITE_API_URL, getToken: () => localStorage.getItem(\'token\') });</>');
-        $this->newLine();
-
-        return self::SUCCESS;
-    }
+    return self::SUCCESS;
+  }
 }

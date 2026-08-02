@@ -22,8 +22,19 @@ use Zuqongtech\LaravelAnvil\Support\ModelMetadata;
  * from the other end: a fatal redeclaration, an unparseable namespace, a login
  * that throws about bcrypt. The schema knows all of it up front.
  */
+
 class DoctorCommand extends Command
 {
+
+    protected $description = 'Check the schema for shapes that break code generation';
+    protected $signature = 'anvil:doctor
+                            {--connection=  : Database connection to inspect}
+                            {--schema=      : Schema(s) to inspect: name, csv list, or "all"}
+                            {--tables=*     : Limit the check to specific tables}
+                            {--ignore=*     : Exclude specific tables}
+                            {--data         : Also run checks that read row data (password hashes)}
+                            {--strict       : Exit non-zero when any error is found}
+                            {--json         : Output machine-readable JSON}';
     private const ERROR = 'error';
 
     private const WARNING = 'warning';
@@ -105,17 +116,6 @@ class DoctorCommand extends Command
         'push',
     ];
 
-    protected $signature = 'anvil:doctor
-                            {--connection=  : Database connection to inspect}
-                            {--schema=      : Schema(s) to inspect: name, csv list, or "all"}
-                            {--tables=*     : Limit the check to specific tables}
-                            {--ignore=*     : Exclude specific tables}
-                            {--data         : Also run checks that read row data (password hashes)}
-                            {--strict       : Exit non-zero when any error is found}
-                            {--json         : Output machine-readable JSON}';
-
-    protected $description = 'Check the schema for shapes that break code generation';
-
     /** @var list<array{severity: string, table: string, check: string, message: string, fix: string}> */
     private array $findings = [];
 
@@ -126,7 +126,7 @@ class DoctorCommand extends Command
         try {
             $inspector = new DatabaseInspector($connection);
         } catch (\Throwable $e) {
-            $this->error('Could not connect to the database: '.$e->getMessage());
+            $this->error('Could not connect to the database: ' . $e->getMessage());
 
             return self::FAILURE;
         }
@@ -184,7 +184,7 @@ class DoctorCommand extends Command
             try {
                 $tables[$table] = ModelMetadata::fromTable($table, $inspector, $row['schema'] ?? $schema);
             } catch (\Throwable $e) {
-                $this->add(self::ERROR, $table, 'introspection', 'Could not read the table: '.$e->getMessage(), 'Check permissions on this table.');
+                $this->add(self::ERROR, $table, 'introspection', 'Could not read the table: ' . $e->getMessage(), 'Check permissions on this table.');
             }
         }
 
@@ -216,7 +216,7 @@ class DoctorCommand extends Command
                 self::NOTE,
                 $meta->table,
                 'primary-key',
-                'Composite primary key ('.implode(', ', $meta->compositePrimaryKey).'). Eloquent has no first-class support.',
+                'Composite primary key (' . implode(', ', $meta->compositePrimaryKey) . '). Eloquent has no first-class support.',
                 'Generated models set $incrementing = false; route binding needs a custom resolveRouteBinding().',
             );
         }
@@ -366,7 +366,7 @@ class DoctorCommand extends Command
         }
 
         // A relation named after the child table colliding with a column here.
-        $columns = array_map(static fn (array $c): string => Str::camel((string) $c['name']), $meta->columns);
+        $columns = array_map(static fn(array $c): string => Str::camel((string) $c['name']), $meta->columns);
         $duplicates = array_values(array_diff_assoc($columns, array_unique($columns)));
 
         foreach (array_unique($duplicates) as $duplicate) {
@@ -386,7 +386,7 @@ class DoctorCommand extends Command
      */
     private function checkAuthenticatable(ModelMetadata $meta, string $connection): void
     {
-        $columns = array_map(static fn (array $c): string => (string) $c['name'], $meta->columns);
+        $columns = array_map(static fn(array $c): string => (string) $c['name'], $meta->columns);
 
         if (! in_array('password', $columns, true)) {
             return;
@@ -398,7 +398,7 @@ class DoctorCommand extends Command
             'authenticatable',
             'Has a password column, so Laravel may authenticate against it.',
             'The model must extend Illuminate\\Foundation\\Auth\\User, not Model, or SessionGuard throws a TypeError. '
-                .'Add it to anvil.protected_models so regeneration cannot clobber it.',
+                . 'Add it to anvil.protected_models so regeneration cannot clobber it.',
         );
 
         if (! $this->option('data')) {
@@ -426,12 +426,12 @@ class DoctorCommand extends Command
                     self::ERROR,
                     $meta->table,
                     'password-hash',
-                    "{$bad} of the first ".count($rows).' password value(s) are not a recognised hash.',
+                    "{$bad} of the first " . count($rows) . ' password value(s) are not a recognised hash.',
                     'Login throws "This password does not use the Bcrypt algorithm". Rehash the rows, or check your factories are not seeding plaintext.',
                 );
             }
         } catch (\Throwable $e) {
-            $this->add(self::NOTE, $meta->table, 'password-hash', 'Could not sample password values: '.$e->getMessage(), '');
+            $this->add(self::NOTE, $meta->table, 'password-hash', 'Could not sample password values: ' . $e->getMessage(), '');
         }
     }
 
@@ -494,7 +494,7 @@ class DoctorCommand extends Command
     private function checkSchemaNames(array $tables): void
     {
         $schemas = array_unique(array_filter(array_map(
-            static fn (ModelMetadata $meta): ?string => $meta->schema,
+            static fn(ModelMetadata $meta): ?string => $meta->schema,
             $tables,
         )));
 
@@ -504,7 +504,7 @@ class DoctorCommand extends Command
                     self::WARNING,
                     (string) $schema,
                     'reserved-word',
-                    "Schema \"{$schema}\" is a PHP reserved word, so App\\Models\\".Str::studly((string) $schema).' is not a legal namespace.',
+                    "Schema \"{$schema}\" is a PHP reserved word, so App\\Models\\" . Str::studly((string) $schema) . ' is not a legal namespace.',
                     'Anvil suffixes it (PublicSchema). Regenerate every model together, since the FQCN changes on both sides of each relation.',
                 );
             }
@@ -560,7 +560,7 @@ class DoctorCommand extends Command
         ksort($grouped);
 
         foreach ($grouped as $table => $findings) {
-            $this->line('  <options=bold>'.$table.'</>');
+            $this->line('  <options=bold>' . $table . '</>');
 
             foreach ($findings as $finding) {
                 [$icon, $colour] = match ($finding['severity']) {
@@ -597,6 +597,6 @@ class DoctorCommand extends Command
 
     private function countOf(string $severity): int
     {
-        return count(array_filter($this->findings, static fn (array $f): bool => $f['severity'] === $severity));
+        return count(array_filter($this->findings, static fn(array $f): bool => $f['severity'] === $severity));
     }
 }

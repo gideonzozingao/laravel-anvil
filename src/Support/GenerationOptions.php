@@ -34,9 +34,50 @@ use RuntimeException;
  *     'connection' => env('DB_INTROSPECTION_CONNECTION', null),
  *
  * which made getConnection(): string return null and throw a TypeError.
+ *
+ * A NOTE ON ARRAY KEYS
+ *
+ * toArray() emits snake_case keys that do not all match the CLI flag names:
+ * --openapi becomes 'open_api'. A caller that hand-merged the flag spelling
+ *
+ *     GenerationOptions::fromArray(array_merge($options->toArray(), [
+ *         'openapi' => false,
+ *     ]));
+ *
+ * produced an array carrying BOTH 'open_api' => true and 'openapi' => false.
+ * fromArray() read 'open_api' and the override was silently discarded, which is
+ * why `anvil:forge --all` still ran the OpenAPI generators it intended to
+ * delegate. Use with() instead of hand-merging: it canonicalises the incoming
+ * keys first, so the override lands on the key fromArray() actually reads.
  */
 final class GenerationOptions implements \Stringable
 {
+    /**
+     * CLI-flag spellings mapped onto the canonical toArray() key. Merging an
+     * override under the left-hand spelling silently missed before.
+     *
+     * @var array<string, string>
+     */
+    private const KEY_ALIASES = [
+        'openapi' => 'open_api',
+        'openapi_format' => 'open_api_format',
+        'openapi_single_file' => 'open_api_single_file',
+        'openapi_ui' => 'open_api_ui',
+        'form-requests' => 'form_requests',
+        'api-routes' => 'api_routes',
+        'api-version' => 'api_version',
+        'dry-run' => 'dry_run',
+        'with-phpdoc' => 'with_phpdoc',
+        'with-inverse' => 'with_inverse',
+        'with-constraints' => 'with_constraints',
+        'validate-fk' => 'validate_fk',
+        'skip-models' => 'skip_models',
+        'listener-style' => 'listener_style',
+        'queued-listeners' => 'queued_listeners',
+        'assets-mode' => 'assets_mode',
+        'schema' => 'schemas',
+    ];
+
     public function __construct(
         // ── Original artifact flags ──────────────────────────────────────────
         public bool $models = true,
@@ -96,6 +137,7 @@ final class GenerationOptions implements \Stringable
         public string $listenerStyle = 'per-event',
         public bool $queuedListeners = false,
         public bool $skipModels = false,
+        public string $assetsMode = 'cdn',
     ) {}
 
     // -----------------------------------------------------------------------
@@ -178,6 +220,7 @@ final class GenerationOptions implements \Stringable
             listenerStyle: (string) (self::opt($command, 'listener-style') ?: 'per-event'),
             queuedListeners: (bool) self::opt($command, 'queued-listeners'),
             skipModels: $skipModels,
+            assetsMode: (string) (self::opt($command, 'assets-mode') ?: 'cdn'),
         );
     }
 
@@ -200,6 +243,8 @@ final class GenerationOptions implements \Stringable
 
     public static function fromArray(array $options): self
     {
+        $options = self::canonicalise($options);
+
         return new self(
             models: $options['models'] ?? true,
             controllers: $options['controllers'] ?? false,
@@ -243,7 +288,75 @@ final class GenerationOptions implements \Stringable
             listenerStyle: $options['listener_style'] ?? 'per-event',
             queuedListeners: $options['queued_listeners'] ?? false,
             skipModels: $options['skip_models'] ?? false,
+            assetsMode: $options['assets_mode'] ?? 'cdn',
         );
+    }
+
+    /**
+     * A copy with the given overrides applied.
+     *
+     * Use this instead of `fromArray(array_merge($opts->toArray(), […]))`. The
+     * overrides are canonicalised before merging, so passing the CLI spelling
+     * ('openapi') lands on the key fromArray() reads ('open_api') rather than
+     * sitting alongside it and being ignored.
+     *
+     * @param  array<string, mixed>  $overrides
+     */
+    public function with(array $overrides): self
+    {
+        return self::fromArray(array_merge($this->toArray(), self::canonicalise($overrides)));
+    }
+
+    /**
+     * A copy with every API and OpenAPI artifact switched off.
+     *
+     * anvil:forge delegates that work to anvil:api, and expressing the intent as a
+     * named method removes the chance of the override missing its key — which is
+     * exactly what happened when it was four hand-merged array entries.
+     */
+    public function withoutApiArtifacts(): self
+    {
+        return $this->with([
+            'api' => false,
+            'open_api' => false,
+            'open_api_single_file' => false,
+            'open_api_ui' => false,
+            'api_routes' => false,
+        ]);
+    }
+
+    /**
+     * Keys fromArray() does not consume, after aliasing. Useful in a test or a
+     * --verbose run to catch a typo'd override rather than having it ignored.
+     *
+     * @param  array<string, mixed>  $options
+     * @return list<string>
+     */
+    public static function unknownKeys(array $options): array
+    {
+        $known = array_keys(self::fromArray([])->toArray());
+        $given = array_keys(self::canonicalise($options));
+
+        return array_values(array_diff($given, $known));
+    }
+
+    /**
+     * Rewrite alias keys onto their canonical form, dropping the alias so a merge
+     * cannot leave both spellings in the array.
+     *
+     * @param  array<string, mixed>  $options
+     * @return array<string, mixed>
+     */
+    private static function canonicalise(array $options): array
+    {
+        foreach (self::KEY_ALIASES as $alias => $canonical) {
+            if (array_key_exists($alias, $options)) {
+                $options[$canonical] = $options[$alias];
+                unset($options[$alias]);
+            }
+        }
+
+        return $options;
     }
 
     // -----------------------------------------------------------------------
@@ -326,10 +439,29 @@ final class GenerationOptions implements \Stringable
 
     /**
      * Namespace for generated Livewire components, e.g. "App\Livewire".
+     *
+     * Both config roots are consulted because the package has historically read
+     * two different keys for this one fact: this method looked at
+     * anvil.web.livewire.namespace while the pipeline's plan block printed
+     * anvil.livewire.namespace. Configure either and both now agree.
      */
     public function getLivewireNamespace(): string
     {
-        return (string) self::cfg('web.livewire.namespace', 'App\\Livewire');
+        return (string) (
+            self::cfg('web.livewire.namespace')
+            ?? self::cfg('livewire.namespace', 'App\\Livewire')
+        );
+    }
+
+    /**
+     * Directory the component's own Blade views are written to.
+     */
+    public function getLivewireViewPath(): string
+    {
+        return (string) (
+            self::cfg('web.livewire.view_path')
+            ?? self::cfg('livewire.view_path', 'resources/views/livewire')
+        );
     }
 
     public function hasSpecificTables(): bool
@@ -404,7 +536,20 @@ final class GenerationOptions implements \Stringable
 
     public function hasAnyArtifacts(): bool
     {
-        return $this->models || $this->controllers || $this->resources
+        return $this->models || $this->hasDependentArtifacts();
+    }
+
+    /**
+     * Anything that needs a model to already exist.
+     *
+     * Separate from hasAnyArtifacts() because $models defaults to true, so
+     * "did the operator ask for anything besides models?" could not be answered
+     * from hasAnyArtifacts() alone — and a pipeline that used it to decide whether
+     * to run the model phase therefore never ran it.
+     */
+    public function hasDependentArtifacts(): bool
+    {
+        return $this->controllers || $this->resources
             || $this->observers || $this->policies || $this->formRequests
             || $this->services || $this->repositories || $this->gates
             || $this->apiRoutes || $this->factories || $this->seeders
@@ -490,6 +635,7 @@ final class GenerationOptions implements \Stringable
             'listener_style' => $this->listenerStyle,
             'queued_listeners' => $this->queuedListeners,
             'skip_models' => $this->skipModels,
+            'assets_mode' => $this->assetsMode,
         ];
     }
 

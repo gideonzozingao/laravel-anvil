@@ -7,9 +7,11 @@ namespace Zuqongtech\LaravelAnvil\Console;
 use Illuminate\Console\Command;
 use Livewire\Component;
 use PragmaRX\Google2FA\Google2FA;
+use Zuqongtech\LaravelAnvil\Console\Concerns\RendersScaffoldOutput;
 use Zuqongtech\LaravelAnvil\Support\Auth\Ui;
 use Zuqongtech\LaravelAnvil\Support\AuthScaffolder;
 use Zuqongtech\LaravelAnvil\Support\DatabaseInspector;
+use Zuqongtech\LaravelAnvil\Support\ScaffoldReport;
 
 /**
  * Scaffolds a complete authentication + authorization layer as Livewire 3
@@ -26,11 +28,17 @@ use Zuqongtech\LaravelAnvil\Support\DatabaseInspector;
  * exist on the users table, the guard must be configured, and the packages the
  * generated code imports must be installed. Generating code that cannot possibly
  * run is worse than refusing.
+ *
+ * Output follows the same shape as anvil:forge-webapp — pre-flight, configuration
+ * table, warnings, connection, generation plan, progress, grouped summary, tail,
+ * next steps — via RendersScaffoldOutput. The two commands previously looked like
+ * different tools, and the sequence is deliberate: warnings come after the table
+ * so the configuration they refer to is still on screen.
  */
+
 class GenerateAuthCommand extends Command
 {
-    /** Columns the generated components reference directly. */
-    private const REQUIRED_COLUMNS = ['email', 'password'];
+    use RendersScaffoldOutput;
 
     protected $signature = 'anvil:forge-auth
                             {--connection=       : Database connection to introspect}
@@ -52,11 +60,12 @@ class GenerateAuthCommand extends Command
                             {--dry-run           : Preview without writing files}';
 
     protected $description = 'Scaffold Livewire authentication (login, register, 2FA, lockout) and RBAC from the users table';
+    /** Columns the generated components reference directly. */
+    private const REQUIRED_COLUMNS = ['email', 'password'];
 
     public function handle(): int
     {
-        $this->info('🔐 Anvil — Authentication Scaffold');
-        $this->newLine();
+        $this->info('🔧 Running pre-flight checks...');
 
         if (! class_exists(Component::class)) {
             $this->error('This command generates Livewire 3 components. Install it first:');
@@ -90,7 +99,7 @@ class GenerateAuthCommand extends Command
         try {
             $inspector = new DatabaseInspector($connection);
         } catch (\Throwable $e) {
-            $this->error('Could not connect to the database: '.$e->getMessage());
+            $this->error('Could not connect to the database: ' . $e->getMessage());
 
             return self::FAILURE;
         }
@@ -112,9 +121,74 @@ class GenerateAuthCommand extends Command
             return self::FAILURE;
         }
 
-        $this->warnAboutOptionalGaps($columns);
+        $scaffolder = new AuthScaffolder($inspector, $this->scaffolderConfig($connection, $schema, $usersTable, $guard, $accent));
 
-        $scaffolder = new AuthScaffolder($inspector, [
+        // The context knows things the checks above cannot: whether the RBAC
+        // tables have the shape the middleware assumes, whether --default-role
+        // exists, whether the schema/guard pair is coherent. Asking it was
+        // always the intent; nothing was calling it.
+        if (($problem = $scaffolder->validate()) !== null) {
+            $this->error($problem);
+
+            return self::FAILURE;
+        }
+
+        $this->info("✅ Pre-flight checks passed.\n");
+
+        // ── Heading, configuration, warnings ─────────────────────────────────
+        $this->renderHeading('🔐', 'Authentication Scaffold');
+        $this->renderConfigTable($this->configRows($inspector, $scaffolder, $connection, $usersTable, $schema));
+        $this->renderWarnings($this->optionalGaps($columns));
+
+        // ── Connection, mode, plan ───────────────────────────────────────────
+        $this->renderConnectionLine($connection, $inspector->getDriver(), $inspector->getDatabaseName());
+        $this->renderModeLine(
+            '🔐',
+            'Auth scaffold',
+            $guard,
+            'Livewire components, guest layout, RBAC middleware and auth routes',
+        );
+
+        $this->renderGenerationPlan(
+            $scaffolder->plannedParts(),
+            $this->planDetails($scaffolder, $guard, $schema, $usersTable),
+        );
+
+        // ── Generate, with a progress bar over the parts ──────────────────────
+        $parts = $scaffolder->plannedParts();
+        $this->startProgress(count($parts), 'Starting...');
+
+        try {
+            $results = $scaffolder->generate(function (string $label): void {
+                $this->advanceProgress($label);
+            });
+        } catch (\RuntimeException $e) {
+            $this->finishProgress();
+            $this->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        $this->finishProgress();
+
+        return $this->report($results, $scaffolder, $guard);
+    }
+
+    // -----------------------------------------------------------------------
+    // Configuration
+    // -----------------------------------------------------------------------
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function scaffolderConfig(
+        string $connection,
+        ?string $schema,
+        string $usersTable,
+        string $guard,
+        string $accent,
+    ): array {
+        return [
             'connection' => $connection,
             'schema' => $schema,
             'users_table' => $usersTable,
@@ -132,29 +206,7 @@ class GenerateAuthCommand extends Command
             'force' => (bool) $this->option('force'),
             'backup' => (bool) $this->option('backup'),
             'dry_run' => (bool) $this->option('dry-run'),
-        ]);
-
-        // The context knows things the checks above cannot: whether the RBAC
-        // tables have the shape the middleware assumes, whether --default-role
-        // exists, whether the schema/guard pair is coherent. Asking it was
-        // always the intent; nothing was calling it.
-        if (($problem = $scaffolder->validate()) !== null) {
-            $this->error($problem);
-
-            return self::FAILURE;
-        }
-
-        $this->summarise($inspector, $scaffolder, $connection, $usersTable, $schema);
-
-        try {
-            $results = $scaffolder->generate();
-        } catch (\RuntimeException $e) {
-            $this->error($e->getMessage());
-
-            return self::FAILURE;
-        }
-
-        return $this->report($results, $scaffolder);
+        ];
     }
 
     // -----------------------------------------------------------------------
@@ -174,7 +226,7 @@ class GenerateAuthCommand extends Command
             return sprintf(
                 "Auth guard '%s' is not defined in config/auth.php.%s",
                 $guard,
-                $guards === [] ? '' : "\n   Configured guards: ".implode(', ', array_keys($guards)),
+                $guards === [] ? '' : "\n   Configured guards: " . implode(', ', array_keys($guards)),
             );
         }
 
@@ -199,7 +251,7 @@ class GenerateAuthCommand extends Command
         if (is_string($model) && ! class_exists($model)) {
             return sprintf(
                 "Auth provider '%s' points at model %s, which does not exist.\n"
-                    .'   Generate it first (anvil:forge --models --tables=%s) or fix config/auth.php.',
+                    . '   Generate it first (anvil:forge --models --tables=%s) or fix config/auth.php.',
                 $providerName,
                 $model,
                 (string) $this->option('users-table'),
@@ -225,7 +277,7 @@ class GenerateAuthCommand extends Command
         // the candidates rather than just refusing.
         $candidates = array_values(array_filter(
             $tables,
-            static fn (string $table): bool => str_contains(strtolower($table), 'user')
+            static fn(string $table): bool => str_contains(strtolower($table), 'user')
                 || str_contains(strtolower($table), 'account'),
         ));
 
@@ -234,7 +286,7 @@ class GenerateAuthCommand extends Command
             $usersTable,
             $connection,
             $schema !== null ? " in schema '{$schema}'" : '',
-            $candidates === [] ? '' : "\n   Candidates: ".implode(', ', array_slice($candidates, 0, 8)),
+            $candidates === [] ? '' : "\n   Candidates: " . implode(', ', array_slice($candidates, 0, 8)),
         );
     }
 
@@ -259,8 +311,8 @@ class GenerateAuthCommand extends Command
 
         return sprintf(
             "Table '%s' is missing the column(s) the generated components authenticate against: %s.\n"
-                .'   Anvil would emit code referencing attributes that do not exist. Add the columns, or point '
-                .'--users-table at the right table.',
+                . '   Anvil would emit code referencing attributes that do not exist. Add the columns, or point '
+                . '--users-table at the right table.',
             $usersTable,
             implode(', ', $missing),
         );
@@ -270,9 +322,14 @@ class GenerateAuthCommand extends Command
      * Non-fatal gaps: the scaffold still works, but a feature will be inert until
      * the operator acts. Better said now than discovered in production.
      *
+     * Returned rather than printed, so the caller controls where they appear —
+     * these used to print above the configuration table, pushing the very settings
+     * they refer to off the top of a short terminal.
+     *
      * @param  list<string>  $columns
+     * @return list<string>
      */
-    private function warnAboutOptionalGaps(array $columns): void
+    private function optionalGaps(array $columns): array
     {
         $warnings = [];
 
@@ -282,7 +339,7 @@ class GenerateAuthCommand extends Command
 
         if (! $this->containsInsensitive($columns, 'email_verified_at') && ! $this->option('no-verification')) {
             $warnings[] = 'No "email_verified_at" column — email verification cannot work. '
-                .'Add the column or pass --no-verification.';
+                . 'Add the column or pass --no-verification.';
         }
 
         if (! $this->option('no-lockout')) {
@@ -295,8 +352,8 @@ class GenerateAuthCommand extends Command
             }
 
             if ($lockoutColumns !== []) {
-                $warnings[] = 'Missing lockout column(s) '.implode(', ', $lockoutColumns)
-                    .' — a migration is generated for them; run it before signing in, or pass --no-lockout.';
+                $warnings[] = 'Missing lockout column(s) ' . implode(', ', $lockoutColumns)
+                    . ' — a migration is generated for them; run it before signing in, or pass --no-lockout.';
             }
         }
 
@@ -306,28 +363,22 @@ class GenerateAuthCommand extends Command
 
         if (! $this->option('no-2fa') && ! class_exists(Google2FA::class)) {
             $warnings[] = 'pragmarx/google2fa is not installed; the generated TwoFactorAuthenticationService '
-                .'will not resolve until you run: composer require pragmarx/google2fa';
+                . 'will not resolve until you run: composer require pragmarx/google2fa';
         }
 
         // Silent double-hashing is the single most common auth bug in generated
         // code: a `hashed` cast is idempotent, a hand-rolled mutator is not.
-        $model = config('auth.providers.'.(config("auth.guards.{$this->option('guard')}.provider", 'users')).'.model');
+        $model = config('auth.providers.' . (config("auth.guards.{$this->option('guard')}.provider", 'users')) . '.model');
 
         if (is_string($model) && class_exists($model) && method_exists($model, 'setPasswordAttribute')) {
             $warnings[] = sprintf(
                 '%s defines setPasswordAttribute() — the generated register form calls Hash::make(), so the '
-                    .'mutator would hash the hash. Remove the mutator and use the "hashed" cast instead.',
+                    . 'mutator would hash the hash. Remove the mutator and use the "hashed" cast instead.',
                 class_basename($model),
             );
         }
 
-        foreach ($warnings as $warning) {
-            $this->components->warn($warning);
-        }
-
-        if ($warnings !== []) {
-            $this->newLine();
-        }
+        return $warnings;
     }
 
     /**
@@ -348,21 +399,24 @@ class GenerateAuthCommand extends Command
     // Output
     // -----------------------------------------------------------------------
 
-    private function summarise(
+    /**
+     * @return array<int, array{0: string, 1: string|null}>
+     */
+    private function configRows(
         DatabaseInspector $inspector,
         AuthScaffolder $scaffolder,
         string $connection,
         string $usersTable,
         ?string $schema,
-    ): void {
-        $layout = $this->option('layout') ?: 'layouts.guest (generated)';
+    ): array {
+        $skipped = $scaffolder->skippedParts();
 
         $rows = [
-            ['Connection', $connection.' ('.$inspector->getDriver().')'],
-            ['Users table', ($schema !== null ? $schema.'.' : '').$usersTable],
+            ['Connection', $connection . ' (' . $inspector->getDriver() . ')'],
+            ['Users table', ($schema !== null ? $schema . '.' : '') . $usersTable],
             ['Guard', (string) $this->option('guard')],
             ['Components', trim((string) $this->option('namespace'), '\\')],
-            ['Guest layout', (string) $layout],
+            ['Guest layout', $this->option('layout') ?: 'layouts.guest (generated)'],
             ['Accent', (string) $this->option('accent')],
             ['Dark mode', $this->option('dark') ? 'toggle included' : 'follows system only'],
             ['Two-factor', $this->option('no-2fa') ? 'off' : 'challenge + setup'],
@@ -371,76 +425,66 @@ class GenerateAuthCommand extends Command
             ['RBAC', $scaffolder->rbacDetected()
                 ? 'roles + permissions tables detected'
                 : 'not detected — helpers assume Role/Permission models'],
+            ['Skipped', $skipped === [] ? null : implode(', ', $skipped)],
         ];
 
         if ($this->option('dry-run')) {
             $rows[] = ['Mode', 'dry run — no files will be written'];
         }
 
-        $this->table(['', ''], $rows);
-        $this->newLine();
+        return $rows;
+    }
+
+    /**
+     * @return array<string, string|null>
+     */
+    private function planDetails(
+        AuthScaffolder $scaffolder,
+        string $guard,
+        ?string $schema,
+        string $usersTable,
+    ): array {
+        $namespace = trim((string) $this->option('namespace'), '\\');
+
+        return [
+            'Guard' => $guard,
+            'Users table' => ($schema !== null ? $schema . '.' : '') . $usersTable,
+            'Components' => $namespace . '\\',
+            'Views' => 'resources/views/auth/ (login, register, forgot-password, reset-password, verify-email)',
+            'Guest layout' => $this->option('layout') ?: 'resources/views/layouts/guest.blade.php',
+            'Route file' => 'routes/auth.php',
+            'Middleware' => 'EnsureUserHasRole, EnsureUserHasPermission',
+            'Provider' => 'App\\Providers\\AnvilAuthServiceProvider',
+            'Migrations' => $this->option('no-lockout') && $this->option('no-2fa')
+                ? null
+                : 'database/migrations/ (login security and 2FA columns)',
+            'Skipped' => $scaffolder->skippedParts() === []
+                ? null
+                : implode(', ', $scaffolder->skippedParts()),
+        ];
     }
 
     /**
      * @param  list<array{type: string, name: string, status: string, reason?: string}>  $results
      */
-    private function report(array $results, AuthScaffolder $scaffolder): int
+    private function report(array $results, AuthScaffolder $scaffolder, string $guard): int
     {
-        $counts = ['success' => 0, 'skipped' => 0, 'dry-run' => 0, 'failed' => 0];
-        $unknown = 0;
+        $report = ScaffoldReport::fromResults($results);
 
-        foreach ($results as $result) {
-            $status = $result['status'] ?? 'success';
+        $this->renderItemisedResults($results);
+        $this->renderSummary($report);
 
-            // An unrecognised status used to be counted into a bucket the summary
-            // line never printed, so the totals silently disagreed with the list.
-            if (array_key_exists($status, $counts)) {
-                $counts[$status]++;
-            } else {
-                $unknown++;
-            }
+        $this->renderCompletion('🔐', sprintf('Auth scaffold complete [%s].', $guard), [
+            'Components' => trim((string) $this->option('namespace'), '\\') . '\\',
+            'Views' => 'resources/views/auth/',
+            'Routes' => 'routes/auth.php (require it from routes/web.php)',
+            'Middleware' => 'App\\Http\\Middleware\\ (role, permission)',
+        ]);
 
-            $icon = match ($status) {
-                'success' => '<fg=green>✔</>',
-                'dry-run' => '<fg=cyan>◌</>',
-                'skipped' => '<fg=gray>–</>',
-                'failed' => '<fg=red>✘</>',
-                default => '<fg=yellow>?</>',
-            };
-
-            $this->line(sprintf(
-                '  %s %-11s %s%s',
-                $icon,
-                $result['type'],
-                $result['name'],
-                isset($result['reason']) ? " <fg=gray>({$result['reason']})</>" : '',
-            ));
-        }
-
-        $this->newLine();
-        $this->line(sprintf(
-            '  <options=bold>%d written</>   %d skipped   %d previewed   %s%s',
-            $counts['success'],
-            $counts['skipped'],
-            $counts['dry-run'],
-            $counts['failed'] > 0 ? "<fg=red>{$counts['failed']} failed</>" : '0 failed',
-            $unknown > 0 ? "   <fg=yellow>{$unknown} unreported</>" : '',
-        ));
-
-        $notes = $scaffolder->postInstallNotes();
-
-        if ($notes !== []) {
-            $this->newLine();
-            $this->line('  <options=bold>Next steps</>');
-
-            foreach ($notes as $note) {
-                $this->line('   • '.$note);
-            }
-        }
-
-        $this->newLine();
+        $this->renderNextSteps($scaffolder->postInstallNotesByPart());
+        $this->renderDone((bool) $this->option('dry-run'));
 
         // A partial scaffold is not a success: exit non-zero so CI notices.
-        return $counts['failed'] > 0 ? self::FAILURE : self::SUCCESS;
+        return $report->hasFailures() ? self::FAILURE : self::SUCCESS;
     }
 }

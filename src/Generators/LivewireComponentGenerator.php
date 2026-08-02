@@ -423,7 +423,7 @@ use Livewire\\Component;
 
 class Form extends Component
 {
-    public int|string|null \$recordId = null;
+    public int|string|null \$recordId;
 
     public bool \$editing = false;
 
@@ -770,9 +770,19 @@ BLADE;
 
             $raw = strtolower(preg_replace('/\(.*\)/', '', $c['type'] ?? ''));
             $isText = in_array($raw, [
-                'char', 'character', 'varchar', 'character varying', 'string',
-                'text', 'tinytext', 'mediumtext', 'longtext', 'citext', 'clob',
-                'nchar', 'nvarchar',
+                'char',
+                'character',
+                'varchar',
+                'character varying',
+                'string',
+                'text',
+                'tinytext',
+                'mediumtext',
+                'longtext',
+                'citext',
+                'clob',
+                'nchar',
+                'nvarchar',
             ], true);
 
             if ($isText) {

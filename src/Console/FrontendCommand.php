@@ -22,6 +22,9 @@ use Zuqongtech\LaravelAnvil\Support\FrontendInstaller;
  */
 final class FrontendCommand extends Command
 {
+
+
+    protected $description = 'Check or install the frontend assets used by the Anvil web scaffold';
     protected $signature = 'anvil:frontend
         {--check : Report the current state and exit without changing anything}
         {--install : Install whatever is missing}
@@ -29,9 +32,6 @@ final class FrontendCommand extends Command
         {--tailwind-version= : Tailwind major version to install when missing (3 or 4)}
         {--no-package-manager : Write config files but only print the composer/npm commands}
         {--dry-run : Show what would happen without writing or installing}';
-
-    protected $description = 'Check or install the frontend assets used by the Anvil web scaffold';
-
     public function handle(): int
     {
         $detector = new FrontendDetector;
@@ -41,7 +41,7 @@ final class FrontendCommand extends Command
         $this->components->info('Anvil — frontend assets');
 
         foreach ($state->summary() as $note) {
-            $this->line('  <fg=gray>·</> '.$note);
+            $this->line('  <fg=gray>·</> ' . $note);
         }
 
         $missing = [];
@@ -63,7 +63,7 @@ final class FrontendCommand extends Command
         }
 
         if (! (bool) $this->option('install')) {
-            $this->components->warn('Missing: '.implode(', ', $missing));
+            $this->components->warn('Missing: ' . implode(', ', $missing));
             $this->line('  Run <fg=yellow>php artisan anvil:frontend --install</> to set them up,');
             $this->line('  or generate with <fg=yellow>--assets-mode=cdn</> to skip the asset build entirely.');
 
@@ -77,7 +77,7 @@ final class FrontendCommand extends Command
             runPackageManager: ! (bool) $this->option('no-package-manager'),
         );
 
-        $installer->onOutput(fn (string $line) => $this->line('  <fg=gray>'.$line.'</>'));
+        $installer->onOutput(fn(string $line) => $this->line('  <fg=gray>' . $line . '</>'));
 
         $ok = true;
 

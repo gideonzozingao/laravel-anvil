@@ -9,11 +9,27 @@ use Zuqongtech\LaravelAnvil\Console\Concerns\RunsGenerationPipeline;
 use Zuqongtech\LaravelAnvil\Generators\ListenerGenerator;
 use Zuqongtech\LaravelAnvil\Support\ConfigValidator;
 use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
+use Zuqongtech\LaravelAnvil\Support\SchemaSelection;
 
 /**
  * Generate the core Laravel application scaffold from live database
  * introspection: models, controllers, resources, requests, services,
  * repositories, factories, seeders, migrations, events, listeners and tests.
+ *
+ * Generation is two-phase, and the phases are separable on purpose:
+ *
+ *   php artisan anvil:forge --models --schema=all      # phase 1
+ *   php artisan anvil:forge --controllers --resources  # phase 2
+ *
+ * Phase 1 writes models into schema-namespaced classes (App\Models\Core\User) and
+ * records every FQCN in the model manifest. Phase 2 imports from that manifest
+ * rather than deriving a namespace, which is what stops a cross-schema table from
+ * being wired to App\Models\User. Running both in one invocation is still fine —
+ * phase 1 simply completes before phase 2 starts.
+ *
+ * A run that asks for dependent artifacts but has no manifest and no models on
+ * disk fails with the tables named, rather than emitting imports that point at
+ * classes which do not exist.
  *
  * Two things this command no longer does:
  *
@@ -21,7 +37,9 @@ use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
  *     (aliased as anvil:openapi)
  *   • the web CRUD front end                               → anvil:generate-web
  *
- * All three commands run the identical pipeline via RunsGenerationPipeline.
+ * All three commands run the identical pipeline via RunsGenerationPipeline, and
+ * only this one owns the model phase — anvil:api and anvil:generate-web read the
+ * manifest and never regenerate models underneath you.
  *
  * The --api / --openapi* flags remain declared below only as a deprecation
  * shim: they print a warning and forward to anvil:api. Delete the DEPRECATED
@@ -29,6 +47,7 @@ use Zuqongtech\LaravelAnvil\Support\GenerationOptions;
  * major — but note that GenerationOptions::fromCommand() reads those option
  * names, so guard its lookups with $command->hasOption() first.
  */
+
 class GenerateModelsFromDatabase extends Command
 {
     use RunsGenerationPipeline;
@@ -39,22 +58,11 @@ class GenerateModelsFromDatabase extends Command
      *
      * @var list<string>
      */
-    private const DEPRECATED_API_OPTIONS = [
-        'api',
-        'openapi',
-        'openapi-single-file',
-        'openapi-ui',
-    ];
-
-    /** @var list<string> */
-    private const LISTENER_STYLES = [
-        ListenerGenerator::STYLE_PER_EVENT,
-        ListenerGenerator::STYLE_SUBSCRIBER,
-    ];
-
     protected $signature = 'anvil:forge
+                            {schemas?*                   : Extra schema names. Only used to recover an unquoted --schema list that the shell split on a space; prefer --schema="a,b,c"}
                             {--all                       : Generate every artifact type}
-                            {--models                    : Eloquent models (always on)}
+                            {--models                    : Phase 1 — Eloquent models into schema-namespaced classes; run this before any other artifact}
+                            {--refresh-models            : Rebuild the model manifest from the models already on disk, without generating anything}
                             {--controllers               : Resource controllers}
                             {--resources                 : API resource classes}
                             {--observers                 : Model observers}
@@ -94,8 +102,18 @@ class GenerateModelsFromDatabase extends Command
                             {--openapi-format=yaml       : [DEPRECATED] Use anvil:openapi --format}
                             {--openapi-single-file       : [DEPRECATED] Use anvil:openapi --single-file}
                             {--openapi-ui                : [DEPRECATED] Use anvil:openapi --ui}';
+    private const DEPRECATED_API_OPTIONS = [
+        'api',
+        'openapi',
+        'openapi-single-file',
+        'openapi-ui',
+    ];
 
-    protected $description = 'Generate the core Laravel application scaffold from live database introspection';
+    /** @var list<string> */
+    private const LISTENER_STYLES = [
+        ListenerGenerator::STYLE_PER_EVENT,
+        ListenerGenerator::STYLE_SUBSCRIBER,
+    ];
 
     public function handle(): int
     {
@@ -126,6 +144,17 @@ class GenerateModelsFromDatabase extends Command
 
         $this->info("✅ Configuration valid.\n");
 
+        if (! $this->recoverSchemaSelection()) {
+            return self::FAILURE;
+        }
+
+        // Indexing existing models is not a generation run — it touches no
+        // database beyond resolving the default schema, and writes only the
+        // manifest, so it short-circuits the pipeline entirely.
+        if ($this->option('refresh-models')) {
+            return $this->refreshModelManifest(GenerationOptions::fromCommand($this));
+        }
+
         $status = $this->runPipeline($this->buildOptions());
 
         if ($status === self::SUCCESS && $this->usesDeprecatedApiOptions()) {
@@ -136,12 +165,59 @@ class GenerateModelsFromDatabase extends Command
     }
 
     /**
+     * Fold shell-split fragments of --schema back into the option.
+     *
+     * `--schema=core,employers_db, admin_db,forms_db` has a space in it, so the
+     * shell hands Symfony `--schema=core,employers_db,` plus a positional argument
+     * `admin_db,forms_db`. Without the catch-all argument declared above, Symfony
+     * aborts with "No arguments expected for anvil:forge", which points nowhere
+     * near the actual mistake.
+     *
+     * Fragments shaped like schema names are recovered and reported; anything else
+     * is refused by name, so a real typo is not silently swallowed.
+     */
+    private function recoverSchemaSelection(): bool
+    {
+        $stray = array_map(strval(...), (array) $this->argument('schemas'));
+
+        if ($stray === []) {
+            return true;
+        }
+
+        $selection = SchemaSelection::fromInput($this->option('schema'), $stray);
+
+        if ($selection->hasRejected()) {
+            $this->error('❌ Unexpected argument(s): ' . implode(', ', $selection->rejected()));
+            $this->newLine();
+            $this->line('   anvil:forge takes options only. If you meant a schema list, quote it:');
+            $this->line('     <fg=cyan>php artisan anvil:forge --models --schema="core,admin_db,forms_db"</>');
+
+            return false;
+        }
+
+        // Write the repaired value back so GenerationOptions::fromCommand() and
+        // everything downstream see one coherent selection.
+        $this->input->setOption('schema', $selection->value());
+        $this->input->setArgument('schemas', []);
+
+        $this->components->warn(sprintf(
+            'Recovered %d schema name(s) from an unquoted --schema list: %s. Quote the value next time: %s',
+            count($selection->recovered()),
+            implode(', ', $selection->recovered()),
+            $selection->suggestedFlag(),
+        ));
+        $this->newLine();
+
+        return true;
+    }
+
+    /**
      * Build the core pipeline options.
      *
-     * The API and OpenAPI switches are forced off regardless of what
-     * fromCommand() read, so the legacy flags cannot cause this pipeline to
-     * generate API artifacts — that work is delegated to anvil:api afterwards,
-     * where it runs with the full set of API-shaping options.
+     * The API and OpenAPI switches are forced off via withoutApiArtifacts(),
+     * so the legacy flags cannot cause this pipeline to generate API artifacts —
+     * that work is delegated to anvil:api afterwards, where it runs with the full
+     * set of API-shaping options.
      */
     private function buildOptions(): GenerationOptions
     {
@@ -163,17 +239,19 @@ class GenerateModelsFromDatabase extends Command
         if ($queued && $style === ListenerGenerator::STYLE_SUBSCRIBER) {
             $this->components->warn(
                 '--queued-listeners is ignored with --listener-style=subscriber; a subscriber\'s methods are plain '
-                    .'callbacks. Queue the work inside them, or switch to the per-event style.'
+                    . 'callbacks. Queue the work inside them, or switch to the per-event style.'
             );
         }
 
         $this->applyListenerConfig($listeners, $style, $queued);
 
-        return GenerationOptions::fromArray(array_merge($options->toArray(), [
-            'api' => false,
-            'openapi' => false,
-            'openapi_single_file' => false,
-            'openapi_ui' => false,
+        // withoutApiArtifacts() rather than four hand-merged array keys.
+        // toArray() emits 'open_api'; the flag is spelled 'openapi'. Merging the
+        // flag spelling left BOTH keys in the array, fromArray() read 'open_api',
+        // and the override was discarded — which is why `anvil:forge --all` still
+        // printed "OpenAPI 3.1 — format: YAML" and ran the OpenAPI generators it
+        // means to delegate to anvil:api.
+        return $options->withoutApiArtifacts()->with([
             'events' => $events,
             'listeners' => $listeners,
             'listener_style' => $style,
@@ -182,7 +260,7 @@ class GenerateModelsFromDatabase extends Command
                 $options->tables,
                 array_map(strval(...), $this->option('only')),
             ))),
-        ]));
+        ]);
     }
 
     /**
@@ -217,13 +295,16 @@ class GenerateModelsFromDatabase extends Command
 
     /**
      * Translate the legacy flags and hand off to anvil:api.
+     *
+     * anvil:api does not own the model phase, so it will read the manifest this
+     * run just wrote rather than regenerating models a second time.
      */
     private function delegateToApiCommand(): int
     {
         $this->newLine();
         $this->components->warn(
             'The --api / --openapi* flags on anvil:generate are deprecated and will be removed in the next major. '
-                .'Use anvil:api (aliased anvil:openapi) instead — it also exposes --auth, --prefix, --throttle and --security.'
+                . 'Use anvil:api (aliased anvil:openapi) instead — it also exposes --auth, --prefix, --throttle and --security.'
         );
 
         $wantsScaffold = (bool) $this->option('api');
