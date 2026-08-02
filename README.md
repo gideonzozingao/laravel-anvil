@@ -160,8 +160,6 @@ php artisan anvil:forge:app-scaffold --models --schema=all
 php artisan anvil:forge-webapp --stack=livewire
 ```
 
-````
-
 That split is what stops a schema-namespaced model (`App\Models\Core\User`)
 being re-derived as `App\Models\User` by a downstream generator, and it stops a
 web or API run silently reverting hand edits to a model. A run that needs a
@@ -912,4 +910,7 @@ reference above, but the generation-stamp invalidation model, the volatility
 profiles and `$cacheVariant` deserve prose alongside "Per-version shape
 profiles". Say the word and I'll draft it.
 ```
-````
+
+```
+
+```
