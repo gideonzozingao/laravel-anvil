@@ -58,7 +58,7 @@ class GenerateModelsFromDatabase extends Command
      *
      * @var list<string>
      */
-    protected $signature = 'anvil:forge
+    protected $signature = 'anvil:forge:app-scaffold
                             {schemas?*                   : Extra schema names. Only used to recover an unquoted --schema list that the shell split on a space; prefer --schema="a,b,c"}
                             {--all                       : Generate every artifact type}
                             {--models                    : Phase 1 — Eloquent models into schema-namespaced classes; run this before any other artifact}
