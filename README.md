@@ -1,13 +1,31 @@
-# README — replacement content
+<p align="center">
+  <img src="art/anvil-logo.svg" alt="Laravel Anvil" width="140" height="140">
+</p>
 
-Three blocks below, each replacing an existing part of `README.md`:
+<h1 align="center">Laravel Anvil</h1>
 
-1. **Table of contents** — replaces the current `## Table of contents` list
-2. **Quick start** — replaces the current `## Quick start` section
-3. **Commands** — replaces everything from `## Commands` down to (but not
-   including) `## Versioned API scaffold`
+<p align="center">
+  <strong>Forge a complete Laravel application from your database.</strong>
+</p>
 
----
+<p align="center">
+  <a href="https://packagist.org/packages/zuqongtech/laravel-anvil"><img alt="Packagist version" src="https://img.shields.io/packagist/v/zuqongtech/laravel-anvil?style=flat-square"></a>
+  <a href="https://packagist.org/packages/zuqongtech/laravel-anvil"><img alt="PHP version" src="https://img.shields.io/packagist/dependency-v/zuqongtech/laravel-anvil/php?style=flat-square"></a>
+  <a href="https://packagist.org/packages/zuqongtech/laravel-anvil"><img alt="Downloads" src="https://img.shields.io/packagist/dt/zuqongtech/laravel-anvil?style=flat-square"></a>
+  <a href="LICENSE.md"><img alt="License" src="https://img.shields.io/packagist/l/zuqongtech/laravel-anvil?style=flat-square"></a>
+</p>
+
+**Laravel Anvil** introspects a live database and hammers your raw schema into a
+full, idiomatic Laravel scaffold — models, controllers, form requests, API
+resources, services, repositories, policies, gates, observers, events, listeners,
+factories, seeders, migrations and tests — plus **versioned JSON APIs** (each
+version with its own key casing, pagination and hidden fields), an **OpenAPI 3.1**
+specification with Swagger UI, a **web CRUD front end** in pure Blade + Tailwind
+or Blade + Livewire, and a **Livewire authentication scaffold** with RBAC.
+
+## Point it at a database, run one command, and get working code you own.
+
+--
 
 ## 1. Table of contents
 
