@@ -905,3 +905,139 @@ README yet — the `--cache*` and `--etag` flags are documented in the command
 reference above, but the generation-stamp invalidation model, the volatility
 profiles and `$cacheVariant` deserve prose alongside "Per-version shape
 profiles". Say the word and I'll draft it.
+
+## Local development
+
+Anvil generates code by introspecting a live database, which makes it awkward to
+test the way a normal library is tested. A unit test can assert that a stub
+renders; only a real schema, a real Laravel application and a real `php artisan`
+run will tell you whether the thing Anvil wrote is code that boots.
+
+The working setup is a throwaway Laravel 12 application that symlinks the
+package source through a Composer path repository, so an edit in `src/` is live
+in the test app on the next command with no `composer update`.
+
+**→ [`documents/local-test.md`](documents/local-test.md) — the full guide.**
+
+It covers:
+
+| Section                                                                                  | What you need it for                                                                                                                                       |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Linking the package](documents/local-test.md#4-linking-the-package-via-path-repository) | The path repository, and the `minimum-stability` / `prefer-stable` / `*@dev` combination an untagged package needs                                         |
+| [Configuring the database](documents/local-test.md#6-configuring-the-database)           | Which driver to reach for — SQLite is fastest but cannot exercise check constraints, column comments or enum detection                                     |
+| [Running the generators](documents/local-test.md#9-running-the-generators)               | Command ordering, and why models have to exist before anything downstream resolves them                                                                    |
+| [Test scenarios](documents/local-test.md#11-common-test-scenarios)                       | Sixteen scenarios from a bare `--dry-run` up to the full OpenAPI → client round trip                                                                       |
+| [Resetting](documents/local-test.md#12-resetting-the-test-application)                   | Getting back to a clean slate between runs                                                                                                                 |
+| [Troubleshooting](documents/local-test.md#13-troubleshooting)                            | Failures specific to the local setup — stale autoloaders, mirrored instead of symlinked packages, published-config merges resolving a connection to `null` |
+
+### The short version
+
+```bash
+# One-time: a throwaway app next to the package
+composer create-project laravel/laravel laravel-anvil-test-local
+cd laravel-anvil-test-local
+```
+
+Add the path repository to its `composer.json`:
+
+```json
+{
+  "repositories": [
+    {
+      "type": "path",
+      "url": "../../packages/laravel-anvil",
+      "options": { "symlink": true }
+    }
+  ],
+  "require": {
+    "zuqongtech/laravel-anvil": "*@dev"
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
+```
+
+```bash
+composer install
+ls -la vendor/zuqongtech/laravel-anvil   # must be a symlink, not a directory
+```
+
+All three stability settings are required together. The package carries no git
+tags, so Composer derives a `dev-main` version from the branch; `minimum-stability`
+admits it, `@dev` scopes that to this one package, and `prefer-stable` keeps
+Laravel and everything else on stable releases regardless. Drop any one of the
+three and the install fails with a resolution error that does not mention the
+real cause.
+
+Then the loop:
+
+```bash
+php artisan anvil:doctor                                     # is the schema generatable?
+php artisan anvil:forge:app-scaffold --models --schema=all   # models first, always
+php artisan anvil:forge-api --api-version=1 --dry-run        # preview
+php artisan anvil:forge-api --api-version=1 --force
+```
+
+Edit the package source, re-run, observe. The one thing a symlink cannot do for
+you is autoload a class that did not exist when the autoloader was built — after
+adding anything to `src/Support/` or `src/Exceptions/`, run `composer dump-autoload`
+in the test app before assuming you have found a bug.
+
+---
+
+## Testing your changes
+
+### The package's own suite
+
+Faster than the test app, and where most support-class regressions surface
+first. Run this before reaching for anything else:
+
+```bash
+composer test              # Pest
+composer test:types        # PHPStan
+vendor/bin/pint --test     # formatting
+vendor/bin/rector process --dry-run
+```
+
+### Against a real application
+
+Some things only fail in a real app: service provider registration, route
+resolution, Livewire component mounting, whether generated PHP actually parses.
+Work through the scenarios in
+[`documents/local-test.md`](documents/local-test.md#11-common-test-scenarios).
+The ones worth running before every PR, regardless of what you changed:
+
+| Scenario                                                                                    | Catches                                                                                                                   |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| [Idempotency](documents/local-test.md#scenario-6--idempotency-run-twice-no-duplicates)      | Appended duplicates in providers, route files and the `servers` block — the single most common regression in this package |
+| [Full scaffold, force write](documents/local-test.md#scenario-3--full-scaffold-force-write) | Generated code that does not parse, or routes that do not resolve                                                         |
+| [OpenAPI round trip](documents/local-test.md#scenario-10--openapi-round-trip)               | Drift between the API, the spec, the docs and the TypeScript client                                                       |
+| [Key casing](documents/local-test.md#scenario-11--key-casing)                               | A `--case` change applied to three of the four surfaces that need it                                                      |
+
+Because every generating command shares `RunsGenerationPipeline`,
+`ResolvesGeneratedModels` and `RendersScaffoldOutput`, a change to any of those
+three is a change to every command. Re-run more than the one you were working
+on.
+
+### CI gates
+
+Each of these exits non-zero on a problem, and each is worth wiring into a
+pipeline for applications built with Anvil as much as for the package itself:
+
+```bash
+php artisan anvil:doctor --strict          # schema shapes that break generation
+php artisan anvil:diff --strict            # a migration shipped without regenerating
+php artisan anvil:docs-sync --check        # hand edits drifted from the spec
+php artisan anvil:forge-apidocs --check --strict   # a targeted version has no spec
+php artisan anvil:polish --test --strict   # formatting, modernisation, model ↔ schema audit
+```
+
+### Before opening a pull request
+
+- The package suite passes, including `pint --test` and `rector --dry-run`
+- A full `--force` scaffold in the test app produces code that parses, boots and
+  routes
+- The same scaffold run twice produces byte-identical files
+- New command flags are documented in the [command reference](#commands), with
+  their default and the behaviour when omitted
+- New behaviour has a scenario in `documents/local-test.md` if it cannot be covered by the package's own tests
