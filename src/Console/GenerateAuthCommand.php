@@ -40,7 +40,7 @@ class GenerateAuthCommand extends Command
 {
     use RendersScaffoldOutput;
 
-    protected $signature = 'anvil:forge-auth
+    protected $signature = 'anvil:forge:auth
                             {--connection=       : Database connection to introspect}
                             {--schema=           : Schema the users table lives in (multi-schema DBs)}
                             {--users-table=users : The users/authenticatable table}

@@ -14,11 +14,12 @@ This document describes how to test `zuqongtech/laravel-anvil` locally during de
 6. [Configuring the Database](#6-configuring-the-database)
 7. [Publishing Anvil Assets](#7-publishing-anvil-assets)
 8. [The Command Suite](#8-the-command-suite)
-9. [Running the Generators](#9-running-the-generators)
-10. [Iterating on Package Source](#10-iterating-on-package-source)
-11. [Common Test Scenarios](#11-common-test-scenarios)
-12. [Resetting the Test Application](#12-resetting-the-test-application)
-13. [Troubleshooting](#13-troubleshooting)
+9. [Source Layout](#9-source-layout)
+10. [Running the Generators](#10-running-the-generators)
+11. [Iterating on Package Source](#11-iterating-on-package-source)
+12. [Common Test Scenarios](#12-common-test-scenarios)
+13. [Resetting the Test Application](#13-resetting-the-test-application)
+14. [Troubleshooting](#14-troubleshooting)
 
 ---
 
@@ -28,7 +29,11 @@ Because `laravel-anvil` is a code-generation package, the most effective way to 
 
 Anvil is a suite of thirteen Artisan commands. Every generating command runs the identical pipeline through the `RunsGenerationPipeline` trait, resolves models through `ResolvesGeneratedModels`, and reports through `RendersScaffoldOutput`. Testing therefore means exercising each command _and_ the sequences that chain them, because the shared traits are where cross-command regressions surface.
 
-> **Command names changed.** Everything that was `anvil:generate*` is now `anvil:forge*`. If you have muscle memory or scripts from before the rename, see the mapping table in [Section 8](#8-the-command-suite).
+Two things about the package shape the testing approach, and both are easy to miss:
+
+**Command signatures were renamed; the classes were not.** Everything that was `anvil:generate*` is now `anvil:forge*`, but the files are still `GenerateWebCommand.php`, `GenerateAuthCommand.php` and so on. See [Section 9](#9-source-layout) for the mapping — without it, hunting a bug in `anvil:forge-webapp` means grepping for a filename that does not exist.
+
+**Anvil ships runtime code, not just generators.** `src/Runtime/Cache/` and `src/Livewire/Concerns/` are consumed by the generated application while it serves requests, and `src/Http/DocsController.php` handles the docs route. A change to those directories can break a running app without changing a single generated file, so re-running the generator is not sufficient to test them.
 
 ---
 
@@ -41,13 +46,8 @@ The setup assumes the following layout. Adjust paths to match your own workspace
 ├── packages/
 │   └── laravel-anvil/                  ← git repo: zuqongtech/laravel-anvil
 │       ├── bin/
-│       ├── src/
-│       │   ├── Console/
-│       │   │   └── Concerns/
-│       │   ├── Exceptions/
-│       │   ├── Generators/
-│       │   └── Support/
 │       ├── config/
+│       ├── src/                        ← see Section 9
 │       ├── stubs/
 │       ├── tests/
 │       └── composer.json
@@ -191,7 +191,7 @@ Anvil checks for these and explains rather than emitting code nothing can run, s
 | `anvil:forge-client --hooks`          | `@tanstack/react-query` v5                                | `npm i @tanstack/react-query`                                         |
 | `anvil:polish`                        | Pint, Rector, PHPStan — each pass skips cleanly if absent | `composer require --dev laravel/pint rector/rector larastan/larastan` |
 
-Use `anvil:frontend` rather than installing Livewire and Tailwind by hand — testing the installer _is_ part of testing the package, and it is the only path that also writes the Tailwind config wiring.
+Use `anvil:frontend` rather than installing Livewire and Tailwind by hand — testing `FrontendInstaller` _is_ part of testing the package, and it is the only path that also writes the Tailwind config wiring.
 
 ---
 
@@ -219,20 +219,21 @@ php artisan migrate
 
 The stock Laravel migrations exercise almost nothing. Build a schema that deliberately contains the shapes `anvil:doctor` reports on, because those are the shapes generation gets wrong:
 
-| Shape                                           | Why it matters                                                                              |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Two FKs from one table to `users`               | Duplicate relation method names — the fatal redeclaration `RelationNamer` must disambiguate |
-| A composite primary key                         | Skipped with a report by `anvil:forge-graphql`; handled specially elsewhere                 |
-| A table with no primary key                     | Doctor error path                                                                           |
-| An unindexed foreign key                        | Doctor warning path                                                                         |
-| A native `ENUM` column                          | `EnumDetector` / `EnumColumn`                                                               |
-| A free-text `status` column                     | Doctor's enum-candidate suggestion                                                          |
-| A reserved word as a column name                | Doctor error path                                                                           |
-| A column that camelises onto an Eloquent method | Model collision detection                                                                   |
-| A second authenticatable table                  | Must extend `Illuminate\Foundation\Auth\User`, not `Model`                                  |
-| A table with no `created_at`/`updated_at`       | Timestamp warning                                                                           |
-| A soft-deletable table                          | `Restored` event generation                                                                 |
-| Column comments and a check constraint          | `--with-constraints`, and driver divergence                                                 |
+| Shape                                           | Exercises                                                     |
+| ----------------------------------------------- | ------------------------------------------------------------- |
+| Two FKs from one table to `users`               | `RelationNamer` disambiguation — the fatal redeclaration path |
+| A composite primary key                         | Skipped with a report by `anvil:forge-graphql`                |
+| A table with no primary key                     | `DoctorCommand` error path                                    |
+| An unindexed foreign key                        | `DoctorCommand` warning path                                  |
+| A native `ENUM` column                          | `EnumDetector`, `EnumColumn`, `EnumGenerator`                 |
+| A free-text `status` column                     | Doctor's enum-candidate suggestion                            |
+| A reserved word as a column name                | `ReservedNames`                                               |
+| A column that camelises onto an Eloquent method | Model collision detection                                     |
+| A second authenticatable table                  | Must extend `Illuminate\Foundation\Auth\User`, not `Model`    |
+| No `created_at`/`updated_at`                    | Timestamp warning                                             |
+| A soft-deletable table                          | `Restored` event in `EventGenerator`                          |
+| Column comments and a check constraint          | `ConstraintAnalyzer`, and driver divergence                   |
+| Two tables whose models resolve to one name     | `AmbiguousModelException` from `ModelRegistry`                |
 
 ```bash
 php artisan make:migration create_posts_table
@@ -257,7 +258,7 @@ CREATE SCHEMA reporting;
 php artisan anvil:forge:app-scaffold --models --schema="core,reporting"
 ```
 
-Quote the list. See the `No arguments expected` entry in [Troubleshooting](#13-troubleshooting).
+Quote the list. See the `No arguments expected` entry in [Troubleshooting](#14-troubleshooting).
 
 ### Option B — SQLite (quickest for basic testing)
 
@@ -271,23 +272,19 @@ touch database/database.sqlite
 php artisan migrate
 ```
 
-> SQLite has no check constraints, no table or column comments, and no native enum type. Use MySQL or PostgreSQL to test those introspection paths. SQLite is for fast iteration on generator logic, not for validating introspection.
+> SQLite has no check constraints, no table or column comments, and no native enum type. Use MySQL or PostgreSQL to test those `DatabaseInspector` paths. SQLite is for fast iteration on generator logic, not for validating introspection.
 
 ### Using a non-default connection
-
-Every command accepts `--connection`:
 
 ```bash
 php artisan anvil:forge:app-scaffold --models --connection=reporting --dry-run
 ```
 
-This flag is also the regression test for shallow config merges — see [Troubleshooting](#13-troubleshooting).
+This flag is also the regression test for shallow config merges — see [Troubleshooting](#14-troubleshooting).
 
 ---
 
 ## 7. Publishing Anvil Assets
-
-Publish the config so you can customise it in the test app:
 
 ```bash
 php artisan vendor:publish \
@@ -295,7 +292,7 @@ php artisan vendor:publish \
     --tag="config"
 ```
 
-This creates `config/anvil.php`. Edit it to adjust ignored tables, namespaces, casing, cache defaults, and per-generator settings.
+This creates `config/anvil.php`. Edit it to adjust ignored tables, namespaces, casing, cache defaults, `openapi.sync.readers`, and per-generator settings.
 
 To test stub customisation:
 
@@ -305,11 +302,11 @@ php artisan vendor:publish \
     --tag="stubs"
 ```
 
-Stubs land in `stubs/anvil/` and take precedence over the package-bundled templates automatically.
+Stubs land in `stubs/anvil/` and take precedence over the package-bundled templates automatically — `StubGenerator` handles the lookup order, so that is where to look if an override is ignored.
 
 > **Tip:** Because the package is symlinked, changes to stubs inside the package source (`packages/laravel-anvil/stubs/`) are reflected immediately without republishing. Publishing is only needed to test the _override_ mechanism itself.
 
-**Always test the published-config path at least once.** Publishing produces a partial config file, and a shallow merge against the package defaults is how `connection` ends up `null` at runtime. Delete `config/anvil.php` and re-run to compare behaviour.
+**Always test the published-config path at least once.** Publishing produces a partial config file, and a shallow merge against the package defaults is how `connection` ends up `null` at runtime. Delete `config/anvil.php` and re-run to compare behaviour. `ConfigValidator` is the class that should be catching malformed config before generation starts.
 
 ---
 
@@ -329,49 +326,168 @@ Stubs land in `stubs/anvil/` and take precedence over the package-bundled templa
 | `anvil:generate-client`                | `anvil:forge-client`          |
 | `anvil:install-swagger-ui`             | `anvil:install:swagger-ui`    |
 
-`anvil:diff`, `anvil:doctor`, `anvil:docs-sync`, `anvil:polish` and `anvil:frontend` are unchanged.
-
-`anvil:forge-openapi` is an alias of `anvil:forge-api`, which reads better with `--spec-only`.
+`anvil:diff`, `anvil:doctor`, `anvil:docs-sync`, `anvil:polish` and `anvil:frontend` are unchanged. `anvil:forge-openapi` is an alias of `anvil:forge-api`.
 
 ### Generation
 
-| Command                    | Produces                                                        | Key support classes                                              |
-| -------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `anvil:forge:app-scaffold` | Models plus the core per-model artifacts                        | `ModelBuilder`, `RelationNamer`, `ModelMetadata`, `EnumDetector` |
-| `anvil:forge-api`          | Versioned JSON API + OpenAPI 3.1 spec                           | `ApiVersionProfile`, `KeyCase`, `OpenApiLocator`                 |
-| `anvil:forge-apidocs`      | Docs for one or all versions, plus a report of where each lives | `OpenApiLocator`                                                 |
-| `anvil:forge-webapp`       | Web CRUD front end (Blade or Livewire)                          | `LivewireComponentGenerator`, `FormStateProperty`, `ImportSet`   |
-| `anvil:forge-auth`         | Livewire auth + RBAC from the users table                       | `AuthScaffolder`                                                 |
-| `anvil:forge-graphql`      | Lighthouse SDL schema                                           | `GraphQLSchemaBuilder`                                           |
-| `anvil:forge-client`       | Typed TypeScript client for a versioned API                     | `ApiVersionProfile`, `KeyCase`                                   |
+| Command                    | Produces                                    | Where the work happens                                                  |
+| -------------------------- | ------------------------------------------- | ----------------------------------------------------------------------- |
+| `anvil:forge:app-scaffold` | Models plus the core per-model artifacts    | `ModelBuilder`, `RelationNamer`, `EnumGenerator`, `Generators/*`        |
+| `anvil:forge-api`          | Versioned JSON API + OpenAPI 3.1 spec       | `Generators/Api*`, `Generators/OpenApi/*`, `ApiVersionProfile`          |
+| `anvil:forge-apidocs`      | Docs for one or all versions, plus a report | `OpenApiLocator`, delegates to `anvil:forge-api --spec-only`            |
+| `anvil:forge-webapp`       | Web CRUD front end (Blade or Livewire)      | `WebControllerGenerator`, `ViewGenerator`, `LivewireComponentGenerator` |
+| `anvil:forge-auth`         | Livewire auth + RBAC from the users table   | `AuthScaffolder` → `Support/Auth/Parts/*`                               |
+| `anvil:forge-graphql`      | Lighthouse SDL schema                       | `GraphQLSchemaBuilder`                                                  |
+| `anvil:forge-client`       | Typed TypeScript client                     | `ApiVersionProfile`, `KeyCase`                                          |
 
 ### Inspection
 
-| Command           | Reports                                                   | Key support classes                 |
-| ----------------- | --------------------------------------------------------- | ----------------------------------- |
-| `anvil:doctor`    | Schema shapes that break generation, before they break it | schema introspection                |
-| `anvil:diff`      | What changed in the database since the last generation    | `SchemaManifest`, `SchemaSelection` |
-| `anvil:docs-sync` | Drift between hand-edited payloads and the OpenAPI spec   | `DocsSynchronizer`                  |
+| Command           | Reports                                                   | Where the work happens               |
+| ----------------- | --------------------------------------------------------- | ------------------------------------ |
+| `anvil:doctor`    | Schema shapes that break generation, before they break it | `DatabaseInspector`, `ReservedNames` |
+| `anvil:diff`      | What changed in the database since the last generation    | `SchemaManifest`, `SchemaSelection`  |
+| `anvil:docs-sync` | Drift between hand-edited payloads and the spec           | `DocsSync/*`                         |
 
 ### Maintenance
 
-| Command                    | Does                                              | Key support classes                               |
-| -------------------------- | ------------------------------------------------- | ------------------------------------------------- |
-| `anvil:polish`             | Pint, Rector, PHPStan, and a model ↔ schema audit | `QualityRunner`, `ModelAuditor`, `PhpSyntaxCheck` |
-| `anvil:frontend`           | Checks or installs Livewire and Tailwind          | —                                                 |
-| `anvil:install:swagger-ui` | Vendors the Swagger UI assets                     | `OpenApiLocator`                                  |
+| Command                    | Does                                              | Where the work happens                                   |
+| -------------------------- | ------------------------------------------------- | -------------------------------------------------------- |
+| `anvil:polish`             | Pint, Rector, PHPStan, and a model ↔ schema audit | `QualityRunner`, `ModelAuditor`, `PhpSyntaxCheck`        |
+| `anvil:frontend`           | Checks or installs Livewire and Tailwind          | `FrontendDetector`, `FrontendInstaller`, `FrontendState` |
+| `anvil:install:swagger-ui` | Vendors the Swagger UI assets                     | `SwaggerUiInstaller`                                     |
 
 ### Two distinctions worth internalising before you test
 
-**`anvil:doctor` inspects the schema. `anvil:polish --audit` inspects the models.** Doctor is read-only and runs _before_ generation — it tells you the schema will produce broken code. The model ↔ schema audit runs _after_ generation and tells you the models have drifted from the schema. They are different checks at different points in the cycle, and doctor has no `--fix`.
+**`anvil:doctor` inspects the schema. `anvil:polish --audit` inspects the models.** Doctor is read-only and runs _before_ generation — it tells you the schema will produce broken code. `ModelAuditor` runs _after_ generation and tells you the models have drifted from the schema. Different checks, different points in the cycle, and doctor has no `--fix`.
 
-**Only `anvil:forge:app-scaffold --models` writes models.** Every other command _resolves_ them, from `storage/anvil/models.json` or by scanning the model path. That split is what stops a schema-namespaced `App\Models\Core\User` being re-derived as `App\Models\User` downstream, and stops a web or API run reverting hand edits to a model. Test it deliberately: a downstream command with no manifest and no models on disk must fail and name the table, not emit a controller importing a class that was never written.
-
-Shared behaviour lives in three concerns — `RunsGenerationPipeline`, `ResolvesGeneratedModels`, `RendersScaffoldOutput`. A bug in any of them shows up in _every_ command, so when something breaks in one place, re-run the others before assuming it is local.
+**Only `anvil:forge:app-scaffold --models` writes models.** Every other command _resolves_ them via `ResolvesGeneratedModels` → `ModelDiscovery` / `ModelRegistry` / `ModelReference`, reading `storage/anvil/models.json` or scanning the model path. That split is what stops a schema-namespaced `App\Models\Core\User` being re-derived as `App\Models\User` downstream. A resolution failure raises `ModelNotRegisteredException` or `AmbiguousModelException` and names the table — a downstream command that instead emits a controller importing a class nobody wrote is the bug.
 
 ---
 
-## 9. Running the Generators
+## 9. Source Layout
+
+Knowing which directory owns a symptom saves more time than any other single thing in this document.
+
+```
+src/
+├── Concerns/SyncsApiDocs.php        ← the auto-sync hook wired into generation
+├── Console/
+│   ├── Commands/                    ← EMPTY. See note below.
+│   ├── Concerns/                    ← shared command behaviour; a bug here hits every command
+│   └── *Command.php                 ← one file per command, old names (see mapping)
+├── Contracts/                       ← Generator, ShapeReader, SpecCodec — the extension points
+├── DocsSync/                        ← the anvil:docs-sync subsystem, self-contained
+├── Exceptions/                      ← AmbiguousModelException, ModelNotRegisteredException
+├── Generators/                      ← one class per artifact type
+├── Http/DocsController.php          ← RUNTIME: serves the docs route
+├── Livewire/Concerns/               ← RUNTIME: consumed by generated components
+├── Runtime/Cache/                   ← RUNTIME: consumed by generated services
+└── Support/                         ← everything else
+```
+
+### Command signatures were renamed; the class files were not
+
+| Signature                  | File                             |
+| -------------------------- | -------------------------------- |
+| `anvil:forge:app-scaffold` | `GenerateModelsFromDatabase.php` |
+| `anvil:forge-api`          | `GenerateOpenApiCommand.php`     |
+| `anvil:forge-apidocs`      | `GenerateOpenApiDocsCommand.php` |
+| `anvil:forge-webapp`       | `GenerateWebCommand.php`         |
+| `anvil:forge-auth`         | `GenerateAuthCommand.php`        |
+| `anvil:forge-graphql`      | `GenerateGraphQLCommand.php`     |
+| `anvil:forge-client`       | `GenerateClientCommand.php`      |
+| `anvil:install:swagger-ui` | `InstallSwaggerUi.php`           |
+| `anvil:doctor`             | `DoctorCommand.php`              |
+| `anvil:diff`               | `DiffCommand.php`                |
+| `anvil:docs-sync`          | `DocsSyncCommand.php`            |
+| `anvil:polish`             | `PolishCommand.php`              |
+| `anvil:frontend`           | `FrontendCommand.php`            |
+
+`GenerateModelsFromDatabase.php` in particular no longer describes what the class does — it owns every artifact type, not just models. Worth renaming before 1.0, while the churn is still cheap.
+
+`src/Console/Commands/` is empty. Either it is the intended destination of a rename that stalled, or it is dead and should go. An empty directory that looks like it should hold the commands is a trap for anyone new to the codebase.
+
+### Runtime code versus generation code
+
+This is the distinction most likely to cost you an afternoon. Three directories ship as part of the running application:
+
+| Directory                 | Consumed by                                          | How to test a change            |
+| ------------------------- | ---------------------------------------------------- | ------------------------------- |
+| `src/Runtime/Cache/`      | Generated services, via the `CachesQueries` trait    | Serve the app and hit endpoints |
+| `src/Livewire/Concerns/`  | Generated Livewire components, `NormalizesFormState` | Interact in a browser           |
+| `src/Http/DocsController` | The docs route                                       | Load `/docs`                    |
+
+Editing any of these and re-running the generator proves nothing — the generated files are unchanged, and the behaviour lives in the symlinked package. `php artisan serve` and exercise the app.
+
+It also means the generated application carries a **runtime dependency** on Anvil, not just a development one. If the README's positioning says otherwise, one of the two needs to change.
+
+### Subsystem map
+
+| Symptom                                          | Look in                                                                  |
+| ------------------------------------------------ | ------------------------------------------------------------------------ |
+| Wrong flag parsing, missing option               | `Console/*Command.php`, then `Support/Options/OptionBag.php`             |
+| A behaviour wrong in _every_ command             | `Console/Concerns/`                                                      |
+| Ordering, which generators ran                   | `Support/GenerationOrchestrator.php`, `Support/Options/GeneratorSet.php` |
+| Console output, summary tables                   | `RendersScaffoldOutput`, `ScaffoldReport`, `GenerationReport`            |
+| Cache flags not taking effect at generation time | `Console/Concerns/ConfiguresGeneratedCache.php`                          |
+| Cache misbehaving at request time                | `Runtime/Cache/`                                                         |
+| Frontend install loop, preflight                 | `Console/Concerns/InstallsFrontendAssets.php`, `Support/Frontend*`       |
+| Spec content wrong                               | `Generators/OpenApi/` — Root, Path and Schema are separate               |
+| Spec file layout, versioned paths                | `Generators/Concerns/WritesVersionedFiles.php`, `OpenApiLocator`         |
+| YAML output malformed                            | `Support/OpenApiYamlSerializer.php`                                      |
+| Type mapping wrong in the spec                   | `Support/OpenApiTypeMapper.php`                                          |
+| docs-sync anything                               | `DocsSync/` — see below                                                  |
+| An auth part missing or broken                   | `Support/Auth/Parts/`                                                    |
+| Auth markup, icons, form styling                 | `Support/Auth/Ui/FormKit.php`, `IconSet.php`                             |
+| Livewire form state not binding                  | `FormStateProperty`, `LivewirePropertyMap`, `NormalizesFormState`        |
+| A provider not registered                        | `Support/ProviderRegistrar.php`                                          |
+| Hand edits clobbered, or `--force` refusing      | `Support/PreserveRegions.php`                                            |
+| Stub override ignored                            | `Support/StubGenerator.php`                                              |
+
+### `DocsSync/` in detail
+
+The only subsystem large enough to need its own map. It is self-contained, which makes it the easiest part of the package to unit-test without the test app:
+
+```
+DocsSync/
+├── DocsSynchronizer.php      ← entry point; all merge safety rules live here
+├── TargetDiscovery.php       ← which resources and requests to read
+├── Readers/                  ← FormRequestShapeReader, ResourceShapeReader
+├── Php/SourceTokens.php      ← the PHP tokenizer the readers use
+├── Mappers/                  ← code shape ↔ OpenAPI schema
+├── Codecs/                   ← JSON and YAML spec I/O (Contracts\SpecCodec)
+├── SpecMerger.php            ← the write side
+├── SchemaDiff.php            ← drift detection
+├── SchemaChange.php          ← one change, with severity
+├── SyncManifest.php          ← what sync owns versus what is hand-authored
+└── Sync{Config,Options,Report,Target}.php
+```
+
+The synchroniser is built per invocation and never resolved from the container — a bound singleton would fix its spec directory at construction, so `--api-version=v2` would silently reconcile v1's spec. If you find yourself binding it, that is the reason not to.
+
+`src/Concerns/SyncsApiDocs.php` sits outside `Console/` because it is the hook used by the `--docs-sync` pipeline flag as well as the command. All three entry points — command, flag, hook — go through `DocsSynchronizer`, which is what stops them drifting apart. Test at least two of the three after any change to the safety rules.
+
+### Extension points
+
+Three contracts, each worth a test that implements it from outside the package:
+
+| Contract      | Implement to                                  | Registered via                 |
+| ------------- | --------------------------------------------- | ------------------------------ |
+| `Generator`   | Add an artifact type to the pipeline          | `GeneratorSet` / orchestrator  |
+| `ShapeReader` | Teach docs-sync to read a new source of truth | `anvil.openapi.sync.readers`   |
+| `SpecCodec`   | Support a spec format beyond JSON and YAML    | codec resolution in `DocsSync` |
+
+`ShapeReader` is the one with a documented config key, so it is the one most likely to be used. Write a trivial reader in the test app and confirm it is picked up.
+
+### Auth is a part system
+
+`AuthScaffolder` composes `Support/Auth/Parts/*`, each implementing `Contracts\ScaffoldPart`, with cross-cutting concerns in `Fragments/` (lockout, two-factor gating) and shared context in `AuthContext` / `TokenMap`. `ScaffoldWriter` does the writing.
+
+This means the `--no-2fa` / `--no-lockout` / `--no-verification` flags are part _selection_, not conditionals threaded through one big template. Test each combination — a part omitted must not leave a dangling route, import or view reference from a part that remains.
+
+---
+
+## 10. Running the Generators
 
 ### Verify registration
 
@@ -379,13 +495,13 @@ Shared behaviour lives in three concerns — `RunsGenerationPipeline`, `Resolves
 php artisan list anvil
 ```
 
-All thirteen commands should appear. If one is missing, the `GeneratorRegistry` binding or the service provider's `commands()` call is the place to look.
+All thirteen commands should appear. If one is missing, check `LaravelAnvilServiceProvider`.
 
 ```bash
 php artisan anvil:forge-api --help
 ```
 
-All flags should be listed. If flags are silently absent, there is a signature parsing issue — see [Section 13](#13-troubleshooting).
+All flags should be listed. If flags are silently absent, there is a signature parsing issue — see [Section 14](#14-troubleshooting).
 
 ### The canonical order
 
@@ -418,8 +534,6 @@ Every command supports `--dry-run`. Use it before any `--force` run against a sc
 
 ### `anvil:forge:app-scaffold`
 
-Models are always generated unless skipped; every other artifact is opt-in, or all at once with `--all`.
-
 ```bash
 php artisan anvil:forge:app-scaffold --models --schema=all
 php artisan anvil:forge:app-scaffold --all --tables=posts --tables=comments --force
@@ -428,9 +542,7 @@ php artisan anvil:forge:app-scaffold --models --with-phpdoc --with-inverse --wit
 php artisan anvil:forge:app-scaffold --refresh-models        # rebuild manifest, generate nothing
 ```
 
-`--refresh-models` short-circuits the pipeline and touches no database beyond resolving the default schema. It is how you recover from a stale or deleted manifest without regenerating.
-
-`--listeners` implies `--events`. `--queued-listeners` applies only to `per-event` style, and the command says so rather than ignoring it.
+`--refresh-models` short-circuits the pipeline and touches no database beyond resolving the default schema. `--listeners` implies `--events`. `--queued-listeners` applies only to `per-event` style, and the command says so rather than ignoring it.
 
 ### `anvil:forge-api`
 
@@ -442,32 +554,30 @@ php artisan anvil:forge-api --api-version=1 --cache --etag --cache-ttl=single=30
 php artisan route:list | grep "api/v1"
 ```
 
-`--auth` decides both the route middleware and the spec's `securityScheme`, so the running API and its documentation cannot disagree — worth asserting in both places after changing it.
+`--auth` decides both the route middleware and the spec's `securityScheme`, so the running API and its documentation cannot disagree — assert both after changing it.
 
-`--no-spec` and `--spec-only` are mutually exclusive. `--pagination-max` must be ≥ `--pagination`. Free-text options (`--auth`, `--format`, `--security`, `--case`, `--throttle`) are validated before anything is written, so a typo should fail fast rather than produce 32 tables of wrong output.
-
-The summary table printed before generation shows the resolved profile. Read it — it is the cheapest way to catch a flag that did not take effect.
+`--no-spec` and `--spec-only` are mutually exclusive. `--pagination-max` must be ≥ `--pagination`. Free-text options are validated by `ConfigValidator` before anything is written, so a typo in `--auth`, `--format`, `--security`, `--case` or `--throttle` should fail fast rather than produce 32 tables of wrong output.
 
 ### `anvil:forge-apidocs`
 
 ```bash
-php artisan anvil:forge-apidocs --check                  # what exists?
+php artisan anvil:forge-apidocs --check
 php artisan anvil:forge-apidocs --all-versions --force
 php artisan anvil:forge-apidocs --check --strict         # CI gate
 php artisan anvil:forge-apidocs --check --json
 ```
 
-Generation is delegated to `anvil:forge-api --spec-only`; this command owns version targeting and reporting. `--all-versions` and `--api-version` are mutually exclusive. A dry run legitimately leaves nothing on disk, so `--dry-run` never fails `--strict`.
+`--all-versions` and `--api-version` are mutually exclusive. A dry run legitimately leaves nothing on disk, so `--dry-run` never fails `--strict`.
 
 ### `anvil:install:swagger-ui`
 
 ```bash
 php artisan anvil:install:swagger-ui --check
-php artisan anvil:install:swagger-ui --source=http        # skip npm entirely
-php artisan anvil:install:swagger-ui --timeout=1800       # slow link
+php artisan anvil:install:swagger-ui --source=http
+php artisan anvil:install:swagger-ui --timeout=1800
 ```
 
-`auto` tries `node_modules`, then a direct download, then npm. Test each `--source` explicitly at least once — the fallback chain is the part that breaks, and it breaks on constrained links where you are least able to debug it. After install, point the docs page at the vendored copy:
+`SwaggerUiInstaller` tries `node_modules`, then a direct download, then npm. Test each `--source` explicitly — the fallback chain is what breaks, and it breaks on constrained links. After install:
 
 ```php
 // config/anvil.php
@@ -485,7 +595,7 @@ php artisan anvil:forge-webapp --stack=livewire --assets-mode=vite --force
 
 **This command does not generate models.** `--namespace` and `--path` tell it where to _locate_ them.
 
-The frontend preflight runs before the pipeline, and an install run exits and asks you to re-run — a Composer install cannot take effect in the process that performed it, because the autoloader is already built and the providers already registered. That exit-and-re-run is correct behaviour, not a failure; confirm it happens rather than treating it as a bug.
+The preflight in `InstallsFrontendAssets` runs before the pipeline, and an install run exits and asks you to re-run — a Composer install cannot take effect in the process that performed it. That exit-and-re-run is correct behaviour; confirm it happens rather than treating it as a bug.
 
 ### `anvil:forge-auth`
 
@@ -495,7 +605,7 @@ php artisan anvil:forge-auth --accent=emerald --dark --default-role=member --for
 php artisan anvil:forge-auth --no-2fa --no-lockout --no-verification --force
 ```
 
-Pre-flight runs before anything is written: Livewire installed, `--accent` known, guard exists in `config/auth.php` and resolves to a provider whose model class exists, users table present with `email` and `password`. Non-fatal gaps are reported as warnings after the configuration table. A partial scaffold exits non-zero.
+Pre-flight runs before anything is written. Non-fatal gaps are reported as warnings after the configuration table. A partial scaffold exits non-zero.
 
 ### `anvil:forge-graphql`
 
@@ -504,9 +614,7 @@ php artisan anvil:forge-graphql --guard=default --policies --force
 php artisan lighthouse:validate-schema
 ```
 
-`graphql/schema.graphql` is written once and then left alone — it is where hand-written operations go. Everything under `graphql/types/` is regenerated freely. Confirm both halves of that: a hand-edit to the root file must survive a `--force` run, and a type file must not.
-
-Composite-PK tables are skipped and reported. Running without `--guard` warns loudly.
+`graphql/schema.graphql` is written once and left alone; everything under `graphql/types/` is regenerated freely. Confirm both halves.
 
 ### `anvil:forge-client`
 
@@ -515,41 +623,43 @@ php artisan anvil:forge-client --api-version=1 --hooks --force
 npx tsc --noEmit
 ```
 
-Output lands in `resources/js/api/v{n}/`. Everything resolves through `ApiVersionProfile` — the same object the PHP requests and resources read — so a camelCase v2 must produce camelCase interfaces and a `?perPage=` query parameter.
+Output lands in `resources/js/api/v{n}/`. Everything resolves through `ApiVersionProfile` — the same object the PHP requests and resources read.
 
 ### Inspection and maintenance
 
 ```bash
 php artisan anvil:doctor --data --strict --json
 php artisan anvil:diff
-php artisan anvil:diff --accept                 # record the baseline
+php artisan anvil:diff --accept
 php artisan anvil:docs-sync --check --diff
 php artisan anvil:polish --test --strict
 php artisan anvil:polish --audit
 php artisan anvil:polish --publish-config
 ```
 
-`anvil:polish` shells out to Pint, Rector and PHPStan, which must be installed in the **test app**, not the package. Each pass skips cleanly when its tool is absent, so a run that reports "skipped" four times means you installed nothing, not that everything passed.
+`QualityRunner` shells out to Pint, Rector and PHPStan, which must be installed in the **test app**. Each pass skips cleanly when its tool is absent, so a run that reports "skipped" four times means you installed nothing, not that everything passed.
 
 ---
 
-## 10. Iterating on Package Source
+## 11. Iterating on Package Source
 
-Because `vendor/zuqongtech/laravel-anvil` is a symlink to your package source, the edit cycle is:
+The edit cycle:
 
 1. Edit a file in `packages/laravel-anvil/src/`
 2. Switch to the test app and run the relevant `anvil:*` command
 3. Observe the output immediately — no `composer update` needed
 
-**The one exception:** if you add a new class that needs autoloading, regenerate the autoloader. This happens often given how many `src/Support/` and `src/Exceptions/` classes are in active development:
+**Except for `src/Runtime/`, `src/Livewire/` and `src/Http/`.** Those are runtime code. Re-running the generator changes nothing; serve the app and exercise it.
+
+**And except for new classes.** Adding anything to `src/Support/`, `src/Exceptions/` or `src/DocsSync/` needs:
 
 ```bash
 composer dump-autoload
 ```
 
-A missing `ModelReference`, `ImportSet`, or exception class almost always means a stale autoloader rather than a real bug.
+A missing `ModelReference`, `ImportSet`, `SyncTarget` or exception class almost always means a stale autoloader rather than a real bug.
 
-**If you change `composer.json` inside the package** (add a dependency, change the service provider registration):
+**If you change `composer.json` inside the package:**
 
 ```bash
 composer update zuqongtech/laravel-anvil
@@ -564,7 +674,7 @@ php artisan cache:clear
 php artisan config:clear
 ```
 
-**Package test suite.** Run the package's own tests before reaching for the test app — they are faster and catch most support-class regressions:
+**Package test suite.** Faster than the test app, and enough for most support-class work. `DocsSync/`, `Support/Options/` and `Support/Auth/Parts/` are all self-contained enough to test without a database:
 
 ```bash
 cd ~/workspace/projects/zuqongtech/packages/laravel-anvil
@@ -576,7 +686,7 @@ vendor/bin/rector process --dry-run
 
 ---
 
-## 11. Common Test Scenarios
+## 12. Common Test Scenarios
 
 Run in order, simplest to most complex.
 
@@ -588,9 +698,9 @@ php artisan anvil:doctor --data
 php artisan anvil:doctor --strict --json
 ```
 
-Confirms: every shape you planted in [Section 6](#a-schema-worth-testing-against) is detected, classified correctly as `error` / `warning` / `note`, and carries a suggested fix. `--data` should sample stored password hashes and flag anything that is not a recognised algorithm. `--strict` exits non-zero only on errors, not warnings.
+Confirms: every shape from [Section 6](#a-schema-worth-testing-against) is detected and classified as `error` / `warning` / `note` with a suggested fix. `--data` samples stored password hashes. `--strict` exits non-zero on errors, not warnings.
 
-This scenario is also how you validate your test schema. Nothing reported means nothing being tested.
+This scenario also validates your test schema. Nothing reported means nothing being tested.
 
 ### Scenario 2 — Models only, dry run
 
@@ -598,7 +708,7 @@ This scenario is also how you validate your test schema. Nothing reported means 
 php artisan anvil:forge:app-scaffold --models --dry-run
 ```
 
-Confirms: introspection, `RelationshipDetector`, `RelationNamer`, `ModelBuilder`, `FileWriter` — with nothing written.
+Confirms: `DatabaseInspector`, `RelationshipDetector`, `RelationNamer`, `ModelBuilder`, `FileWriter` — with nothing written.
 
 ### Scenario 3 — Models, and the manifest
 
@@ -607,28 +717,32 @@ php artisan anvil:forge:app-scaffold --models --schema=all --force
 cat storage/anvil/models.json
 ```
 
-Confirms: every table has a manifest entry, and the namespace recorded matches where the file actually landed. For a multi-schema run, `App\Models\Core\User` must be recorded as such, not flattened.
+Confirms: every table has a `ModelReference` entry and the recorded namespace matches where the file landed. For a multi-schema run, `App\Models\Core\User` must be recorded as such, not flattened.
 
-### Scenario 4 — Manifest recovery
+### Scenario 4 — Model resolution, including its failures
 
 ```bash
 mv storage/anvil/models.json /tmp/
-php artisan anvil:forge-webapp --tables=posts --dry-run    # should resolve by scanning
+php artisan anvil:forge-webapp --tables=posts --dry-run    # ModelDiscovery scan fallback
 php artisan anvil:forge:app-scaffold --refresh-models
 diff <(jq -S . storage/anvil/models.json) <(jq -S . /tmp/models.json)
 ```
 
-Confirms: the scan fallback works, and `--refresh-models` reconstructs an equivalent manifest without touching the database beyond schema resolution.
-
-Then the failure path:
+Then both exception paths:
 
 ```bash
-rm storage/anvil/models.json
-rm app/Models/Post.php
+rm storage/anvil/models.json app/Models/Post.php
 php artisan anvil:forge-webapp --tables=posts
+# expect: ModelNotRegisteredException, naming the posts table
 ```
 
-Confirms: this fails, names the `posts` table, and does not emit a controller importing a class that was never written.
+```bash
+# create a second model resolving to the same reference, then:
+php artisan anvil:forge-webapp --tables=posts
+# expect: AmbiguousModelException, naming both candidates
+```
+
+Both must fail cleanly and name the table. Neither may emit a controller importing a class that was never written.
 
 ### Scenario 5 — Full app scaffold
 
@@ -638,7 +752,7 @@ php artisan route:list
 php artisan test
 ```
 
-Confirms: generated files parse (`PhpSyntaxCheck` should catch anything that does not), providers register, routes resolve, tests pass.
+Confirms: generated files parse (`PhpSyntaxCheck`), `ProviderRegistrar` registered what it should, routes resolve, tests pass.
 
 ### Scenario 6 — Listener styles
 
@@ -648,18 +762,26 @@ php artisan anvil:forge:app-scaffold --events --listeners --listener-style=subsc
 php artisan anvil:forge:app-scaffold --events --listeners --listener-style=subscriber --queued-listeners --force
 ```
 
-Confirms: `per-event` emits one class per event, `subscriber` one per model, and the third invocation _warns_ that `--queued-listeners` does not apply to subscriber style rather than silently dropping it.
+Confirms: `per-event` emits one class per event, `subscriber` one per model, and the third invocation _warns_ that `--queued-listeners` does not apply rather than silently dropping it.
 
-### Scenario 7 — Versioned API
+### Scenario 7 — Enum generation
+
+```bash
+php artisan anvil:forge:app-scaffold --models --tables=posts --force
+```
+
+Confirms: `EnumDetector` finds the native enum column, `EnumGenerator` writes a backed enum, `ModelBuilder` casts to it, the form request validates against it, and the OpenAPI schema declares the same values. Four surfaces from one detection — check all four.
+
+### Scenario 8 — Versioned API
 
 ```bash
 php artisan anvil:forge-api --api-version=1 --force
 php artisan route:list | grep "api/v1"
 ```
 
-Confirms: `ApiVersionProfile` applies, the `ForceJsonResponse` middleware and provider are registered, versioned routes exist, JSON enforcement is active. Cross-check that the spec's `securityScheme` matches the `--auth` value that produced the route middleware.
+Confirms: `ApiVersionProfile` applies, `ForceJsonServiceProviderGenerator` output is registered, versioned routes exist. Cross-check that the spec's `securityScheme` matches the `--auth` value that produced the middleware.
 
-### Scenario 8 — Two versions with different wire formats
+### Scenario 9 — Two versions with different wire formats
 
 ```bash
 php artisan anvil:forge-api --api-version=1 --tables=posts --force
@@ -667,25 +789,33 @@ php artisan anvil:forge-api --api-version=2 --tables=posts --case=camel --pagina
 php artisan route:list | grep "api/v"
 ```
 
-Confirms: both versions registered, v1 untouched by the v2 run, and v2 genuinely camelCase in resources, form requests, the spec and the page-size parameter (`perPage`, not `per_page`).
+Confirms: `WritesVersionedFiles` keeps v1 untouched by the v2 run, and v2 is genuinely camelCase in resources, form requests, the spec and the page-size parameter.
 
-### Scenario 9 — Response caching
+### Scenario 10 — Response caching, at runtime
+
+Generation-time and request-time are separate halves; test both.
 
 ```bash
 php artisan anvil:forge-api --api-version=1 --cache --etag --force
 php artisan anvil:forge-api --api-version=2 --cache --etag --force
+grep -r CachesQueries app/Services        # generation half
+php artisan serve                          # runtime half
 ```
 
 Confirms:
 
-- Generated services cache reads, and invalidation works on the `file` driver — the point of generation stamps over tags is that tagless drivers work, so test on `file`, not `redis`
-- `$cacheVariant` defaults to `static::class`, so v1 and v2 reading the same table do not collide on a key. Hit both, compare payloads, confirm each returns its own shape
-- `--cache-jitter=0.1` produces TTLs spread around the nominal value rather than identical ones
-- `--cache-model=Category:reference` and `--cache-model=PriceHistory:off` apply per-model rather than globally
+- `ConfiguresGeneratedCache` resolved the flags into the generated services
+- `CacheStamps` invalidation works on the `file` driver — the point of stamps over tags is that tagless drivers work, so test on `file`, not `redis`
+- `CacheKey` includes `$cacheVariant`, defaulting to `static::class`, so v1 and v2 reading one table do not collide. Hit both, compare payloads
+- `CacheInvalidationListener` fires on write and clears the right stamp
+- `CachePolicy` honours `--cache-model=Category:reference` and `PriceHistory:off` per-model
+- `--cache-jitter=0.1` spreads TTLs rather than making them identical
 - `--no-cache` overrides `anvil.cache.enabled`
-- `ETag` / `If-None-Match` round-trips to a `304`, and the spec documents it
+- `ETag` / `If-None-Match` round-trips to `304`, and the spec documents it
 
-### Scenario 10 — OpenAPI round trip
+Because this is runtime code in `src/Runtime/Cache/`, a fix here needs the server restarted and the endpoints hit again — regenerating proves nothing.
+
+### Scenario 11 — OpenAPI round trip
 
 ```bash
 php artisan anvil:forge-api --api-version=1 --force
@@ -695,9 +825,9 @@ npx tsc --noEmit
 npx @redocly/cli lint openapi/v1/openapi.yaml
 ```
 
-Confirms: `OpenApiLocator` finds the spec each downstream command needs; path keys are not doubled; `servers` appears exactly once; the generated TypeScript compiles. Validate the spec with an independent linter rather than trusting Swagger UI to render it.
+Confirms: `OpenApiLocator` finds the spec each downstream command needs; `OpenApiRootGenerator` emits `servers` exactly once; `OpenApiPathGenerator` does not double path keys; `OpenApiTypeMapper` produces types the client compiles against; `OpenApiYamlSerializer` output passes an independent linter.
 
-Then switch format and confirm reporting is not fooled:
+Then switch format:
 
 ```bash
 php artisan anvil:forge-api --api-version=1 --spec-only --format=json --force
@@ -706,7 +836,7 @@ php artisan anvil:forge-apidocs --check
 
 A spec written in the format you did _not_ ask for must still be reported as present.
 
-### Scenario 11 — Swagger UI without a CDN
+### Scenario 12 — Swagger UI without a CDN
 
 ```bash
 php artisan anvil:install:swagger-ui --check
@@ -716,33 +846,46 @@ php artisan anvil:install:swagger-ui --source=npm --timeout=1800 --force
 php artisan serve
 ```
 
-Confirms: each strategy works in isolation, `--check` reports without writing, `--skip-generate` skips the spec regeneration, and a total failure produces an actionable list rather than a `ProcessTimedOutException` naming a vendor file. Then load the docs route in a browser with devtools open — no CDN requests, no CORS errors.
+Confirms: each `SwaggerUiInstaller` strategy works in isolation, `--check` reports without writing, and total failure produces an actionable list rather than a `ProcessTimedOutException`. Load the docs route with devtools open: no CDN requests, no CORS errors, and `DocsController` serving the page.
 
-### Scenario 12 — Docs sync
+### Scenario 13 — Docs sync
 
 ```bash
 php artisan anvil:docs-sync --check                 # clean
 # hand-edit a generated API resource: add a field, remove another
-php artisan anvil:docs-sync --check --diff          # should report both, non-zero
+php artisan anvil:docs-sync --check --diff          # both reported, non-zero
 php artisan anvil:docs-sync --check --breaking-only
 php artisan anvil:docs-sync --dry-run
 php artisan anvil:docs-sync
 ```
 
-Confirms: drift detected in both directions, severity is direction-dependent (a response change treated more seriously than the same request change), `--check` never writes, a partial read never prunes, and hand-authored components are untouched.
+Confirms: `ResourceShapeReader` and `FormRequestShapeReader` parse the edits via `SourceTokens`; `SchemaDiff` classifies severity direction-dependently; `SpecMerger` writes only what `SyncManifest` says it owns; `--check` never writes; a partial read never prunes.
 
-The version-scoping bug is worth an explicit check, since a container-bound synchroniser would fix its spec directory at construction:
+Version scoping, which a container-bound synchroniser would break:
 
 ```bash
-php artisan anvil:docs-sync --api-version=v2 --check
+php artisan anvil:docs-sync --api-version=v2 --check      # must read v2's spec
 ```
 
-This must read v2's spec, not v1's.
-
-### Scenario 13 — Web scaffold, both stacks
+Then the three entry points, which must agree:
 
 ```bash
-php artisan anvil:frontend --check                          # expect non-zero when missing
+php artisan anvil:docs-sync --check
+php artisan anvil:forge-api --api-version=1 --docs-sync --dry-run
+# and the SyncsApiDocs hook during a normal generation run
+```
+
+And a custom reader, to exercise `Contracts\ShapeReader`:
+
+```php
+// config/anvil.php
+'openapi' => ['sync' => ['readers' => [App\Anvil\MyShapeReader::class]]],
+```
+
+### Scenario 14 — Web scaffold, both stacks
+
+```bash
+php artisan anvil:frontend --check                          # non-zero when missing
 php artisan anvil:frontend --install --stack=livewire
 php artisan anvil:forge-webapp --stack=blade --force
 php artisan anvil:forge-webapp --stack=livewire --force
@@ -750,19 +893,19 @@ php artisan anvil:forge-webapp --stack=livewire --per-page=30 --force
 php artisan serve
 ```
 
-Confirms: both stacks produce working CRUD, the frontend preflight exits and asks for a re-run after installing, and a non-standard `--per-page` is inserted into the generated `<select>` so the dropdown never opens showing a value nobody chose.
+Confirms: `WebStack` selection works both ways, `FrontendDetector` and `FrontendState` report accurately, the preflight exits and asks for a re-run after installing, and a non-standard `--per-page` is inserted into the generated `<select>`.
 
-Also confirm the warning paths:
+In the browser, confirm `NormalizesFormState` actually binds — this is runtime code, so it cannot be verified by reading generated files.
 
 ```bash
 php artisan anvil:forge-webapp --layout=layouts.custom --no-layout --dry-run   # should warn
-php artisan anvil:forge-webapp --skip-models --dry-run                          # deprecated no-op, should warn
-php artisan anvil:forge-webapp --assets-mode=cdn --dry-run                      # should warn: not for production
+php artisan anvil:forge-webapp --skip-models --dry-run                          # deprecated no-op
+php artisan anvil:forge-webapp --assets-mode=cdn --dry-run                      # not for production
 ```
 
-### Scenario 14 — Auth scaffold and its preflight
+### Scenario 15 — Auth parts, and their combinations
 
-Test the failures before the success — the preflight is most of this command's value:
+The preflight is most of this command's value, so test the failures first:
 
 ```bash
 php artisan anvil:forge-auth --accent=chartreuse         # unknown accent
@@ -770,16 +913,23 @@ php artisan anvil:forge-auth --guard=nonexistent         # guard not in config/a
 php artisan anvil:forge-auth --users-table=userz         # should offer near-miss candidates
 ```
 
-Then add a `setPasswordAttribute()` mutator to the `User` model and run again — it must warn, because that mutator hashes the hash the register form already produced and silently breaks every login.
+Add a `setPasswordAttribute()` mutator to the `User` model and run again — it must warn, because that mutator hashes the hash the register form already produced.
+
+Then the part combinations, since `--no-*` flags select parts rather than branching inside one template:
 
 ```bash
 php artisan anvil:forge-auth --force
-php artisan serve
+php artisan anvil:forge-auth --no-2fa --force
+php artisan anvil:forge-auth --no-lockout --force
+php artisan anvil:forge-auth --no-verification --force
+php artisan anvil:forge-auth --no-2fa --no-lockout --no-verification --force
 ```
 
-Confirms: login, register, logout, password reset, verification, 2FA and lockout all work in a browser; RBAC middleware and gates read your actual roles/permissions tables; accent classes appear as literal strings so Tailwind's scanner sees them.
+Each must leave no dangling route, import or view reference from an omitted part. `RoutesPart` is where a stale reference will surface; `TwoFactorGateFragment` and `LockoutFragment` are the cross-cutting bits most likely to leak.
 
-### Scenario 15 — GraphQL
+Then exercise every flow in a browser.
+
+### Scenario 16 — GraphQL
 
 ```bash
 composer require nuwave/lighthouse
@@ -788,9 +938,9 @@ php artisan anvil:forge-graphql --guard=default --policies --force
 php artisan lighthouse:validate-schema
 ```
 
-Then hand-edit `graphql/schema.graphql`, add a type file change, and re-run with `--force`. The root file must survive; `graphql/types/*` must be replaced. Composite-PK tables must be skipped _and named_.
+Hand-edit `graphql/schema.graphql`, then re-run with `--force`: the root file must survive, `graphql/types/*` must be replaced. Composite-PK tables must be skipped _and named_.
 
-### Scenario 16 — Idempotency and provenance
+### Scenario 17 — Idempotency and preserved regions
 
 ```bash
 git add -A && git commit -m "before"
@@ -803,83 +953,70 @@ php artisan anvil:forge-api --api-version=1 --force
 git status --porcelain        # must be empty
 ```
 
-The recurring offenders are `GateServiceProvider`, `RepositoryServiceProvider`, route files, and the spec's `servers` block and path keys.
+The recurring offenders are the gate and repository providers (`ProviderRegistrar` appending rather than replacing), route files, and the spec's `servers` block and path keys.
 
-Then the provenance half:
+Then `PreserveRegions`: add a hand edit inside a preserved region, regenerate, confirm it survives. Add one outside a region, regenerate, confirm the expected behaviour — whichever it is, it should be the same every time.
 
-```bash
-# hand-edit a generated model
-php artisan anvil:forge:app-scaffold --models --force    # must refuse, or preserve the edit
-```
-
-Confirms: the provenance hash marks the file as hand-edited and `--force` respects it. This is the mechanism `anvil:polish` has to re-stamp after formatting — see Scenario 18.
-
-### Scenario 17 — Schema drift
+### Scenario 18 — Schema drift
 
 ```bash
-php artisan anvil:diff --accept                 # baseline
-php artisan anvil:diff                          # expect: no drift
+php artisan anvil:diff --accept                 # baseline into SchemaManifest
+php artisan anvil:diff                          # no drift
 php artisan make:migration add_status_to_posts_table
-# add a column, then:
 php artisan migrate
-php artisan anvil:diff                          # expect: one added column
-php artisan anvil:diff --strict                 # expect: non-zero
+php artisan anvil:diff                          # one added column
+php artisan anvil:diff --strict                 # non-zero
 php artisan anvil:diff --json
 ```
 
-Then the orphan path — drop a table and confirm the report lists artifacts belonging to a table that no longer exists, and that regeneration does not delete them:
+Then the orphan path — drop a table, confirm the report lists artifacts for a table that no longer exists, and that regeneration does not delete them.
+
+### Scenario 19 — Polish, and the re-stamp
 
 ```bash
-php artisan migrate:rollback
-php artisan anvil:diff
-```
-
-### Scenario 18 — Polish, and the re-stamp
-
-```bash
-php artisan anvil:polish --test --strict        # CI mode: reports, changes nothing
+php artisan anvil:polish --test --strict        # CI mode
 php artisan anvil:polish --pint
-php artisan anvil:polish --audit
+php artisan anvil:polish --audit                # ModelAuditor only
 php artisan anvil:polish                        # everything installed
 php artisan anvil:polish --publish-config       # must not overwrite an existing rector.php
 ```
 
-Confirms: each pass skips cleanly when its tool is absent, only manifest-listed files are touched by default, `--all-paths` widens it, and the run reports how many files it re-stamped.
-
-The re-stamp is the part that breaks quietly, so verify it directly:
+Then verify the re-stamp directly, because it fails quietly:
 
 ```bash
 php artisan anvil:polish --pint
 php artisan anvil:forge:app-scaffold --models --force    # must still regenerate
 ```
 
-If `--force` now refuses, Pint's rewrite invalidated the provenance hash and the re-stamp did not happen.
+If `--force` now refuses, Pint's rewrite invalidated the provenance hash and `QualityRunner` did not re-stamp.
 
-### Scenario 19 — Multi-schema and the quoting trap
+### Scenario 20 — Multi-schema and the quoting trap
 
 ```bash
 php artisan anvil:forge:app-scaffold --models --schema="core,reporting" --force
 php artisan anvil:forge:app-scaffold --models --schema=core, reporting --dry-run
 ```
 
-The second must recover the split fragment, report what it recovered, and proceed — not abort with `No arguments expected`. Then confirm a real typo is still refused by name:
+The second must recover the split fragment via `SchemaSelection`, report what it recovered, and proceed — not abort with `No arguments expected`. Then confirm a real typo is still refused by name:
 
 ```bash
-php artisan anvil:forge:app-scaffold --models --schema=core --tables=posts nonsense
+php artisan anvil:forge:app-scaffold --models --schema=core nonsense
 ```
 
-### Scenario 20 — Deprecated flag forwarding
+### Scenario 21 — Deprecated flag forwarding
 
 ```bash
 php artisan anvil:forge:app-scaffold --api --api-version=1 --dry-run
 php artisan anvil:forge:app-scaffold --openapi --openapi-format=json --dry-run
 ```
 
-Confirms: each prints a deprecation warning naming the replacement and forwards to `anvil:forge-api` rather than failing or silently doing nothing. Worth keeping until the flags are actually removed at 1.0.
+Each must print a deprecation warning naming the replacement and forward to `anvil:forge-api`. Keep until the flags are removed at 1.0.
 
-### Scenario 21 — The full CI gate
+### Scenario 22 — A custom generator
 
-Everything that exits non-zero, run together, on a clean generated tree:
+Implement `Contracts\Generator` in the test app and register it. Confirm the orchestrator picks it up, `GeneratorSet` includes it in `--all`, and it reports through `ScaffoldReport` like any built-in. If this is awkward, the extension point is not yet real — worth knowing before the README promises it.
+
+### Scenario 23 — The full CI gate
 
 ```bash
 php artisan anvil:doctor --strict
@@ -890,11 +1027,11 @@ php artisan anvil:polish --test --strict
 php artisan anvil:frontend --check
 ```
 
-All should pass. Then break one thing at a time and confirm exactly one gate fails, with a message that names the cause.
+All should pass on a clean generated tree. Then break one thing at a time and confirm exactly one gate fails, with a message naming the cause.
 
 ---
 
-## 12. Resetting the Test Application
+## 13. Resetting the Test Application
 
 If the test app is under git — and it should be — this replaces everything below:
 
@@ -906,33 +1043,22 @@ git clean -fd && git checkout .
 
 ```bash
 # Application code
-rm -rf app/Http/Controllers/Api
-rm -rf app/Http/Resources
-rm -rf app/Http/Requests
-rm -rf app/Services
-rm -rf app/Repositories
-rm -rf app/Policies
-rm -rf app/Observers
-rm -rf app/Events
-rm -rf app/Listeners
-rm -rf app/Livewire
+rm -rf app/Http/Controllers/Api app/Http/Resources app/Http/Requests
+rm -rf app/Services app/Repositories app/Policies app/Observers
+rm -rf app/Events app/Listeners app/Livewire app/Enums
 rm -f  app/Providers/RepositoryServiceProvider.php
 rm -f  app/Providers/GateServiceProvider.php
 rm -f  app/Providers/ForceJsonApiServiceProvider.php
 rm -f  app/Http/Middleware/ForceJsonResponse.php
-rm -rf routes/api
-rm -rf tests/Feature
+rm -rf routes/api tests/Feature
 
 # Views, specs, docs, clients, schemas
-rm -rf resources/views/livewire
-rm -rf resources/views/auth
-rm -rf resources/views/layouts/guest.blade.php
+rm -rf resources/views/livewire resources/views/auth
+rm -f  resources/views/layouts/guest.blade.php
 rm -rf resources/js/api
-rm -rf openapi/
-rm -rf public/api-docs
-rm -rf graphql/
+rm -rf openapi/ public/api-docs graphql/
 
-# Anvil state — the manifest, and the diff baseline
+# Anvil state — model manifest, diff baseline, sync manifest
 rm -rf storage/anvil
 
 # Models and factories, keeping the framework defaults
@@ -944,9 +1070,9 @@ php artisan clear-compiled
 php artisan cache:clear
 ```
 
-Adjust to match your published `config/anvil.php` — output paths for the spec (`--output`, `--flat`), the client (`--output`), GraphQL (`--output`) and the docs route are all configurable.
+Adjust to match your published `config/anvil.php` — spec, client and GraphQL output paths are all configurable.
 
-Note that deleting `storage/anvil` discards the `anvil:diff` baseline as well as the model manifest. Re-establish it with `anvil:diff --accept` after the next generation, or the first diff will report the entire schema as new.
+Deleting `storage/anvil` discards the `SchemaManifest` baseline and the `SyncManifest` alongside the model manifest. Re-establish with `anvil:diff --accept` after the next generation, or the first diff reports the entire schema as new, and docs-sync will treat previously-owned components as unmanaged.
 
 ### Full reset (nuclear)
 
@@ -962,107 +1088,92 @@ git init && git add -A && git commit -m "baseline"
 
 ---
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 ### Composer
 
 **`Could not find a matching version of package zuqongtech/laravel-anvil`**
 
-Stability resolution. Confirm all three of: `"minimum-stability": "dev"`, `"prefer-stable": true`, and a `"*@dev"` constraint. If you set `canonical`, confirm it is a sibling of `url` and not nested inside `options`, where it is silently ignored. Then:
+Stability resolution. Confirm `"minimum-stability": "dev"`, `"prefer-stable": true`, and a `"*@dev"` constraint. If you set `canonical`, confirm it is a sibling of `url`, not nested inside `options` where it is silently ignored. Then `rm -f composer.lock && composer install`.
 
-```bash
-rm -f composer.lock && composer install
-```
+**`composer update` fails on the package**
 
-**`composer update` fails on `zuqongtech/laravel-anvil`**
-
-Confirm the `url` in the `repositories` block resolves to an existing directory. Relative paths are resolved from the directory containing `composer.json`, not from your shell's working directory.
+Confirm the `url` resolves to an existing directory. Relative paths resolve from the directory containing `composer.json`, not your shell's working directory.
 
 **Package is copied instead of symlinked**
 
-Delete `vendor/zuqongtech` and `composer.lock`, confirm `"options": { "symlink": true }`, reinstall. On Windows without developer mode, symlinks require an elevated shell.
+Delete `vendor/zuqongtech` and `composer.lock`, confirm `"options": { "symlink": true }`, reinstall. On Windows without developer mode, symlinks need an elevated shell.
 
 **Parse error inside `vendor/zuqongtech/laravel-anvil/src/...`**
 
-Your PHP is older than the syntax the package uses. The declared constraint is `^8.3`; parts of the source need 8.4. Check with `php -v`.
+Your PHP is older than the syntax the package uses. Declared constraint is `^8.3`; parts of the source need 8.4.
 
 ### Command registration and arguments
 
 **`An argument with name "n" already exists`**
 
-A `$signature` contains a multi-line option description or a `{n}` placeholder that Symfony Console is parsing as an argument. All option descriptions in `$signature` must be single-line strings with no `{...}` tokens.
+A `$signature` contains a multi-line option description or a `{n}` placeholder Symfony is parsing as an argument. Option descriptions must be single-line with no `{...}` tokens.
 
 **Flags missing from `--help`**
 
-Same root cause: Symfony stops parsing the signature at the first malformed token and drops everything after it. Fix the signature, then:
+Same root cause: Symfony stops parsing at the first malformed token and drops everything after it. Fix the signature, then `php artisan clear-compiled`.
 
-```bash
-php artisan clear-compiled && php artisan anvil:forge-api --help
-```
+**Grep for a command's file finds nothing**
+
+The classes kept their old `Generate*` names through the signature rename. See the mapping in [Section 9](#command-signatures-were-renamed-the-class-files-were-not).
 
 **`No arguments expected` on a schema list**
 
-`--schema=core, admin_db` reaches Symfony as `--schema=core,` plus a stray argument. The positional catch-all recovers fragments shaped like schema names and reports what it recovered; anything else is refused by name. Quote the list:
-
-```bash
-php artisan anvil:forge:app-scaffold --models --schema="core,admin_db"
-```
+`--schema=core, admin_db` reaches Symfony as `--schema=core,` plus a stray argument. `SchemaSelection` recovers fragments shaped like schema names; anything else is refused by name. Quote the list.
 
 **Mutually exclusive flags accepted silently**
 
-`--no-spec` with `--spec-only`, or `--all-versions` with `--api-version`, must both fail with an explanation. If either combination proceeds, the validation is missing.
-
-**A command hangs, or the same output repeats indefinitely**
-
-Recursive command invocation. Commands should invoke generators through `GeneratorRegistry`, not by calling sibling Artisan commands — with the deliberate exception of `anvil:forge-apidocs`, which delegates to `anvil:forge-api --spec-only` so there is only one implementation of the spec pipeline.
+`--no-spec` with `--spec-only`, or `--all-versions` with `--api-version`, must both fail with an explanation. If either proceeds, the validation is missing.
 
 ### Model resolution
 
-**A downstream command reports a model it cannot find**
+**`ModelNotRegisteredException`**
 
-Correct behaviour, and the alternative is worse. Generate models first:
+Correct behaviour, and the alternative is worse. Generate models first, or rebuild the manifest:
 
 ```bash
 php artisan anvil:forge:app-scaffold --models --schema=all
-```
-
-If the models exist but the manifest is stale or missing:
-
-```bash
 php artisan anvil:forge:app-scaffold --refresh-models
 ```
 
-**A schema-namespaced model is imported from the wrong namespace**
+**`AmbiguousModelException`**
 
-`App\Models\Core\User` re-derived as `App\Models\User` means the command derived the namespace instead of resolving it through `ResolvesGeneratedModels`. Check `storage/anvil/models.json` first — if the manifest is right and the import is wrong, the bug is in the consuming generator.
+Two candidates resolve to one `ModelReference` — commonly the same table name in two schemas, or a stale model left behind after a namespace change. The message should name both; if it does not, that is a `ModelRegistry` bug.
+
+**A schema-namespaced model imported from the wrong namespace**
+
+`App\Models\Core\User` re-derived as `App\Models\User` means the command derived the namespace instead of resolving through `ResolvesGeneratedModels`. Check `storage/anvil/models.json` first — if the manifest is right and the import is wrong, the bug is in the consuming generator.
 
 **`--force` refuses to regenerate a file you did not edit**
 
-The provenance hash says otherwise. A formatter almost certainly rewrote it — `anvil:polish` re-stamps what Pint and Rector touch, so if you ran them directly rather than through `polish`, the stamps are stale. Re-run through `anvil:polish`, or regenerate with `--backup` and accept the overwrite.
+The provenance hash says otherwise. A formatter almost certainly rewrote it; `anvil:polish` re-stamps what Pint and Rector touch, so if you ran them directly, the stamps are stale.
 
 ### Configuration and connections
 
 **`Connection [] not configured` / connection resolves to `null`**
 
-A shallow `array_merge` of the published `config/anvil.php` over the package defaults drops nested keys. Test both with and without a published config file, and use `Arr::get()` with an explicit default rather than assuming a key is present:
+A shallow `array_merge` of the published `config/anvil.php` over the package defaults drops nested keys. Test both with and without a published config, and use `Arr::get()` with an explicit default:
 
 ```bash
 php artisan tinker --execute="dd(config('anvil'));"
 ```
 
+`ConfigValidator` should be catching this shape before generation starts.
+
 ### Generated code
 
-**Duplicate relation method names on a model**
+**Duplicate relation method names**
 
-Two foreign keys pointing at the same parent produce colliding method names. `RelationNamer` should disambiguate on the local column (`author()` and `editor()`, not two `user()` methods). `anvil:doctor` reports this shape before generation — if doctor is silent on a table that then generates a redeclaration, the detection is the bug.
+Two FKs to the same parent produce colliding methods. `RelationNamer` should disambiguate on the local column. `anvil:doctor` reports the shape before generation — if doctor is silent on a table that then generates a redeclaration, the detection is the bug.
 
-**`Redefinition of parameter $user` (PHP fatal)**
+**`Redefinition of parameter $user`**
 
-A generated policy method with `fn (User $user, User $user)`. The generator must rename the second parameter when the subject type matches the authenticated user type:
-
-```php
-public function view(User $user, User $target): bool
-```
+`PolicyGenerator` must rename the second parameter when the subject type matches the authenticated user type: `view(User $user, User $target)`.
 
 **`Cannot use App\Models\User as User because the name is already in use`**
 
@@ -1070,35 +1181,43 @@ Duplicate import. `ImportSet` exists to deduplicate — if duplicates appear, th
 
 **`Target [...RepositoryInterface] is not instantiable`**
 
-`RepositoryServiceProvider` is not registered in `bootstrap/providers.php`. `--repositories` should auto-register it; if it did not, that is the bug. Add it manually to unblock, then `php artisan clear-compiled`.
+`ProviderRegistrar` should have registered `RepositoryServiceProvider` in `bootstrap/providers.php`. If it did not, that is the bug, not your setup. Add it manually to unblock, then `php artisan clear-compiled`.
 
-**Generated file has a syntax error that reaches disk**
+**A syntax error reaches disk**
 
 `PhpSyntaxCheck` should reject it before the write. If invalid PHP is landing, the generator is bypassing the pipeline in `RunsGenerationPipeline`.
 
+**Stub override ignored**
+
+`StubGenerator` owns the lookup order. Confirm the published stub is in `stubs/anvil/` with the exact expected filename.
+
 ### Auth
 
-**`SessionGuard::__construct(): Argument #3 must be of type UserProvider` / TypeError at login**
+**`SessionGuard` TypeError at login**
 
-The authenticatable model extends `Model` instead of `Illuminate\Foundation\Auth\User`. Any table with a `password` column needs the latter. `anvil:doctor` reports this.
+The authenticatable model extends `Model` instead of `Illuminate\Foundation\Auth\User`. Any table with a `password` column needs the latter. `anvil:doctor` reports it.
 
 **"This password does not use the Bcrypt algorithm"**
 
-Stored hashes are not bcrypt. Confirm with `anvil:doctor --data`, which samples up to fifty and names the ones it does not recognise.
+Stored hashes are not bcrypt. Confirm with `anvil:doctor --data`.
 
 **Registration succeeds but login always fails**
 
-A `setPasswordAttribute()` mutator on the user model, hashing the hash the register form already produced. `anvil:forge-auth` warns about this — check the warnings printed after the configuration table, which is where non-fatal findings go.
+A `setPasswordAttribute()` mutator, hashing the hash the register form already produced. `anvil:forge-auth` warns after the configuration table, which is where non-fatal findings go.
 
-**Accent colour classes have no effect**
+**A route or view references a part you disabled**
 
-Tailwind's scanner only sees literal class names. If accents were assembled at runtime rather than interpolated at generation time, the classes exist in no file Tailwind reads.
+`RoutesPart` or a fragment did not respect the part selection. Check `Support/Auth/Parts/RoutesPart.php` and the two fragments.
+
+**Accent classes have no effect**
+
+Tailwind's scanner only sees literal class names. If `Ui`/`FormKit` assembled them at runtime rather than interpolating at generation time, they exist in no file Tailwind reads.
 
 ### OpenAPI, docs, and client
 
-**Doubled path keys, or `servers` appearing twice**
+**Doubled path keys, or `servers` twice**
 
-The spec is being merged into an existing file rather than regenerated, or a base path is being prepended to paths that already carry it. Delete and regenerate to isolate which:
+`OpenApiRootGenerator` and `OpenApiPathGenerator` are separate; a doubled `servers` is the root generator, doubled paths the path generator. Delete and regenerate to isolate:
 
 ```bash
 rm -rf openapi/v1 && php artisan anvil:forge-api --api-version=1 --spec-only --force
@@ -1106,52 +1225,70 @@ rm -rf openapi/v1 && php artisan anvil:forge-api --api-version=1 --spec-only --f
 
 **Path template placeholders rendered literally**
 
-`/posts/{id}` in the spec needs a matching `parameters` entry with `in: path`. Check the route-to-spec mapping, not the stub.
+`/posts/{id}` needs a matching `parameters` entry with `in: path`. Check `OpenApiPathGenerator`, not the stub.
+
+**Malformed YAML**
+
+`OpenApiYamlSerializer` is hand-rolled. Multi-line strings, special characters and deep nesting are the usual suspects. Lint independently rather than trusting Swagger UI to render it.
 
 **`--check` reports a spec as missing when the file is there**
 
-Format mismatch. Reporting should recognise a spec written as JSON when you asked for YAML. If it does not, switching `--format` will make every existing spec read as absent.
+Format mismatch in `OpenApiLocator`. It must recognise a JSON spec when you asked for YAML.
 
-**Swagger UI shows "Failed to fetch" or a CORS error**
+**Swagger UI "Failed to fetch" or CORS**
 
-The UI is fetching the spec cross-origin. Serve the spec from the same origin as the docs page, or inline it at generation time. Permissive CORS headers are not the fix; they move the problem to whoever deploys this.
+The UI is fetching cross-origin. Serve the spec from the same origin, or inline it at generation. Permissive CORS headers move the problem to whoever deploys this.
 
 **`ProcessTimedOutException` naming a vendor file**
 
-The npm strategy timed out. Skip it:
+The npm strategy timed out:
 
 ```bash
 php artisan anvil:install:swagger-ui --source=http
-```
-
-Or pre-seed and use the local strategy:
-
-```bash
+# or
 npm install --no-save swagger-ui-dist@5.17.14 \
   && php artisan anvil:install:swagger-ui --source=local
 ```
 
-**TypeScript client keys do not match API responses**
+**TypeScript keys do not match API responses**
 
-A casing mismatch. Resources, form requests, the spec and the client all read `ApiVersionProfile`, so they cannot legitimately disagree — if they do, one of them is deriving casing itself instead of reading the profile. Regenerate all four after any `--case` change.
+Resources, form requests, the spec and the client all read `ApiVersionProfile`. If they disagree, one of them is deriving casing itself instead of reading the profile.
 
-**`--hooks` output does not compile**
+### Docs sync
 
-Requires `@tanstack/react-query` v5. The generated `client.ts` has no dependencies; the hooks file does.
+**Sync rewrites a hand-authored component**
+
+`SyncManifest` decides what sync owns. A component it never adopted must be untouched. `--adopt` is the only way ownership should be acquired.
+
+**`--api-version=v2` reconciles v1's spec**
+
+`DocsSynchronizer` was resolved from the container rather than built per invocation, fixing its spec directory at construction.
+
+**A hand edit is not detected**
+
+`SourceTokens` failed to parse it. Reduce to the smallest resource or form request that reproduces — the tokenizer is the likeliest culprit, not the mapper.
+
+**Command, `--docs-sync` flag and hook behave differently**
+
+They must all route through `DocsSynchronizer`. If one diverges, it has its own copy of a rule.
 
 ### Cache
 
 **Cached reads never invalidate**
 
-Invalidation uses generation stamps, not tags, specifically so tagless drivers work. If it only fails on `file` or `database`, something reintroduced a tag dependency.
+`CacheStamps`, not tags, specifically so tagless drivers work. If it fails only on `file` or `database`, something reintroduced a tag dependency.
 
 **v1 and v2 return each other's payloads**
 
-`$cacheVariant` is not defaulting to `static::class`, so two versioned services reading one table share a key. This is the failure mode Scenario 9 exists to catch.
+`CacheKey` is not including `$cacheVariant`. This is the failure Scenario 10 exists to catch.
+
+**A cache fix has no effect**
+
+`src/Runtime/Cache/` is runtime code. Restart the server and hit the endpoints — regenerating changes nothing.
 
 ### Symlink staleness
 
-**Changes to package source are not reflected**
+**Changes to package source not reflected**
 
 ```bash
 composer dump-autoload
@@ -1159,11 +1296,10 @@ php artisan clear-compiled
 php artisan package:discover --ansi
 ```
 
-If you changed the service provider's `register()` or `boot()`:
-
-```bash
-php artisan config:clear
-php artisan cache:clear
-```
+If you changed the service provider's `register()` or `boot()`, add `config:clear` and `cache:clear`.
 
 If a _newly added_ class is not found, it is almost certainly the autoloader — `composer dump-autoload` before investigating anything else.
+
+**A change to `src/Runtime/`, `src/Livewire/` or `src/Http/` appears to do nothing**
+
+Those are runtime, not generation. Re-running the generator cannot show the change. Serve the app.

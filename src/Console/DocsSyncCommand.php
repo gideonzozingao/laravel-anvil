@@ -23,7 +23,7 @@ class DocsSyncCommand extends Command
 {
 
     protected $description = 'Sync hand-edited request/response payloads back into the OpenAPI spec';
-    protected $signature = 'anvil:docs-sync
+    protected $signature = 'anvil:forge:docs-sync
         {model?* : Limit to these models or tables (e.g. Vehicle users)}
         {--api-version= : Limit to one API version and read that version\'s spec (e.g. v1)}
         {--only= : Limit to "requests" or "responses" (default: both)}
